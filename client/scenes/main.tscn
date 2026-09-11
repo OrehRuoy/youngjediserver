@@ -1,0 +1,291 @@
+[gd_scene load_steps=5 format=3 uid="uid://young_jedi_main"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Texture2D" path="res://assets/space_background.png" id="2_bg"]
+[ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="3_theme"]
+[ext_resource type="Texture2D" path="res://assets/title_logo.png" id="4_title"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_main")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="Rows" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constant_separation = 12
+
+; ═══════════════════ ROW 1: PLAYER INFO + ONLINE ═══════════════════
+
+[node name="TopRow" type="HBoxContainer" parent="Margin/Rows"]
+layout_mode = 2
+theme_override_constant_separation = 12
+
+[node name="PlayerPanel" type="PanelContainer" parent="Margin/Rows/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 0
+custom_minimum_size = Vector2(220, 0)
+
+[node name="PlayerHBox" type="HBoxContainer" parent="Margin/Rows/TopRow/PlayerPanel"]
+layout_mode = 2
+theme_override_constant_separation = 12
+
+[node name="AvatarRect" type="TextureRect" parent="Margin/Rows/TopRow/PlayerPanel/PlayerHBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(48, 48)
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NameVBox" type="VBoxContainer" parent="Margin/Rows/TopRow/PlayerPanel/PlayerHBox"]
+layout_mode = 2
+size_flags_vertical = 1
+theme_override_constant_separation = 2
+
+[node name="PlayerNameLabel" type="Label" parent="Margin/Rows/TopRow/PlayerPanel/PlayerHBox/NameVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = ""
+
+[node name="OnlineLabel" type="Label" parent="Margin/Rows/TopRow/PlayerPanel/PlayerHBox/NameVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 13
+text = "• ONLINE"
+
+[node name="TitleLogo" type="TextureRect" parent="Margin/Rows/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+texture = ExtResource("4_title")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OnlinePanel" type="PanelContainer" parent="Margin/Rows/TopRow"]
+layout_mode = 2
+size_flags_horizontal = 0
+custom_minimum_size = Vector2(300, 0)
+
+[node name="OnlineMargin" type="MarginContainer" parent="Margin/Rows/TopRow/OnlinePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 6
+
+[node name="OnlineVBox" type="VBoxContainer" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin"]
+layout_mode = 2
+theme_override_constant_separation = 4
+
+[node name="TitleRow" type="HBoxContainer" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox"]
+layout_mode = 2
+
+[node name="OnlineTitle" type="Label" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox/TitleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 15
+text = "ONLINE"
+
+[node name="LogoutBtn" type="Button" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox/TitleRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(80, 28)
+text = "LOGOUT"
+
+[node name="PlayersScroll" type="ScrollContainer" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+custom_minimum_size = Vector2(0, 50)
+
+[node name="PlayersList" type="VBoxContainer" parent="Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox/PlayersScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constant_separation = 2
+
+; ═══════════════════ ROW 2: LIVE TABLES + NEWS + BUTTONS ═══════════════════
+
+[node name="MiddleRow" type="HBoxContainer" parent="Margin/Rows"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constant_separation = 12
+
+[node name="LiveTablesPanel" type="PanelContainer" parent="Margin/Rows/MiddleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.2
+
+[node name="LiveVBox" type="VBoxContainer" parent="Margin/Rows/MiddleRow/LiveTablesPanel"]
+layout_mode = 2
+theme_override_constant_separation = 8
+
+[node name="LiveTitle" type="Label" parent="Margin/Rows/MiddleRow/LiveTablesPanel/LiveVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 16
+text = "LIVE TABLES"
+
+[node name="LiveScroll" type="ScrollContainer" parent="Margin/Rows/MiddleRow/LiveTablesPanel/LiveVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TablesList" type="VBoxContainer" parent="Margin/Rows/MiddleRow/LiveTablesPanel/LiveVBox/LiveScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constant_separation = 6
+
+[node name="NewsPanel" type="PanelContainer" parent="Margin/Rows/MiddleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
+
+[node name="NewsMargin" type="MarginContainer" parent="Margin/Rows/MiddleRow/NewsPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="NewsVBox" type="VBoxContainer" parent="Margin/Rows/MiddleRow/NewsPanel/NewsMargin"]
+layout_mode = 2
+theme_override_constant_separation = 6
+
+[node name="NewsTitle" type="Label" parent="Margin/Rows/MiddleRow/NewsPanel/NewsMargin/NewsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 16
+text = "NEWS"
+
+[node name="NewsContent" type="RichTextLabel" parent="Margin/Rows/MiddleRow/NewsPanel/NewsMargin/NewsVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+text = ""
+
+[node name="ButtonsColumn" type="VBoxContainer" parent="Margin/Rows/MiddleRow"]
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_constant_separation = 8
+visible = false
+
+[node name="CreateLight" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "Create (Light)"
+
+[node name="OrLabel" type="Label" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+horizontal_alignment = 1
+text = "OR"
+
+[node name="CreateDark" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "Create (Dark)"
+
+[node name="BotGameBtn" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "  BOT GAME"
+
+[node name="DeckbuilderBtn" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "DECKBUILDER"
+
+[node name="RulesBtn" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "RULES"
+
+; ═══════════════════ ROW 3: PLAYING TABLES + COMMS FEED ═══════════════════
+
+[node name="BottomRow" type="HBoxContainer" parent="Margin/Rows"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.8
+theme_override_constant_separation = 12
+
+[node name="PlayingPanel" type="PanelContainer" parent="Margin/Rows/BottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.8
+
+[node name="PlayingVBox" type="VBoxContainer" parent="Margin/Rows/BottomRow/PlayingPanel"]
+layout_mode = 2
+theme_override_constant_separation = 6
+
+[node name="PlayingTitle" type="Label" parent="Margin/Rows/BottomRow/PlayingPanel/PlayingVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 16
+text = "PLAYING TABLES"
+
+[node name="PlayingScroll" type="ScrollContainer" parent="Margin/Rows/BottomRow/PlayingPanel/PlayingVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PlayingTablesList" type="VBoxContainer" parent="Margin/Rows/BottomRow/PlayingPanel/PlayingVBox/PlayingScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constant_separation = 4
+
+[node name="CommsPanel" type="PanelContainer" parent="Margin/Rows/BottomRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.2
+
+[node name="CommsVBox" type="VBoxContainer" parent="Margin/Rows/BottomRow/CommsPanel"]
+layout_mode = 2
+theme_override_constant_separation = 6
+
+[node name="CommsTitle" type="Label" parent="Margin/Rows/BottomRow/CommsPanel/CommsVBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 16
+text = "COMMS FEED"
+
+[node name="ChatLog" type="RichTextLabel" parent="Margin/Rows/BottomRow/CommsPanel/CommsVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+bbcode_enabled = true
+scroll_following = true
+text = ""
+
+[node name="ChatRow" type="HBoxContainer" parent="Margin/Rows/BottomRow/CommsPanel/CommsVBox"]
+layout_mode = 2
+theme_override_constant_separation = 8
+
+[node name="ChatEdit" type="LineEdit" parent="Margin/Rows/BottomRow/CommsPanel/CommsVBox/ChatRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Message..."
+
+[node name="SendBtn" type="Button" parent="Margin/Rows/BottomRow/CommsPanel/CommsVBox/ChatRow"]
+layout_mode = 2
+text = "Send"

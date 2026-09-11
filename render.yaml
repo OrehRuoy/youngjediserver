@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: young-jedi-server
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MAX_CONNECTIONS_PER_IP
+        value: "4"
+      - key: MAX_CONNECTIONS
+        value: "32"

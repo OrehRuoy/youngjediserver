@@ -1,0 +1,9 @@
+{
+  "battleThresholdWithWeapons": 0.6989365284109801,
+  "battleThresholdNoWeapons": 0.7878940857125001,
+  "battleThresholdMoreCharsCap": 0.660467141538621,
+  "useMemoryAdjustment": false,
+  "surrenderPowerRatio": 1.5186580382357329,
+  "discardHandUnplayableThreshold": 4,
+  "discardHandMinDeck": 22
+}

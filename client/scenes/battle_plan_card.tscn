@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://battle_plan_card"]
+
+[ext_resource type="Script" path="res://scripts/battle_plan_card.gd" id="1_bpc"]
+
+[node name="BattlePlanCard" type="Control"]
+layout_mode = 2
+custom_minimum_size = Vector2(96, 136)
+script = ExtResource("1_bpc")

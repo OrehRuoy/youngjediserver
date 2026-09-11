@@ -1,0 +1,248 @@
+[gd_scene format=3 uid="uid://es6frycq6f7d"]
+
+[ext_resource type="Script" uid="uid://bx8fn6vqrjgcl" path="res://scripts/login.gd" id="1_login"]
+[ext_resource type="Texture2D" uid="uid://ca7o0cnh0njx7" path="res://assets/space_background.png" id="2_bg"]
+[ext_resource type="Texture2D" uid="uid://bu2mdbihp8rla" path="res://assets/title_logo.png" id="3_logo"]
+[ext_resource type="Texture2D" uid="uid://h3uhg65jrj1q" path="res://assets/check_white.svg" id="5_check"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_checkbox_panel"]
+content_margin_left = 14.0
+content_margin_top = 10.0
+content_margin_right = 14.0
+content_margin_bottom = 10.0
+bg_color = Color(0.03, 0.04, 0.12, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.5, 0.7, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_normal"]
+bg_color = Color(0.12, 0.18, 0.42, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.55, 0.85, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_hover"]
+bg_color = Color(0.16, 0.24, 0.52, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.4, 0.65, 0.95, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 8.0
+content_margin_right = 16.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_pressed"]
+bg_color = Color(0.08, 0.12, 0.3, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.2, 0.4, 0.7, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 10.0
+content_margin_right = 16.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_form_card"]
+bg_color = Color(0.04, 0.05, 0.14, 0.92)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.22, 0.45, 0.7, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+content_margin_left = 24.0
+content_margin_top = 24.0
+content_margin_right = 24.0
+content_margin_bottom = 24.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_name_edit"]
+bg_color = Color(0.06, 0.08, 0.18, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25, 0.45, 0.65, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_server_pill"]
+bg_color = Color(0.08, 0.12, 0.18, 0.9)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.5, 0.5, 0.8)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+
+[node name="Login" type="Control" unique_id=2107371945]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_login")
+
+[node name="Background" type="TextureRect" parent="." unique_id=1524182169]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="ServerStatusPill" type="PanelContainer" parent="." unique_name_in_owner=true]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 0.0
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -180.0
+offset_top = 16.0
+offset_right = -20.0
+offset_bottom = 48.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_server_pill")
+
+[node name="ServerStatus" type="Label" parent="ServerStatusPill" unique_name_in_owner=true]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.25, 0.2, 1)
+theme_override_font_sizes/font_size = 14
+text = "Server Offline"
+horizontal_alignment = 1
+
+[node name="Margin" type="MarginContainer" parent="." unique_id=2061314284]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="CenterContainer" type="CenterContainer" parent="Margin" unique_id=1239868185]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="OuterVBox" type="VBoxContainer" parent="Margin/CenterContainer"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 20
+
+[node name="TitleLogo" type="TextureRect" parent="Margin/CenterContainer/OuterVBox" unique_id=1269186619]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+size_flags_horizontal = 4
+texture = ExtResource("3_logo")
+expand_mode = 1
+stretch_mode = 3
+
+[node name="FormCard" type="PanelContainer" parent="Margin/CenterContainer/OuterVBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_form_card")
+
+[node name="VBox" type="VBoxContainer" parent="Margin/CenterContainer/OuterVBox/FormCard" unique_id=1097373890]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="UsernameLabel" type="Label" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85, 0.9, 1, 1)
+theme_override_font_sizes/font_size = 16
+text = "Username:"
+horizontal_alignment = 1
+
+[node name="NameEdit" type="LineEdit" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1060331778]
+custom_minimum_size = Vector2(320, 48)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.92, 0.94, 1, 1)
+theme_override_colors/placeholder_color = Color(0.45, 0.55, 0.7, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_name_edit")
+theme_override_styles/focus = SubResource("StyleBoxFlat_name_edit")
+placeholder_text = "Enter your name"
+
+[node name="CheckBoxPanel" type="PanelContainer" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_id=353978793]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_checkbox_panel")
+
+[node name="StayLoggedIn" type="CheckBox" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox/CheckBoxPanel" unique_name_in_owner=true unique_id=1010811074]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_icons/checked = ExtResource("5_check")
+text = "Stay logged in"
+
+[node name="LoginBtn" type="Button" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1586321534]
+custom_minimum_size = Vector2(320, 52)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0.92, 0.95, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(0.7, 0.78, 0.95, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_styles/normal = SubResource("StyleBoxFlat_btn_normal")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_btn_pressed")
+theme_override_styles/hover = SubResource("StyleBoxFlat_btn_hover")
+theme_override_styles/focus = SubResource("StyleBoxFlat_btn_normal")
+text = "LOGIN"
+
+[node name="StatusLabel" type="Label" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1879622421]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.72, 0.9, 1)
+text = "Enter your name to join"
+horizontal_alignment = 1

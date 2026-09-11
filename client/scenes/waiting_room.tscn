@@ -1,0 +1,346 @@
+[gd_scene load_steps=15 format=3 uid="uid://waiting_room"]
+
+[ext_resource type="Script" path="res://scripts/waiting_room.gd" id="1_wr"]
+[ext_resource type="Texture2D" path="res://assets/space_background.png" id="2_bg"]
+[ext_resource type="Texture2D" path="res://assets/card_back_light.png" id="3_light"]
+[ext_resource type="Texture2D" path="res://assets/card_back_dark.png" id="4_dark"]
+[ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="5_theme"]
+[ext_resource type="Script" path="res://scripts/wire_decoration.gd" id="6_wires"]
+[ext_resource type="Shader" path="res://shaders/panel_stripes.gdshader" id="7_stripes"]
+[ext_resource type="FontFile" path="res://fonts/Orbitron.ttf" id="8_font"]
+
+; ── Light seat panel: dark with blue tint + blue border ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_light_panel"]
+bg_color = Color(0.03, 0.06, 0.16, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.2, 0.45, 0.8, 0.9)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 20.0
+content_margin_top = 20.0
+content_margin_right = 20.0
+content_margin_bottom = 20.0
+shadow_color = Color(0.1, 0.25, 0.55, 0.3)
+shadow_size = 12
+shadow_offset = Vector2(0, 2)
+
+; ── Dark seat panel: dark with red tint + red border ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dark_panel"]
+bg_color = Color(0.14, 0.04, 0.04, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.75, 0.2, 0.2, 0.9)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 20.0
+content_margin_top = 20.0
+content_margin_right = 20.0
+content_margin_bottom = 20.0
+shadow_color = Color(0.45, 0.1, 0.1, 0.3)
+shadow_size = 12
+shadow_offset = Vector2(0, 2)
+
+; ── Card glow behind card backs (light = blue glow) ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_glow_light"]
+bg_color = Color(0.15, 0.35, 0.75, 0.25)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+shadow_color = Color(0.2, 0.4, 0.9, 0.45)
+shadow_size = 18
+shadow_offset = Vector2(0, 0)
+
+; ── Card glow behind card backs (dark = red glow) ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_glow_dark"]
+bg_color = Color(0.6, 0.15, 0.15, 0.25)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+shadow_color = Color(0.85, 0.2, 0.2, 0.45)
+shadow_size = 18
+shadow_offset = Vector2(0, 0)
+
+; ── Deck dropdown styling (dark fill, blue border) ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_deck_dropdown"]
+bg_color = Color(0.04, 0.06, 0.14, 0.95)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.4, 0.65, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+content_margin_left = 10.0
+content_margin_top = 6.0
+content_margin_right = 10.0
+content_margin_bottom = 6.0
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_stripes"]
+shader = ExtResource("7_stripes")
+
+; ── Bottom actions bar panel ──
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_actions_bar"]
+bg_color = Color(0.03, 0.04, 0.1, 0.85)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.38, 0.65, 0.6)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+content_margin_left = 16.0
+content_margin_top = 12.0
+content_margin_right = 16.0
+content_margin_bottom = 12.0
+
+; ═══════════════════════════════════════════════════════
+; SCENE TREE
+; ═══════════════════════════════════════════════════════
+
+[node name="WaitingRoom" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("5_theme")
+script = ExtResource("1_wr")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_bg")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="WireDecoration" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_wires")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 28
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+; ── Title ──
+
+[node name="Title" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 26
+theme_override_fonts/font = ExtResource("8_font")
+text = "Game #1 — Waiting for players"
+
+; ── Seats row (takes most vertical space) ──
+
+[node name="Seats" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 20
+
+; ═══════════ LIGHT SEAT ═══════════
+
+[node name="LightSeat" type="PanelContainer" parent="Margin/VBox/Seats"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_light_panel")
+
+[node name="StripeOverlay" type="ColorRect" parent="Margin/VBox/Seats/LightSeat"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+material = SubResource("ShaderMaterial_stripes")
+
+[node name="VBox" type="VBoxContainer" parent="Margin/VBox/Seats/LightSeat"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="SideLabel" type="Label" parent="Margin/VBox/Seats/LightSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_fonts/font = ExtResource("8_font")
+text = "LIGHT SIDE"
+horizontal_alignment = 1
+
+[node name="CardGlow" type="PanelContainer" parent="Margin/VBox/Seats/LightSeat/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_card_glow_light")
+
+[node name="CardBack" type="TextureRect" parent="Margin/VBox/Seats/LightSeat/VBox/CardGlow"]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 140)
+texture = ExtResource("3_light")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NameLabel" type="Label" parent="Margin/VBox/Seats/LightSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 19
+theme_override_fonts/font = ExtResource("8_font")
+text = "—"
+horizontal_alignment = 1
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox/Seats/LightSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.65, 0.75, 1)
+theme_override_font_sizes/font_size = 15
+text = "Not ready"
+horizontal_alignment = 1
+
+[node name="DeckSelect" type="OptionButton" parent="Margin/VBox/Seats/LightSeat/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(220, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_deck_dropdown")
+text = "Starter Deck"
+
+; ═══════════ DARK SEAT ═══════════
+
+[node name="DarkSeat" type="PanelContainer" parent="Margin/VBox/Seats"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_dark_panel")
+
+[node name="StripeOverlay" type="ColorRect" parent="Margin/VBox/Seats/DarkSeat"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+material = SubResource("ShaderMaterial_stripes")
+
+[node name="VBox" type="VBoxContainer" parent="Margin/VBox/Seats/DarkSeat"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="SideLabel" type="Label" parent="Margin/VBox/Seats/DarkSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.92, 1, 1)
+theme_override_font_sizes/font_size = 20
+theme_override_fonts/font = ExtResource("8_font")
+text = "DARK SIDE"
+horizontal_alignment = 1
+
+[node name="CardGlow" type="PanelContainer" parent="Margin/VBox/Seats/DarkSeat/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_card_glow_dark")
+
+[node name="CardBack" type="TextureRect" parent="Margin/VBox/Seats/DarkSeat/VBox/CardGlow"]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 140)
+texture = ExtResource("4_dark")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="NameLabel" type="Label" parent="Margin/VBox/Seats/DarkSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.82, 0.35, 1)
+theme_override_font_sizes/font_size = 19
+theme_override_fonts/font = ExtResource("8_font")
+text = "—"
+horizontal_alignment = 1
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox/Seats/DarkSeat/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6, 0.65, 0.75, 1)
+theme_override_font_sizes/font_size = 15
+text = "Not ready"
+horizontal_alignment = 1
+
+[node name="DeckSelect" type="OptionButton" parent="Margin/VBox/Seats/DarkSeat/VBox"]
+layout_mode = 2
+size_flags_horizontal = 4
+custom_minimum_size = Vector2(220, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("StyleBoxFlat_deck_dropdown")
+text = "Dark Side Starter Deck"
+
+; ═══════════ BOTTOM ACTIONS BAR ═══════════
+
+[node name="ActionsBar" type="PanelContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_actions_bar")
+
+[node name="Actions" type="HBoxContainer" parent="Margin/VBox/ActionsBar"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="LeaveBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
+layout_mode = 2
+custom_minimum_size = Vector2(140, 42)
+text = "Leave table"
+
+[node name="ReadyBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
+layout_mode = 2
+custom_minimum_size = Vector2(140, 42)
+toggle_mode = true
+text = "Not ready"
+
+[node name="StartBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
+layout_mode = 2
+custom_minimum_size = Vector2(140, 42)
+text = "Start game"
+
+; ── Status label (for errors etc.) ──
+
+[node name="StatusLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.75, 0.9, 1)
+theme_override_font_sizes/font_size = 15
+text = ""
+horizontal_alignment = 1

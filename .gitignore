@@ -1,0 +1,33 @@
+# Dependencies and secrets
+node_modules/
+dist/
+.env
+
+# Godot editor / local credentials
+**/.godot/
+**/export_credentials.cfg
+
+# Build artifacts and binaries (GitHub 100MB file limit)
+*.exe
+*.TMP
+*.7z
+*.zip
+*.pck
+*.wasm
+*.x86_64
+*.apk
+*.aab
+*.dmg
+*.app
+
+# Keep the PCK the hosted server serves to the launcher
+!server/data/game_data.pck
+
+# Huge local training dump — not needed to run the lobby
+server/data/headless-training-log.json
+
+# Cursor / OS
+.cursor/
+Thumbs.db
+.DS_Store
+*~

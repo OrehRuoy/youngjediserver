@@ -1,0 +1,137 @@
+{
+  "decks": [
+    {
+      "id": "starter_dark_deck",
+      "name": "Dark Side Starter Deck",
+      "side": "dark",
+      "cards": [
+        { "id": "battledroidinfantrymttdivision", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "battledroidofficeraatdivision", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "neimoidiantradefederationpilot", "set":"menaceofdarthmaul","count": 8 },
+        { "id": "darthmaulsithlord", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "blaster_dark", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "blasterrifle_dark", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "incompletecontrol", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "tatooinedesertlandingsite", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "coruscantjedicouncilchamber", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "naboogunganswamp", "set":"menaceofdarthmaul","count": 2 }
+      ]
+    },
+    {
+      "id": "starter_deck",
+      "name": "Starter Deck",
+      "side": "light",
+      "cards": [
+        { "id": "jawabargainer", "set":"menaceofdarthmaul","count": 8 },
+        { "id": "royalguardleader", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "royalguardveteran", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "obiwankenobijedipadawan", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "blaster_light", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "blasterrifle_light", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "securityvolunteers", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "tatooinepodracearena", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "coruscantcapitalcity", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "nabootheedpalace", "set":"menaceofdarthmaul","count": 2 }
+      ]
+    },
+    {
+      "id": "origins99_light_deck",
+      "name": "Origins 99 Champion",
+      "side": "light",
+      "cards": [
+        { "id": "obiwankenobiyoungjedi", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "quigonjinnjedimaster", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "macewindujedimaster", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "ishitibwarrior", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "jawabargainer", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "anakinskywalkerpodracerpilot", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "padmenaberriehandmaiden", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "jarjarbinksgunganchubathief", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "yodajedimaster", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "captaintarpalsgunganguard", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "nabooofficerbattleplanner", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "gunganwarriorinfantry", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "queenamidalarulerofnaboo", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "queenamidalaroyalleader", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "c3poanakinscreation", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "blasterrifle_light", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "obiwankenobislightsaber", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "eopie", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "blaster_light", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "thenegotiationswereshort", "set":"menaceofdarthmaul","count": 8 },
+        { "id": "dabeingshereaboutscawazy", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "bravo1naboostarfighter", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "naboostarfighter", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "tatooinepodracearena", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "coruscantcapitalcity", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "nabootheedpalace", "set":"menaceofdarthmaul","count": 1 }
+      ]
+    },
+    {
+      "id": "worldchampionship99_light_deck",
+      "name": "World Championship 99",
+      "side": "light",
+      "cards": [
+        { "id": "ithorianmerchant", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "coruscantguardofficer", "set":"thejedicouncil","count": 5 },
+        { "id": "padmenaberriehandmaiden", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "padmenaberriequeenshandmaiden", "set":"thejedicouncil","count": 5 },
+        { "id": "queenamidalarulerofnaboo", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "amidalasblaster", "set":"thejedicouncil","count": 10 },
+        { "id": "thenegotiationswereshort", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "ivebeentrainedindefense", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "enoughofthispretense", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "republiccruisertransport", "set":"menaceofdarthmaul","count": 7 },
+        { "id": "tatooinemosespa", "set":"thejedicouncil","count": 1 },
+        { "id": "coruscantcapitalcity", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "naboogunganswamp", "set":"thejedicouncil","count": 1 }
+      ]
+    },
+    {
+      "id": "worldchampionship99_dark_deck",
+      "name": "World Championship 99",
+      "side": "dark",
+      "cards": [
+        { "id": "tradefederationtankarmoreddivision", "set":"menaceofdarthmaul","count": 10 },
+        { "id": "tradefederationtankassaultdivision", "set":"thejedicouncil","count": 10 },
+        { "id": "sithprobedroidhunterdroid", "set":"thejedicouncil","count": 10 },
+        { "id": "blasterrifle_dark", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "tradefederationtanklasercannon", "set":"thejedicouncil","count": 6 },
+        { "id": "openfire", "set":"thejedicouncil","count": 6 },
+        { "id": "opeeseakiller", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "droidstarfighter", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "tatooinedesertlandingsite", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "coruscantgalacticsenate", "set":"thejedicouncil","count": 1 },
+        { "id": "naboobattleplains", "set":"thejedicouncil","count": 2 }
+      ]
+    },
+    {
+      "id": "origins99_dark_deck",
+      "name": "Origins 99 Champion",
+      "side": "dark",
+      "cards": [
+        { "id": "aurrasingbountyhunter", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "darthmaulsithapprentice", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "darthsidioussithmaster", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "battledroidsquadassaultunit", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "destroyerdroidwheeldroid", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "jabbathehuttvilecrimelord", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "wattoslaveowner", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "battledroidofficermttdivision", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "battledroidinfantrymttdivision", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "bibfortunatwilekadvisor", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "tuskenraidernomad", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "tuskenraidermarksman", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "blasterrifle_dark", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "tatooinethunderrifle", "set":"menaceofdarthmaul","count": 5 },
+        { "id": "opeeseakiller", "set":"menaceofdarthmaul","count": 4 },
+        { "id": "sniper", "set":"menaceofdarthmaul","count": 6 },
+        { "id": "darthmaulsstarfighter", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "droidstarfighter", "set":"menaceofdarthmaul","count": 2 },
+        { "id": "tatooinedesertlandingsite", "set":"menaceofdarthmaul","count": 3 },
+        { "id": "coruscantjedicouncilchamber", "set":"menaceofdarthmaul","count": 1 },
+        { "id": "naboogunganswamp", "set":"menaceofdarthmaul","count": 1 }
+      ]
+    }
+  ]
+}
