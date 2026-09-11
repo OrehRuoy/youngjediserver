@@ -288,7 +288,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
       const def = getCard(c.cardId) as { side?: string };
       if (def?.side && def.side !== botSide) continue;
       if (type === "character" && (state.wouldViolateUniqueness(g, botSide, c.cardId, c.cardSet) || state.wouldViolateUniquenessAtLocation(g, botSide, c.cardId))) continue;
-      if (type === "weapon" && (state.wouldViolateUniquenessWeapon(g, botSide, c.cardId, c.cardSet) || state.wouldViolateUniquenessAtLocationWeapon(g, botSide, c.cardId))) continue;
+      if (type === "weapon" && (state.wouldViolateUniquenessWeapon(g, botSide, c.cardId, c.cardSet) || state.wouldViolateUniquenessAtLocationWeapon(g, botSide, c.cardId, c.cardSet))) continue;
       let score = 2;
       if (type === "character") {
         if (locId) score += state.getLocationBonusForCharacter(c.cardId, locId);
@@ -357,13 +357,13 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         const myPower = state.totalPowerInPlay(g, botSide);
         const oppPower = state.totalPowerInPlay(g, oppSide);
         const likelyLosing = !botIsAttacker && (myPower < oppPower || characters.length < oppChars.length);
-        const weaponPowerAdd = (w: { instanceId: string; cardId: string }, ch: { instanceId: string; cardId: string }) =>
-          state.getWeaponPowerAddForCharacter(w.cardId, ch.cardId);
+        const weaponPowerAdd = (w: { instanceId: string; cardId: string; cardSet?: string }, ch: { instanceId: string; cardId: string }) =>
+          state.getWeaponPowerAddForCharacter(w.cardId, ch.cardId, w.cardSet);
         const pairs: { weapon: typeof weapons[0]; char: typeof characters[0]; add: number }[] = [];
         for (const w of weapons) {
           for (const ch of characters) {
             if (!canWeaponBeUsedBy(w.cardId, ch.cardId)) continue;
-            const add = state.getWeaponPowerAddForCharacter(w.cardId, ch.cardId);
+            const add = state.getWeaponPowerAddForCharacter(w.cardId, ch.cardId, w.cardSet);
             pairs.push({ weapon: w, char: ch, add });
           }
         }

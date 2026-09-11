@@ -95,7 +95,7 @@ export function handleGameAction(
         error: "This unique weapon is already stranded on a planet; you cannot deploy another copy",
       };
     }
-    const atLocWeaponViolation = cardType === "weapon" ? state.wouldViolateUniquenessAtLocationWeapon(g, side, card.cardId) : null;
+    const atLocWeaponViolation = cardType === "weapon" ? state.wouldViolateUniquenessAtLocationWeapon(g, side, card.cardId, card.cardSet) : null;
     if (atLocWeaponViolation) {
       return { applied: false, error: `Only 1 "${atLocWeaponViolation.cardTitle}" allowed at this location` };
     }

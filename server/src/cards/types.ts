@@ -73,10 +73,10 @@ export interface WeaponCardDefinition extends CardDefinitionBase {
   stackable?: boolean;
   /** Deploy/play cost */
   cost?: number;
-  /** Add this to power when deployed (e.g. adds 4 to character power) */
-  powerAdd?: number;
-  /** Second power add when canUse2 matches (e.g. "any") */
-  powerAdd2?: number;
+  /** Add this to power when deployed (e.g. adds 4 to character power). "?" = draw destiny for power. */
+  powerAdd?: number | string;
+  /** Second power add when canUse2 matches (e.g. "any"). "?" = draw destiny for power. */
+  powerAdd2?: number | string;
   /** Add this to destiny when used */
   destinyAdd?: number;
   /** Second destiny add when canUse2 matches */

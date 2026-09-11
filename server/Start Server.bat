@@ -2,8 +2,8 @@
 title Young Jedi TCG Server
 cd /d "%~dp0"
 
-echo Building and starting server...
-echo (Builds TypeScript, then runs. Default port 49152.)
+echo Syncing cards, building, and starting server...
+echo (Default port 49152. Ctrl+C to stop.)
 echo.
 call npm run serve
 if errorlevel 1 (

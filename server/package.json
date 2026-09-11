@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "serve": "npm run build && node dist/index.js",
+    "serve": "node ../scripts/sync-cards.js && npm run build && node dist/index.js",
     "dev": "ts-node src/index.ts",
     "sync-cards": "node ../scripts/sync-cards.js",
     "headless": "node dist/headless-runner.js",
