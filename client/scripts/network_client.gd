@@ -8,7 +8,7 @@ signal connected()
 signal disconnected()
 signal message_received(msg: Dictionary)
 
-const DEFAULT_URL := "wss://mnbsekfunp.localto.net"
+const DEFAULT_URL := "wss://youngjediserver.onrender.com"
 const HEARTBEAT_MS := 25000
 
 var _ws: WebSocketPeer

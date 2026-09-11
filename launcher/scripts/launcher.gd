@@ -5,7 +5,7 @@
 extends Control
 
 const VERSION_URL_LOCAL := "http://127.0.0.1:49152/updates/version.json"
-const VERSION_URL_REMOTE := "https://mnbsekfunp.localto.net/updates/version.json"
+const VERSION_URL_REMOTE := "https://youngjediserver.onrender.com/updates/version.json"
 const GAME_SCENE := "res://scenes/login.tscn"
 const GAME_WINDOW_WIDTH := 1280
 const GAME_WINDOW_HEIGHT := 720

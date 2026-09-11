@@ -53,7 +53,7 @@ Until this step, clients still use the old Localtonet tunnel. After you have the
 
 Use **`wss://`** for WebSockets and **`https://`** for version/PCK. Then re-export the Godot web build for itch.
 
-Local debug builds still use `ws://127.0.0.1:49152`.
+Local debug builds use Render too, unless `application/config/use_local_server` is true (`ws://127.0.0.1:49152`).
 
 ## Docker (optional, Fly later)
 

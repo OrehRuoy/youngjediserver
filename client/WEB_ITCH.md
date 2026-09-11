@@ -6,6 +6,6 @@
 
 3. Try **Run game** in a **new browser tab** (not only the small embed).
 
-4. After Render deploy, set the client to `wss://YOUR-APP.onrender.com` (see `server/DEPLOY.md`). Until then the tunnel URL below is still used.
+4. Web client uses `wss://youngjediserver.onrender.com` (`connection.gd`).
 
 5. Login waits two frames before connecting so the head script is ready; the client calls `window.youngJediWsStart` directly (no `eval`).

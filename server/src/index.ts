@@ -96,13 +96,18 @@ loadHeadlessBotConfig();
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 
+function requestPath(req: http.IncomingMessage): string {
+  return (req.url ?? "/").split("?")[0];
+}
+
 const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse): void => {
-  if (req.url === "/health" && req.method === "GET") {
+  const urlPath = requestPath(req);
+  if (urlPath === "/health" && (req.method === "GET" || req.method === "HEAD")) {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, service: "young-jedi-server" }));
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ ok: true, service: "young-jedi-server" }));
     return;
   }
-  if (req.url === "/updates/version.json" && req.method === "GET") {
+  if (urlPath === "/updates/version.json" && req.method === "GET") {
     const versionPath = path.join(DATA_DIR, "version.json");
     const pckPath = path.join(DATA_DIR, "game_data.pck");
     try {
@@ -123,26 +128,26 @@ const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse): vo
     }
     return;
   }
-  if (req.url === "/updates/game_data.pck" && req.method === "GET") {
+  if (urlPath === "/updates/game_data.pck" && req.method === "GET") {
     const pckPath = path.join(DATA_DIR, "game_data.pck");
-    try {
-      if (!fs.existsSync(pckPath)) {
+    fs.stat(pckPath, (err, st) => {
+      if (err || !st.isFile()) {
         res.writeHead(404);
         res.end();
         return;
       }
-      const buf = fs.readFileSync(pckPath);
       res.writeHead(200, {
         "Content-Type": "application/octet-stream",
-        "Content-Length": String(buf.length),
+        "Content-Length": String(st.size),
         "Cache-Control": "no-store, no-cache, must-revalidate",
         Pragma: "no-cache",
       });
-      res.end(buf);
-    } catch {
-      res.writeHead(500);
-      res.end();
-    }
+      const stream = fs.createReadStream(pckPath);
+      stream.on("error", () => {
+        if (!res.writableEnded) res.destroy();
+      });
+      stream.pipe(res);
+    });
     return;
   }
   res.writeHead(404);
@@ -179,7 +184,7 @@ function applyConcedeAndBroadcast(gameId: string, playerId: string, reason: stri
   return true;
 }
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 256 * 1024 });
 
 function send(ws: import("ws").WebSocket, msg: object): void {
   if (ws.readyState !== 1) return;
@@ -343,7 +348,7 @@ function scheduleDestinyCompareResolve(gameId: string): void {
 }
 
 wss.on("connection", (ws, req) => {
-  // --- Security: connection limit per IP (1 for external, unlimited for localhost) ---
+  // --- Security: connection limits (see MAX_CONNECTIONS_PER_IP / MAX_CONNECTIONS) ---
   const limitErr = security.checkConnectionLimit(req);
   if (limitErr) {
     send(ws, { type: "error", error: limitErr });
@@ -380,6 +385,7 @@ wss.on("connection", (ws, req) => {
       }
     }
 
+    try {
     switch (msg.type) {
       case "heartbeat":
         break;
@@ -743,6 +749,10 @@ wss.on("connection", (ws, req) => {
 
       default:
         send(ws, { type: "error", error: "Unknown message type" });
+    }
+    } catch (err) {
+      console.error("[ws] handler error:", err);
+      send(ws, { type: "error", error: "Server error" });
     }
   });
 

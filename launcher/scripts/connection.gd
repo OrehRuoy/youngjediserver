@@ -5,16 +5,13 @@ const NetworkClientScript = preload("res://scripts/network_client.gd")
 const GameStateScript = preload("res://scripts/game_state.gd")
 
 const SERVER_LOCAL := "ws://127.0.0.1:49152"
-## After Render deploy, set to wss://YOUR-APP.onrender.com (see server/DEPLOY.md).
-const SERVER_REMOTE := "wss://mnbsekfunp.localto.net"
+const SERVER_REMOTE := "wss://youngjediserver.onrender.com"
 
 var _client: RefCounted
 var _state: RefCounted
 
 
 func get_server_url() -> String:
-	if OS.is_debug_build():
-		return SERVER_LOCAL
 	if ProjectSettings.get_setting("application/config/use_local_server", false):
 		return SERVER_LOCAL
 	return SERVER_REMOTE

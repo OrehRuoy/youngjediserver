@@ -18,7 +18,7 @@ Small launcher that checks for updates, downloads `game_data.pck` from the URL i
 1. Export the game as **game_data.pck** (see below).
 2. Copy **game_data.pck** into **server/data/**.
 3. In **server/data/version.json**, set **url** to your server’s URL, for example:
-   - Remote: `"url": "https://mnbsekfunp.localto.net/updates/game_data.pck"`
+   - Remote: `"url": "https://youngjediserver.onrender.com/updates/game_data.pck"`
    - (For local testing the launcher uses localhost automatically.)
 
 The server serves `GET /updates/game_data.pck` from `server/data/game_data.pck`. Use that URL in version.json and the launcher will download the file correctly.
@@ -68,7 +68,7 @@ In this **launcher** project:
 
 In `scripts/launcher.gd`:
 
-- **VERSION_URL_REMOTE**: Remote version.json. Default: `https://mnbsekfunp.localto.net/updates/version.json` (Localtonet HTTP tunnel). Local dev still tries `http://127.0.0.1:49152/updates/version.json` first.
+- **VERSION_URL_REMOTE**: Remote version.json. Default: `https://youngjediserver.onrender.com/updates/version.json`. Local dev still tries `http://127.0.0.1:49152/updates/version.json` first.
 - **GAME_SCENE**: Scene to run after loading the pack (`res://scenes/login.tscn` for the current game).
 - **PCK_PATH**: Where to store the downloaded pack (`user://game_data.pck`).
 
