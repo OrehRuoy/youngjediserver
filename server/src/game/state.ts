@@ -1572,6 +1572,21 @@ function parseGametextBonusClauses(gametextbonus: string): { num: number; what: 
   return out;
 }
 
+function opponentMatchesGametextCondition(opponentCharacterCardId: string | undefined, condition: string): boolean {
+  if (!opponentCharacterCardId || !condition) return false;
+  if (condition === "tank") return opponentCharacterCardId.toLowerCase().includes("tank");
+  const oppDef = getCard(opponentCharacterCardId);
+  if (!oppDef || (oppDef as { type?: string }).type !== "character") return false;
+  if (condition === "amidala") {
+    return ((oppDef as { persona?: string }).persona ?? "").toLowerCase() === "amidala";
+  }
+  if (condition === "handmaiden") {
+    const traits = ((oppDef as { trait?: string }).trait ?? "").toLowerCase().split(",").map((s) => s.trim());
+    return traits.includes("handmaiden");
+  }
+  return false;
+}
+
 function weaponMatchesGametextCondition(
   weaponCardId: string | undefined,
   condition: string,
@@ -1602,13 +1617,11 @@ function getGametextBonusForCharacter(
   let label: string | undefined;
   for (const clause of parseGametextBonusClauses(gametextbonus)) {
     if (clause.what !== "power") continue;
-    if (clause.condition === "tank") {
-      if (!opponentCharacterCardId) continue;
-      const oppId = opponentCharacterCardId.toLowerCase();
-      if (oppId.includes("tank")) {
-        bonus += clause.num;
-        label = "vs Tank +" + clause.num;
-      }
+    if (opponentMatchesGametextCondition(opponentCharacterCardId, clause.condition)) {
+      bonus += clause.num;
+      if (clause.condition === "tank") label = "vs Tank +" + clause.num;
+      else if (clause.condition === "amidala") label = "vs Amidala +" + clause.num;
+      else if (clause.condition === "handmaiden") label = "vs Handmaiden +" + clause.num;
       continue;
     }
     if (weaponMatchesGametextCondition(weaponCardId, clause.condition, weaponSet)) bonus += clause.num;
