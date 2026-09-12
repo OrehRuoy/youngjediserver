@@ -223,6 +223,11 @@ layout_mode = 2
 custom_minimum_size = Vector2(160, 38)
 text = "RULES"
 
+[node name="ReportBugBtn" type="Button" parent="Margin/Rows/MiddleRow/ButtonsColumn"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 38)
+text = "REPORT BUG"
+
 ; ═══════════════════ ROW 3: PLAYING TABLES + COMMS FEED ═══════════════════
 
 [node name="BottomRow" type="HBoxContainer" parent="Margin/Rows"]

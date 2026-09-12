@@ -64,6 +64,7 @@ var _previous_phase: String = ""
 var _initial_draw_animation_done: bool = false
 var _your_deck_count: int = 0
 var _opp_deck_count: int = 0
+var _chat_send_frame: int = -1
 
 const DECK_POPUP_CARD_SIZE := Vector2(120, 170)
 var _deck_popup_yours: PanelContainer = null
@@ -145,6 +146,7 @@ func _ready() -> void:
 		chat_send_btn.pressed.connect(_on_chat_send)
 	if chat_input:
 		chat_input.text_submitted.connect(_on_chat_submitted)
+		chat_input.gui_input.connect(_on_chat_input_gui_input)
 	# Deck hover: connect to wrappers (mouse_filter STOP) so hover is detected
 	if opp_deck_wrapper:
 		opp_deck_wrapper.mouse_entered.connect(_on_opp_deck_mouse_entered)
@@ -1873,12 +1875,19 @@ func _append_chat_line(from: String, text: String) -> void:
 
 func _on_chat_send() -> void:
 	_send_chat_text(chat_input.text)
-	chat_input.clear()
 
 
 func _on_chat_submitted(new_text: String) -> void:
 	_send_chat_text(new_text)
-	chat_input.clear()
+
+
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.keycode != KEY_ENTER and event.keycode != KEY_KP_ENTER:
+		return
+	_send_chat_text(chat_input.text)
+	chat_input.accept_event()
 
 
 func _scroll_chat_to_bottom(scroll: ScrollContainer) -> void:
@@ -1890,7 +1899,14 @@ func _send_chat_text(text: String) -> void:
 	var t: String = text.strip_edges()
 	if t.is_empty():
 		return
+	var frame: int = Engine.get_process_frames()
+	if frame == _chat_send_frame:
+		return
+	_chat_send_frame = frame
 	Connection.get_client().game_chat(t)
+	if chat_input:
+		chat_input.clear()
+		chat_input.grab_focus()
 
 
 func _refresh() -> void:

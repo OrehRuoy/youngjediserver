@@ -70,8 +70,27 @@ function tableToSummary(t: TableState): TableSummary {
     darkReady: t.darkReady,
     lightDeckId: t.lightDeckId ?? DEFAULT_LIGHT_DECK,
     darkDeckId: t.darkDeckId ?? DEFAULT_DARK_DECK,
+    lightCoverCard: t.lightCoverCard,
+    darkCoverCard: t.darkCoverCard,
     gameStarted: !!t.gameId,
   };
+}
+
+export type CoverCard = { id: string; set?: string };
+
+export function parseCoverCard(raw: unknown): CoverCard | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const id = (raw as { id?: unknown }).id;
+  if (typeof id !== "string") return undefined;
+  const trimmed = id.trim();
+  if (!trimmed || trimmed.length > 80) return undefined;
+  const out: CoverCard = { id: trimmed };
+  const set = (raw as { set?: unknown }).set;
+  if (typeof set === "string") {
+    const setTrim = set.trim();
+    if (setTrim && setTrim.length <= 80) out.set = setTrim;
+  }
+  return out;
 }
 
 export function getLobbyChat(limit = 50): ChatEntry[] {
@@ -184,22 +203,34 @@ export function setDeck(playerId: string, deckId: string): TableState | null {
   const player = players.get(playerId);
   const table = player?.tableId ? tables.get(player.tableId) : undefined;
   if (!player || !table) return null;
-  if (table.lightPlayerId === playerId) table.lightDeckId = deckId;
-  else if (table.darkPlayerId === playerId) table.darkDeckId = deckId;
-  else return null;
+  if (table.lightPlayerId === playerId) {
+    table.lightDeckId = deckId;
+    delete table.lightCoverCard;
+  } else if (table.darkPlayerId === playerId) {
+    table.darkDeckId = deckId;
+    delete table.darkCoverCard;
+  } else return null;
   return table;
 }
 
-export function setCustomDeck(playerId: string, cards: { id: string; set?: string; count: number }[]): TableState | null {
+export function setCustomDeck(
+  playerId: string,
+  cards: { id: string; set?: string; count: number }[],
+  coverCard?: CoverCard
+): TableState | null {
   const player = players.get(playerId);
   const table = player?.tableId ? tables.get(player.tableId) : undefined;
   if (!player || !table) return null;
   if (table.lightPlayerId === playerId) {
     table.lightDeckId = "custom";
     table.lightCustomCards = cards;
+    if (coverCard) table.lightCoverCard = coverCard;
+    else delete table.lightCoverCard;
   } else if (table.darkPlayerId === playerId) {
     table.darkDeckId = "custom";
     table.darkCustomCards = cards;
+    if (coverCard) table.darkCoverCard = coverCard;
+    else delete table.darkCoverCard;
   } else {
     return null;
   }

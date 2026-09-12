@@ -18,6 +18,7 @@ const RANDOM_ID := "random"
 @onready var bot_avatar: TextureRect = $Margin/VBox/Seats/BotSeat/VBox/BotAvatar
 @onready var bot_name_label: Label = $Margin/VBox/Seats/BotSeat/VBox/NameLabel
 @onready var bot_deck_select: OptionButton = $Margin/VBox/Seats/BotSeat/VBox/DeckSelect
+@onready var bot_style_select: OptionButton = $Margin/VBox/Seats/BotSeat/VBox/StyleSelect
 @onready var leave_btn: Button = $Margin/VBox/ActionsBar/Actions/LeaveBtn
 @onready var start_btn: Button = $Margin/VBox/ActionsBar/Actions/StartBtn
 @onready var status_label: Label = $Margin/VBox/StatusLabel
@@ -165,6 +166,7 @@ func _load_custom_decks() -> void:
 			"side": deck_side,
 			"cards": cards_list,
 			"is_custom": true,
+			"coverCard": _cover_from_raw(deck.get("coverCard", {})),
 		}
 		if deck_side == "light":
 			_light_decks.append(custom_entry)
@@ -181,11 +183,6 @@ func _refresh_ui() -> void:
 
 	var player_is_light: bool = _player_side == "light"
 
-	var card_back_light: Texture2D = load("res://assets/card_back_light.png") as Texture2D
-	var card_back_dark: Texture2D = load("res://assets/card_back_dark.png") as Texture2D
-	if player_card_back:
-		player_card_back.texture = card_back_light if player_is_light else card_back_dark
-
 	player_panel.add_theme_stylebox_override("panel", _make_panel_style(player_is_light))
 	bot_panel.add_theme_stylebox_override("panel", _make_panel_style(not player_is_light))
 	player_card_glow.add_theme_stylebox_override("panel", _make_glow_style(player_is_light))
@@ -196,6 +193,15 @@ func _refresh_ui() -> void:
 
 	_populate_deck_dropdown(player_deck_select, player_decks)
 	_populate_deck_dropdown(bot_deck_select, bot_decks)
+	_apply_player_cover_art(player_is_light, player_decks)
+	var player_accent: Color = DropdownStyle.LIGHT_ACCENT if player_is_light else DropdownStyle.DARK_ACCENT
+	var bot_accent: Color = DropdownStyle.DARK_ACCENT if player_is_light else DropdownStyle.LIGHT_ACCENT
+	DropdownStyle.apply(player_side_select, player_accent, theme)
+	DropdownStyle.apply(player_deck_select, player_accent, theme)
+	DropdownStyle.apply(bot_deck_select, bot_accent, theme)
+	if bot_style_select:
+		_fill_style_dropdown()
+		DropdownStyle.apply(bot_style_select, bot_accent, theme)
 	status_label.text = ""
 	call_deferred("_update_wires")
 
@@ -224,7 +230,37 @@ func _on_player_side_selected(idx: int) -> void:
 func _on_player_deck_selected(_idx: int) -> void:
 	if _deck_select_ignore:
 		return
-	# Selection is kept; no need to refresh and reset the dropdown
+	var player_is_light: bool = _player_side == "light"
+	var player_decks: Array[Dictionary] = _light_decks if player_is_light else _dark_decks
+	_apply_player_cover_art(player_is_light, player_decks)
+
+
+func _cover_from_raw(raw: Variant) -> Dictionary:
+	if raw is Dictionary:
+		var cid: String = str(raw.get("id", "")).strip_edges()
+		if cid.is_empty():
+			return {}
+		return { "id": cid, "set": str(raw.get("set", "")).strip_edges() }
+	return {}
+
+
+func _apply_player_cover_art(player_is_light: bool, player_decks: Array[Dictionary]) -> void:
+	if player_card_back == null:
+		return
+	var cover: Dictionary = {}
+	var idx: int = player_deck_select.selected
+	if idx > 0 and idx - 1 < player_decks.size():
+		var d: Dictionary = player_decks[idx - 1]
+		cover = _cover_from_raw(d.get("coverCard", {}))
+	var side := "light" if player_is_light else "dark"
+	var cover_id: String = str(cover.get("id", ""))
+	if not cover_id.is_empty() and CardCatalog:
+		var info: Dictionary = CardCatalog.get_card_info(cover_id, "", str(cover.get("set", "")))
+		var tex: Texture2D = CardCatalog.load_card_texture(cover_id, str(info.get("side", side)), str(cover.get("set", "")))
+		if tex:
+			player_card_back.texture = tex
+			return
+	player_card_back.texture = load("res://assets/card_back_light.png" if player_is_light else "res://assets/card_back_dark.png") as Texture2D
 
 
 func _on_bot_deck_selected(_idx: int) -> void:
@@ -260,6 +296,33 @@ func _get_bot_deck_selection() -> Dictionary:
 	return {"id": d.get("id", ""), "custom": []}
 
 
+func _fill_style_dropdown() -> void:
+	if bot_style_select == null or bot_style_select.item_count > 0:
+		return
+	bot_style_select.add_item("Style: Random", 0)
+	bot_style_select.add_item("Style: Match deck", 1)
+	bot_style_select.add_item("Style: Neutral", 2)
+	bot_style_select.add_item("Style: Aggressive", 3)
+	bot_style_select.add_item("Style: Passive", 4)
+	bot_style_select.selected = 0
+
+
+func _get_bot_style() -> String:
+	if bot_style_select == null:
+		return "random"
+	match bot_style_select.selected:
+		1:
+			return "auto"
+		2:
+			return "balanced"
+		3:
+			return "aggressive"
+		4:
+			return "passive"
+		_:
+			return "random"
+
+
 func _on_leave_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
@@ -283,7 +346,8 @@ func _on_start_pressed() -> void:
 		player_deck.get("id", ""),
 		player_custom,
 		bot_deck.get("id", ""),
-		bot_custom
+		bot_custom,
+		_get_bot_style()
 	)
 	start_btn.disabled = true
 	status_label.text = "Starting game..."

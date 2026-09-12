@@ -13,10 +13,12 @@ const DEFAULT_DARK_DECK := "starter_dark_deck"
 @onready var light_name_label: Label = $Margin/VBox/Seats/LightSeat/VBox/NameLabel
 @onready var light_status_label: Label = $Margin/VBox/Seats/LightSeat/VBox/StatusLabel
 @onready var light_deck_select: OptionButton = $Margin/VBox/Seats/LightSeat/VBox/DeckSelect
+@onready var light_card_art: TextureRect = $Margin/VBox/Seats/LightSeat/VBox/CardGlow/CardBack
 @onready var dark_panel: PanelContainer = $Margin/VBox/Seats/DarkSeat
 @onready var dark_name_label: Label = $Margin/VBox/Seats/DarkSeat/VBox/NameLabel
 @onready var dark_status_label: Label = $Margin/VBox/Seats/DarkSeat/VBox/StatusLabel
 @onready var dark_deck_select: OptionButton = $Margin/VBox/Seats/DarkSeat/VBox/DeckSelect
+@onready var dark_card_art: TextureRect = $Margin/VBox/Seats/DarkSeat/VBox/CardGlow/CardBack
 @onready var leave_btn: Button = $Margin/VBox/ActionsBar/Actions/LeaveBtn
 @onready var ready_btn: Button = $Margin/VBox/ActionsBar/Actions/ReadyBtn
 @onready var start_btn: Button = $Margin/VBox/ActionsBar/Actions/StartBtn
@@ -46,6 +48,8 @@ func _ready() -> void:
 	start_btn.pressed.connect(_on_start_pressed)
 	light_deck_select.item_selected.connect(_on_light_deck_selected)
 	dark_deck_select.item_selected.connect(_on_dark_deck_selected)
+	DropdownStyle.apply(light_deck_select, DropdownStyle.LIGHT_ACCENT, theme)
+	DropdownStyle.apply(dark_deck_select, DropdownStyle.DARK_ACCENT, theme)
 	_refresh()
 	call_deferred("_update_wires")
 
@@ -136,6 +140,7 @@ func _load_custom_decks() -> void:
 			"side": deck_side,
 			"cards": cards_list,
 			"is_custom": true,
+			"coverCard": _cover_from_raw(deck.get("coverCard", {})),
 		}
 
 		if deck_side == "light":
@@ -177,6 +182,8 @@ func _refresh() -> void:
 	dark_status_label.add_theme_color_override("font_color", Color(0.3, 0.85, 0.35) if dark_ready else Color(0.55, 0.6, 0.7))
 	_populate_deck_dropdown(light_deck_select, _light_decks, light_deck_id, _last_light_custom_deck_id)
 	_populate_deck_dropdown(dark_deck_select, _dark_decks, dark_deck_id, _last_dark_custom_deck_id)
+	_apply_seat_art(light_card_art, "light", table.get("lightCoverCard", {}))
+	_apply_seat_art(dark_card_art, "dark", table.get("darkCoverCard", {}))
 	light_deck_select.disabled = state.my_side != "light" or light_name == "—"
 	dark_deck_select.disabled = state.my_side != "dark" or dark_name == "—"
 	var is_host: bool = table.get("hostId", "") == state.player_id
@@ -213,7 +220,7 @@ func _on_light_deck_selected(idx: int) -> void:
 	var deck: Dictionary = _light_decks[idx]
 	if deck.get("is_custom", false):
 		_last_light_custom_deck_id = deck.get("id", "")
-		Connection.get_client().table_deck_select_custom(deck.get("cards", []))
+		Connection.get_client().table_deck_select_custom(deck.get("cards", []), deck.get("coverCard", {}))
 	else:
 		_last_light_custom_deck_id = ""
 		Connection.get_client().table_deck_select(deck.get("id", ""))
@@ -225,10 +232,37 @@ func _on_dark_deck_selected(idx: int) -> void:
 	var deck: Dictionary = _dark_decks[idx]
 	if deck.get("is_custom", false):
 		_last_dark_custom_deck_id = deck.get("id", "")
-		Connection.get_client().table_deck_select_custom(deck.get("cards", []))
+		Connection.get_client().table_deck_select_custom(deck.get("cards", []), deck.get("coverCard", {}))
 	else:
 		_last_dark_custom_deck_id = ""
 		Connection.get_client().table_deck_select(deck.get("id", ""))
+
+
+func _cover_from_raw(raw: Variant) -> Dictionary:
+	if raw is Dictionary:
+		var cid: String = str(raw.get("id", "")).strip_edges()
+		if cid.is_empty():
+			return {}
+		return { "id": cid, "set": str(raw.get("set", "")).strip_edges() }
+	return {}
+
+
+func _apply_seat_art(tex_rect: TextureRect, side: String, cover_var: Variant) -> void:
+	if tex_rect == null:
+		return
+	var cover_id := ""
+	var cover_set := ""
+	if cover_var is Dictionary:
+		cover_id = str(cover_var.get("id", "")).strip_edges()
+		cover_set = str(cover_var.get("set", "")).strip_edges()
+	if not cover_id.is_empty() and CardCatalog:
+		var info: Dictionary = CardCatalog.get_card_info(cover_id, "", cover_set)
+		var tex: Texture2D = CardCatalog.load_card_texture(cover_id, str(info.get("side", side)), cover_set)
+		if tex:
+			tex_rect.texture = tex
+			return
+	var back_path := "res://assets/card_back_light.png" if side == "light" else "res://assets/card_back_dark.png"
+	tex_rect.texture = load(back_path) as Texture2D
 
 
 func _game_number(table_id: String) -> String:

@@ -9,7 +9,7 @@ import type { WebSocket } from "ws";
 import type { ClientMessage, Side } from "../types";
 import * as lobby from "./lobby";
 import { getTableSummaries, getLobbyPlayers, getLobbyChat, addLobbyChat } from "./lobby";
-import { createTable, joinTable, leaveTable, setReady, setDeck, setCustomDeck, getTableForBroadcast, getPlayersInTable, getTableSummary, createBotTable } from "./lobby";
+import { createTable, joinTable, leaveTable, setReady, setDeck, setCustomDeck, getTableForBroadcast, getPlayersInTable, getTableSummary, createBotTable, parseCoverCard } from "./lobby";
 import { getDecksForSide, getDeck } from "../cards/loader";
 
 const PLAYER_ID_PREFIX = "p_";
@@ -95,11 +95,15 @@ export function handleTableDeckSelect(playerId: string, deckId: string): { type:
   return { type: "table_update", table: getTableSummary(t.id)! };
 }
 
-export function handleTableDeckSelectCustom(playerId: string, cards: { id: string; set?: string; count: number }[]): { type: "table_update"; table: import("../types").TableSummary } | { type: "error"; error: string } | null {
+export function handleTableDeckSelectCustom(
+  playerId: string,
+  cards: { id: string; set?: string; count: number }[],
+  coverCardRaw?: unknown
+): { type: "table_update"; table: import("../types").TableSummary } | { type: "error"; error: string } | null {
   const player = lobby.getPlayer(playerId);
   if (!player || !player.tableId) return null;
   if (!cards || !Array.isArray(cards) || cards.length === 0) return { type: "error", error: "No cards in custom deck" };
-  const t = setCustomDeck(playerId, cards);
+  const t = setCustomDeck(playerId, cards, parseCoverCard(coverCardRaw));
   if (!t) return null;
   return { type: "table_update", table: getTableSummary(t.id)! };
 }

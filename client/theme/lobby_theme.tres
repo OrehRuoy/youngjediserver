@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=7 format=3]
+[gd_resource type="Theme" load_steps=9 format=3]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_panel"]
 bg_color = Color(0.03, 0.04, 0.1, 0.88)
@@ -86,6 +86,38 @@ content_margin_bottom = 8.0
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lobby_scroll"]
 bg_color = Color(0, 0, 0, 0)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_popup_panel"]
+bg_color = Color(0.03, 0.05, 0.12, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.28, 0.52, 0.88, 0.95)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 6.0
+content_margin_top = 6.0
+content_margin_right = 6.0
+content_margin_bottom = 6.0
+shadow_color = Color(0, 0, 0, 0.5)
+shadow_size = 10
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_popup_hover"]
+bg_color = Color(0.12, 0.22, 0.42, 0.95)
+border_width_left = 3
+border_color = Color(0.95, 0.82, 0.35, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 10.0
+content_margin_top = 7.0
+content_margin_right = 10.0
+content_margin_bottom = 7.0
+
 [resource]
 PanelContainer/styles/panel = SubResource("StyleBoxFlat_lobby_panel")
 Button/styles/normal = SubResource("StyleBoxFlat_lobby_btn")
@@ -106,3 +138,26 @@ Label/colors/font_color = Color(0.88, 0.9, 0.98, 1)
 Label/font_sizes/font_size = 14
 RichTextLabel/colors/default_color = Color(0.85, 0.88, 0.96, 1)
 RichTextLabel/font_sizes/normal_font_size = 14
+OptionButton/styles/normal = SubResource("StyleBoxFlat_lobby_btn")
+OptionButton/styles/hover = SubResource("StyleBoxFlat_lobby_btn_hover")
+OptionButton/styles/pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+OptionButton/styles/hover_pressed = SubResource("StyleBoxFlat_lobby_btn_pressed")
+OptionButton/styles/disabled = SubResource("StyleBoxFlat_lobby_btn_pressed")
+OptionButton/styles/focus = SubResource("StyleBoxFlat_lobby_btn_hover")
+OptionButton/colors/font_color = Color(0.92, 0.94, 1, 1)
+OptionButton/colors/font_hover_color = Color(0.98, 0.9, 0.5, 1)
+OptionButton/colors/font_pressed_color = Color(0.95, 0.82, 0.35, 1)
+OptionButton/colors/font_disabled_color = Color(0.55, 0.58, 0.68, 0.85)
+OptionButton/colors/font_focus_color = Color(0.98, 0.9, 0.5, 1)
+OptionButton/font_sizes/font_size = 14
+PopupMenu/styles/panel = SubResource("StyleBoxFlat_popup_panel")
+PopupMenu/styles/hover = SubResource("StyleBoxFlat_popup_hover")
+PopupMenu/colors/font_color = Color(0.9, 0.92, 1, 1)
+PopupMenu/colors/font_hover_color = Color(0.98, 0.92, 0.55, 1)
+PopupMenu/colors/font_accelerator_color = Color(0.7, 0.75, 0.88, 1)
+PopupMenu/colors/font_disabled_color = Color(0.5, 0.55, 0.65, 0.8)
+PopupMenu/colors/font_separator_color = Color(0.3, 0.48, 0.75, 0.7)
+PopupMenu/font_sizes/font_size = 14
+PopupMenu/constants/v_separation = 4
+PopupMenu/constants/item_start_padding = 8
+PopupMenu/constants/item_end_padding = 8

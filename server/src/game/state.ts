@@ -716,6 +716,8 @@ export interface GameStateData {
   };
   /** Instance IDs of effects already activated this deploy phase (each effect usable once per turn). */
   usedEffectsThisTurn?: string[];
+  /** Bot personality for vs-computer games. */
+  botStyle?: "balanced" | "aggressive" | "passive";
   /** Set when game has ended; players can return to lobby. */
   lightReturnedToLobby?: boolean;
   darkReturnedToLobby?: boolean;
@@ -1447,7 +1449,7 @@ export function getEffectYourDeployCountersBonus(state: GameStateData, side: Sid
 }
 
 /** Parse effect "effects" for "evenup:evenup+N". Returns N or 0 if not present (draw up to 6+N cards when evening up). */
-function getEffectEvenUpBonus(effectCardId: string, effectSet?: string): number {
+export function getEffectEvenUpBonus(effectCardId: string, effectSet?: string): number {
   const def = getCard(effectCardId, effectSet);
   if (!def || (def as { type?: string }).type !== "effect") return 0;
   const effectsStr = (def as { effects?: string }).effects;

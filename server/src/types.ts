@@ -15,9 +15,9 @@ export type ClientMessage =
   | { type: "table_leave" }
   | { type: "table_ready"; ready: boolean }
   | { type: "table_deck_select"; deckId: string }
-  | { type: "table_deck_select_custom"; name: string; cards: { id: string; set?: string; count: number }[] }
+  | { type: "table_deck_select_custom"; name: string; cards: { id: string; set?: string; count: number }[]; coverCard?: { id: string; set?: string } | null }
   | { type: "table_start" }  // host only, when all ready
-  | { type: "start_bot_game"; playerSide: Side; playerDeckId?: string; playerDeckCustom?: { id: string; count: number }[]; botDeckId?: string; botDeckCustom?: { id: string; count: number }[] }
+  | { type: "start_bot_game"; playerSide: Side; playerDeckId?: string; playerDeckCustom?: { id: string; count: number }[]; botDeckId?: string; botDeckCustom?: { id: string; count: number }[]; botStyle?: string }
   | { type: "game_chat"; text: string }
   | { type: "game_action"; action: GameAction }
   | { type: "game_concede" }
@@ -67,6 +67,8 @@ export interface TableSummary {
   darkReady: boolean;
   lightDeckId?: string;
   darkDeckId?: string;
+  lightCoverCard?: { id: string; set?: string };
+  darkCoverCard?: { id: string; set?: string };
   gameStarted: boolean;
 }
 
@@ -152,6 +154,8 @@ export interface TableState {
   darkDeckId?: string;
   lightCustomCards?: { id: string; set?: string; count: number }[];
   darkCustomCards?: { id: string; set?: string; count: number }[];
+  lightCoverCard?: { id: string; set?: string };
+  darkCoverCard?: { id: string; set?: string };
   gameId?: string;
   chat: ChatEntry[];
 }

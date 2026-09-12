@@ -56,6 +56,10 @@ func _ready() -> void:
 	if not Connection.get_client().is_connected_to_server():
 		Connection.get_client().connect_to_server(server_url)
 		_begin_wake_if_remote(server_url)
+		# Launcher used to force localhost; if that never opens, disconnected never fired.
+		# Start remote fallback on a timer instead of waiting for a disconnect.
+		if not _is_remote_url(server_url) and _local_fallback_timer < 0:
+			_local_fallback_timer = 2.0
 
 
 var _web_debug_label: Label = null
@@ -211,6 +215,9 @@ func _on_login_pressed() -> void:
 	if not Connection.get_client().is_connected_to_server():
 		pending_login_name = name_text
 		var url := _get_server_url()
+		if not _is_remote_url(url):
+			Connection.switch_to_remote_server()
+			url = Connection.get_server_url()
 		Connection.get_client().connect_to_server(url)
 		_begin_wake_if_remote(url)
 		status_label.text = "Connecting..."

@@ -44,6 +44,10 @@ var _drag_preview_card: Dictionary = {}
 
 var _hover_popup: Control = null
 var _hover_card_panel: Control = null
+var _cover_card: Dictionary = {}
+var _cover_panel: PanelContainer
+var _cover_tex: TextureRect
+var _cover_empty_label: Label
 
 
 func _ready() -> void:
@@ -132,6 +136,8 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 	deck_vbox.add_child(_deck_avg_destiny_label)
 	_update_average_destiny()
 
+	_build_cover_slot(deck_vbox)
+
 	var slot_scroll := ScrollContainer.new()
 	slot_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	slot_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -144,6 +150,64 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 
 	for color_name in COLOR_NAMES:
 		_build_color_slot(slots_vbox, color_name)
+
+
+func _build_cover_slot(parent: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	parent.add_child(row)
+
+	_cover_panel = PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.09, 0.14, 0.95)
+	style.border_color = Color(0.95, 0.82, 0.35, 1)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(8)
+	_cover_panel.add_theme_stylebox_override("panel", style)
+	_cover_panel.custom_minimum_size = Vector2(132, 168)
+	row.add_child(_cover_panel)
+
+	var cover_inner := VBoxContainer.new()
+	cover_inner.add_theme_constant_override("separation", 4)
+	_cover_panel.add_child(cover_inner)
+
+	var title := Label.new()
+	title.text = "Cover"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35, 1))
+	title.add_theme_font_size_override("font_size", 13)
+	cover_inner.add_child(title)
+
+	_cover_tex = TextureRect.new()
+	_cover_tex.custom_minimum_size = Vector2(100, 140)
+	_cover_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cover_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	_cover_tex.mouse_filter = Control.MOUSE_FILTER_STOP
+	_cover_tex.gui_input.connect(_on_cover_card_input)
+	_cover_tex.mouse_entered.connect(_on_cover_mouse_entered)
+	_cover_tex.mouse_exited.connect(_on_deck_card_mouse_exited)
+	cover_inner.add_child(_cover_tex)
+
+	_cover_empty_label = Label.new()
+	_cover_empty_label.text = "Drag a\ncard here"
+	_cover_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cover_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_cover_empty_label.add_theme_color_override("font_color", Color(0.7, 0.72, 0.8, 0.9))
+	_cover_empty_label.add_theme_font_size_override("font_size", 12)
+	_cover_empty_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_cover_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cover_tex.add_child(_cover_empty_label)
+
+	var hint := Label.new()
+	hint.text = "Cover card is table art only.\nIt is not in your deck and does not count toward limits."
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.85, 1))
+	hint.add_theme_font_size_override("font_size", 13)
+	row.add_child(hint)
+	_refresh_cover_display()
 
 
 func _build_color_slot(parent: VBoxContainer, color_name: String) -> void:
@@ -534,16 +598,22 @@ func _end_drag(gpos: Vector2) -> void:
 	var card: Dictionary = _drag_preview_card
 	var dot_color: String = card.get("dotColor", "")
 
-	var dropped_color := _get_drop_target_color(gpos)
-	if dropped_color.is_empty():
-		_show_toast("Drag card to a color slot on the left.")
+	var dropped_target := _get_drop_target(gpos)
+	if dropped_target == "cover":
+		_set_cover_card(card)
+		_drag_source = null
+		_drag_preview_card = {}
 		return
 
-	if dropped_color != dot_color:
+	if dropped_target.is_empty():
+		_show_toast("Drag card to a color slot, or onto Cover for table art.")
+		return
+
+	if dropped_target != dot_color:
 		_show_toast("This card is %s — it must go in the %s slot." % [dot_color.capitalize(), dot_color.capitalize()])
 		return
 
-	_try_add_card_to_slot(card, dropped_color)
+	_try_add_card_to_slot(card, dropped_target)
 	_drag_source = null
 	_drag_preview_card = {}
 
@@ -576,6 +646,50 @@ func _try_add_card_to_slot(card: Dictionary, color_name: String) -> void:
 	_deck_slots[color_name].append(card)
 	_refresh_slot_display(color_name)
 	_show_toast("Added %s to %s slot." % [card_name, color_name.capitalize()])
+
+
+func _set_cover_card(card: Dictionary) -> void:
+	_cover_card = card.duplicate(true)
+	_refresh_cover_display()
+	_show_toast("Cover set to %s. This is table art only." % card.get("name", "this card"))
+
+
+func _refresh_cover_display() -> void:
+	if _cover_tex == null:
+		return
+	var cid: String = str(_cover_card.get("id", ""))
+	if cid.is_empty():
+		_cover_tex.texture = null
+		if _cover_empty_label:
+			_cover_empty_label.visible = true
+		_cover_tex.tooltip_text = "Cover card — drag a card here for table art"
+		return
+	var side: String = str(_cover_card.get("side", ""))
+	var tex := _load_card_texture(cid, side)
+	if tex == null and CardCatalog:
+		tex = CardCatalog.load_card_texture(cid, side, str(_cover_card.get("set", "")))
+	_cover_tex.texture = tex
+	if _cover_empty_label:
+		_cover_empty_label.visible = tex == null
+	_cover_tex.tooltip_text = "%s (cover — click to remove)" % _cover_card.get("name", "Cover")
+
+
+func _on_cover_mouse_entered() -> void:
+	if _cover_card.is_empty():
+		return
+	_on_deck_card_mouse_entered(_cover_card)
+
+
+func _on_cover_card_input(event: InputEvent) -> void:
+	if _cover_card.is_empty():
+		return
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_RIGHT:
+			var name_str: String = str(_cover_card.get("name", "cover"))
+			_cover_card = {}
+			_hide_hover_preview()
+			_refresh_cover_display()
+			_show_toast("Removed cover card (%s)." % name_str)
 
 
 func _count_title_in_deck(card_name: String) -> int:
@@ -619,7 +733,9 @@ func _has_required_locations() -> bool:
 	return true
 
 
-func _get_drop_target_color(gpos: Vector2) -> String:
+func _get_drop_target(gpos: Vector2) -> String:
+	if _cover_panel and _cover_panel.get_global_rect().has_point(gpos):
+		return "cover"
 	for color_name in COLOR_NAMES:
 		var container: HFlowContainer = _slot_containers[color_name]
 		var parent_panel: PanelContainer = container.get_parent().get_parent() as PanelContainer
@@ -768,6 +884,8 @@ func _apply_filters() -> void:
 func _on_new_deck() -> void:
 	_deck_name = "New Deck"
 	_deck_name_label.text = _deck_name
+	_cover_card = {}
+	_refresh_cover_display()
 	for c in COLOR_NAMES:
 		_deck_slots[c].clear()
 		_refresh_slot_display(c)
@@ -825,6 +943,11 @@ func _save_to_file() -> void:
 		"side": detected_side,
 		"slots": {}
 	}
+	if not _cover_card.is_empty() and not str(_cover_card.get("id", "")).is_empty():
+		deck_data["coverCard"] = {
+			"id": _cover_card.get("id", ""),
+			"set": _cover_card.get("set", "menaceofdarthmaul")
+		}
 	for color_name in COLOR_NAMES:
 		var card_entries: Array = []
 		for card in _deck_slots[color_name]:
@@ -934,6 +1057,17 @@ func _load_deck_data(deck: Dictionary) -> void:
 			if not info.is_empty():
 				_deck_slots[color_name].append(info)
 		_refresh_slot_display(color_name)
+
+	_cover_card = {}
+	var cover_raw: Variant = deck.get("coverCard", {})
+	if cover_raw is Dictionary:
+		var cid: String = str(cover_raw.get("id", ""))
+		var set_hint: String = str(cover_raw.get("set", "menaceofdarthmaul"))
+		if not cid.is_empty():
+			var info: Dictionary = CardCatalog.get_card_info(cid, "", set_hint)
+			if not info.is_empty():
+				_cover_card = info
+	_refresh_cover_display()
 
 	_show_toast("Loaded deck '%s'." % _deck_name)
 

@@ -19,6 +19,7 @@ extends Control
 @onready var bot_game_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/BotGameBtn
 @onready var deckbuilder_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/DeckbuilderBtn
 @onready var rules_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/RulesBtn
+@onready var report_bug_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/ReportBugBtn
 
 # --- Row 3: Playing tables + Comms ---
 @onready var playing_tables_container: VBoxContainer = $Margin/Rows/BottomRow/PlayingPanel/PlayingVBox/PlayingScroll/PlayingTablesList
@@ -33,6 +34,7 @@ var _reconnecting: bool = false
 var _player_avatar_tex: Texture2D
 var _bot_avatar_tex: Texture2D
 var _logout_cooldown: float = 0.5  # brief guard against stray input from login screen
+var _chat_send_frame: int = -1
 
 
 func _ready() -> void:
@@ -58,11 +60,16 @@ func _ready() -> void:
 	state.error_received.connect(_on_error)
 	logout_btn.pressed.connect(_on_logout_pressed)
 	chat_btn.pressed.connect(_on_chat_sent)
+	if chat_edit:
+		chat_edit.text_submitted.connect(_on_chat_submitted)
+		chat_edit.gui_input.connect(_on_chat_edit_gui_input)
 	create_light_btn.pressed.connect(_on_create_light)
 	create_dark_btn.pressed.connect(_on_create_dark)
 	bot_game_btn.pressed.connect(_on_bot_game_pressed)
 	deckbuilder_btn.pressed.connect(_on_deckbuilder_pressed)
 	rules_btn.pressed.connect(_on_rules_pressed)
+	if report_bug_btn:
+		report_bug_btn.pressed.connect(_on_report_bug_pressed)
 	_setup_bot_game_icon()
 	_update_ui()
 	_build_players_list()
@@ -78,6 +85,7 @@ func _setup_bot_game_icon() -> void:
 	_style_side_button(create_dark_btn, false)
 	_setup_deckbuilder_icon()
 	_setup_rules_icon()
+	_setup_report_bug_icon()
 
 
 func _setup_deckbuilder_icon() -> void:
@@ -96,6 +104,15 @@ func _setup_rules_icon() -> void:
 	rules_btn.icon = tex
 	rules_btn.expand_icon = true
 	rules_btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+
+
+func _setup_report_bug_icon() -> void:
+	if not report_bug_btn:
+		return
+	var tex := _make_bug_icon(Color(0.7, 0.8, 0.95))
+	report_bug_btn.icon = tex
+	report_bug_btn.expand_icon = true
+	report_bug_btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 
 static func _make_cards_icon(tint: Color) -> ImageTexture:
@@ -152,6 +169,41 @@ static func _make_book_icon(tint: Color) -> ImageTexture:
 		img.set_pixel(x, 13, Color(tint.r * 0.6, tint.g * 0.6, tint.b * 0.6, 0.35))
 	for x in range(7, 14):
 		img.set_pixel(x, 16, Color(tint.r * 0.5, tint.g * 0.5, tint.b * 0.5, 0.3))
+	return ImageTexture.create_from_image(img)
+
+
+static func _make_bug_icon(tint: Color) -> ImageTexture:
+	var sz := 24
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var body := Color(tint.r, tint.g, tint.b, 0.9)
+	var dim := Color(tint.r * 0.55, tint.g * 0.55, tint.b * 0.55, 0.7)
+	# Body oval
+	for y in range(7, 19):
+		for x in range(8, 16):
+			var dx := absf(x - 11.5) / 3.5
+			var dy := absf(y - 12.5) / 5.5
+			if dx * dx + dy * dy <= 1.0:
+				img.set_pixel(x, y, body if dx * dx + dy * dy > 0.55 else Color(tint.r * 0.18, tint.g * 0.18, tint.b * 0.18, 0.55))
+	# Head
+	for y in range(4, 9):
+		for x in range(9, 15):
+			var dx := absf(x - 11.5) / 2.6
+			var dy := absf(y - 6.0) / 2.2
+			if dx * dx + dy * dy <= 1.0:
+				img.set_pixel(x, y, body)
+	# Antennae
+	img.set_pixel(9, 3, dim)
+	img.set_pixel(8, 2, dim)
+	img.set_pixel(14, 3, dim)
+	img.set_pixel(15, 2, dim)
+	# Legs
+	for i in range(3):
+		var ly := 9 + i * 3
+		img.set_pixel(6, ly, dim)
+		img.set_pixel(5, ly + 1, dim)
+		img.set_pixel(17, ly, dim)
+		img.set_pixel(18, ly + 1, dim)
 	return ImageTexture.create_from_image(img)
 
 
@@ -235,11 +287,33 @@ func _on_disconnected() -> void:
 
 
 func _on_chat_sent() -> void:
-	var text: String = chat_edit.text.strip_edges()
+	_send_lobby_chat(chat_edit.text)
+
+
+func _on_chat_submitted(new_text: String) -> void:
+	_send_lobby_chat(new_text)
+
+
+func _on_chat_edit_gui_input(event: InputEvent) -> void:
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.keycode != KEY_ENTER and event.keycode != KEY_KP_ENTER:
+		return
+	_send_lobby_chat(chat_edit.text)
+	chat_edit.accept_event()
+
+
+func _send_lobby_chat(raw: String) -> void:
+	var text: String = raw.strip_edges()
 	if text.is_empty():
 		return
+	var frame: int = Engine.get_process_frames()
+	if frame == _chat_send_frame:
+		return
+	_chat_send_frame = frame
 	Connection.get_client().lobby_chat(text)
 	chat_edit.clear()
+	chat_edit.grab_focus()
 
 
 func _on_chat(from: String, text: String, _at: int) -> void:
@@ -354,6 +428,12 @@ func _on_deckbuilder_pressed() -> void:
 
 func _on_rules_pressed() -> void:
 	OS.shell_open("https://www.starwarsccg.org/young-jedi/")
+
+
+func _on_report_bug_pressed() -> void:
+	var to_addr := "brock.hall1985@gmail.com"
+	var subject := "Young Jedi Server bug report"
+	OS.shell_open("mailto:%s?subject=%s" % [to_addr, subject.uri_encode()])
 
 
 func _on_join_light(table: Dictionary) -> void:

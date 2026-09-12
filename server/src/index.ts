@@ -12,7 +12,7 @@ import https from "https";
 import fs from "fs";
 import path from "path";
 import { WebSocketServer } from "ws";
-import { initCards } from "./cards/loader";
+import { initCards, getStarterDeckCardList } from "./cards/loader";
 import * as lobby from "./lobby/lobby";
 import * as lobbyHandlers from "./lobby/handlers";
 import * as gameEngine from "./game/engine";
@@ -250,7 +250,8 @@ function runBotTurn(gameId: string): void {
     return;
   }
   const botSide = bot.getBotSide(g)!;
-  let action = bot.getNextAction(g, botSide, headlessBotConfig);
+  const liveCfg = bot.applyBotStyle(headlessBotConfig ?? bot.DEFAULT_BOT_CONFIG, g.botStyle ?? "balanced");
+  let action = bot.getNextAction(g, botSide, liveCfg);
   const battleSubPhaseActive = !!(g.battleCardDeclareSide || g.battlePlanPhase);
   if (action === null && (g.phase === "deploy" || (g.phase === "battle" && !battleSubPhaseActive))) action = { kind: "pass_phase" };
   if (action === null) return;
@@ -497,7 +498,7 @@ wss.on("connection", (ws, req) => {
       }
 
       case "table_deck_select_custom": {
-        const out = lobbyHandlers.handleTableDeckSelectCustom(playerId!, msg.cards);
+        const out = lobbyHandlers.handleTableDeckSelectCustom(playerId!, msg.cards, msg.coverCard);
         if (out) {
           if (out.type === "error") {
             send(ws, out);
@@ -553,6 +554,21 @@ wss.on("connection", (ws, req) => {
           table.darkCustomCards
         );
         const g = gameEngine.getGame(gameId)!;
+        const computerSide: Side = table.lightPlayerId === lobby.BOT_PLAYER_ID ? "light" : "dark";
+        const computerEntries =
+          computerSide === "light"
+            ? table.lightCustomCards && table.lightCustomCards.length > 0
+              ? table.lightCustomCards
+              : getStarterDeckCardList(table.lightDeckId ?? "starter_deck")
+            : table.darkCustomCards && table.darkCustomCards.length > 0
+              ? table.darkCustomCards
+              : getStarterDeckCardList(table.darkDeckId ?? "starter_dark_deck");
+        const computerCardIds: string[] = [];
+        for (const e of computerEntries) {
+          const n = Math.max(1, e.count || 1);
+          for (let i = 0; i < n; i++) computerCardIds.push(e.id);
+        }
+        g.botStyle = bot.resolveBotStyle(msg.botStyle, computerCardIds);
         const snapshot = gameState.toSnapshot(g);
         const phaseEndsAt = g.phaseStartedAt + g.phaseDurationMs;
         const startedMsg = {

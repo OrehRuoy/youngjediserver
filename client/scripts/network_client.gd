@@ -15,6 +15,7 @@ var _ws: WebSocketPeer
 var _url: String = DEFAULT_URL
 var _connected: bool = false
 var _last_heartbeat_ms: int = 0
+var _connect_attempted: bool = false
 
 var _js_ws: Variant
 var _js_open_cb: Variant
@@ -36,6 +37,7 @@ func _is_web() -> bool:
 func connect_to_server(url: String = DEFAULT_URL) -> void:
 	_url = url
 	_connected = false
+	_connect_attempted = true
 	_last_heartbeat_ms = 0
 	if _is_web():
 		_browser_connect(url)
@@ -67,12 +69,17 @@ func poll() -> void:
 	if state == WebSocketPeer.STATE_OPEN:
 		if not _connected:
 			_connected = true
+			_connect_attempted = false
 			connected.emit()
 		_incoming_native()
 		_maybe_heartbeat()
 	elif state == WebSocketPeer.STATE_CLOSED:
 		if _connected:
 			_connected = false
+			disconnected.emit()
+		elif _connect_attempted:
+			# Failed to open (e.g. nothing on localhost) — still notify so login can fall back to Render.
+			_connect_attempted = false
 			disconnected.emit()
 		_connected = false
 
@@ -247,16 +254,22 @@ func table_deck_select(deck_id: String) -> void:
 	send_message({ "type": "table_deck_select", "deckId": deck_id })
 
 
-func table_deck_select_custom(cards: Array) -> void:
-	send_message({ "type": "table_deck_select_custom", "name": "custom", "cards": cards })
+func table_deck_select_custom(cards: Array, cover_card: Dictionary = {}) -> void:
+	var msg: Dictionary = { "type": "table_deck_select_custom", "name": "custom", "cards": cards }
+	var cid: String = str(cover_card.get("id", "")).strip_edges()
+	if cid.is_empty():
+		msg["coverCard"] = null
+	else:
+		msg["coverCard"] = { "id": cid, "set": str(cover_card.get("set", "")).strip_edges() }
+	send_message(msg)
 
 
 func table_start() -> void:
 	send_message({ "type": "table_start" })
 
 
-func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array) -> void:
-	var payload: Dictionary = { "type": "start_bot_game", "playerSide": player_side }
+func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array, bot_style: String = "random") -> void:
+	var payload: Dictionary = { "type": "start_bot_game", "playerSide": player_side, "botStyle": bot_style }
 	if not player_deck_id.is_empty():
 		payload["playerDeckId"] = player_deck_id
 	if player_deck_custom.size() > 0:
