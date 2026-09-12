@@ -315,8 +315,8 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         ((getCard(c.cardId) as { trait?: string } | undefined)?.trait ?? "").toLowerCase() === "starfighter"
     );
     if (!starfighter || !state.hasStarfighterInHand(g, botSide)) return { kind: "decline_intercept" };
-    const stacked = g.evacuationState.stackedCardIds ?? [];
-    const pullingUnique = stacked.some((id) => isUniqueCard(id) && isCharacter(id));
+    const stacked = g.evacuationState.stackedCards ?? [];
+    const pullingUnique = stacked.some((c) => isUniqueCard(c.cardId) && isCharacter(c.cardId));
     if (passive && !pullingUnique) return { kind: "decline_intercept" };
     if (!aggressive && !pullingUnique && stacked.length < 3) return { kind: "decline_intercept" };
     return { kind: "intercept_transport", starfighterInstanceId: starfighter.instanceId };
