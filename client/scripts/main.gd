@@ -431,9 +431,13 @@ func _on_rules_pressed() -> void:
 
 
 func _on_report_bug_pressed() -> void:
-	var to_addr := "brock.hall1985@gmail.com"
-	var subject := "Young Jedi Server bug report"
-	OS.shell_open("mailto:%s?subject=%s" % [to_addr, subject.uri_encode()])
+	if get_node_or_null("BugReportDialog") != null:
+		return
+	var dlg: Control = preload("res://scenes/bug_report_dialog.tscn").instantiate()
+	dlg.name = "BugReportDialog"
+	add_child(dlg)
+	if dlg.has_method("prefill"):
+		dlg.prefill(Connection.get_state().player_name)
 
 
 func _on_join_light(table: Dictionary) -> void:

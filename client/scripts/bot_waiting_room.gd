@@ -254,9 +254,8 @@ func _apply_player_cover_art(player_is_light: bool, player_decks: Array[Dictiona
 		cover = _cover_from_raw(d.get("coverCard", {}))
 	var side := "light" if player_is_light else "dark"
 	var cover_id: String = str(cover.get("id", ""))
-	if not cover_id.is_empty() and CardCatalog:
-		var info: Dictionary = CardCatalog.get_card_info(cover_id, "", str(cover.get("set", "")))
-		var tex: Texture2D = CardCatalog.load_card_texture(cover_id, str(info.get("side", side)), str(cover.get("set", "")))
+	if not cover_id.is_empty():
+		var tex: Texture2D = CoverArt.load_texture(cover_id, side, str(cover.get("set", "")))
 		if tex:
 			player_card_back.texture = tex
 			return
@@ -341,14 +340,23 @@ func _on_start_pressed() -> void:
 	if bot_deck.get("custom", []).size() > 0:
 		for c in bot_deck.custom:
 			bot_custom.append({"id": c.get("id", ""), "set": c.get("set", "menaceofdarthmaul"), "count": c.get("count", 1)})
-	Connection.get_client().start_bot_game(
-		_player_side,
-		player_deck.get("id", ""),
-		player_custom,
-		bot_deck.get("id", ""),
-		bot_custom,
-		_get_bot_style()
-	)
+	var payload: Dictionary = {
+		"type": "start_bot_game",
+		"playerSide": _player_side,
+		"botStyle": _get_bot_style(),
+	}
+	var player_deck_id: String = str(player_deck.get("id", ""))
+	if not player_deck_id.is_empty():
+		payload["playerDeckId"] = player_deck_id
+	if player_custom.size() > 0:
+		payload["playerDeckCustom"] = player_custom
+	var bot_deck_id: String = str(bot_deck.get("id", ""))
+	if not bot_deck_id.is_empty():
+		payload["botDeckId"] = bot_deck_id
+	if bot_custom.size() > 0:
+		payload["botDeckCustom"] = bot_custom
+	# send_message works with the itch launcher client; start_bot_game() there has no botStyle arg.
+	Connection.get_client().send_message(payload)
 	start_btn.disabled = true
 	status_label.text = "Starting game..."
 

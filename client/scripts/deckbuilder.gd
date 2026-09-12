@@ -96,33 +96,41 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 
 	var toolbar := HBoxContainer.new()
 	toolbar.add_theme_constant_override("separation", 6)
+	toolbar.alignment = BoxContainer.ALIGNMENT_BEGIN
 	deck_vbox.add_child(toolbar)
 
 	var new_btn := Button.new()
 	new_btn.text = "New Deck"
+	new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	new_btn.pressed.connect(_on_new_deck)
 	toolbar.add_child(new_btn)
 
 	var save_btn := Button.new()
 	save_btn.text = "Save"
+	save_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	save_btn.pressed.connect(_on_save_deck)
 	toolbar.add_child(save_btn)
 
 	var load_btn := Button.new()
 	load_btn.text = "Load"
+	load_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	load_btn.pressed.connect(_on_load_deck)
 	toolbar.add_child(load_btn)
 
 	var delete_btn := Button.new()
 	delete_btn.text = "Delete"
+	delete_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	delete_btn.add_theme_color_override("font_color", Color(1, 0.3, 0.3))
 	delete_btn.pressed.connect(_on_delete_deck_pressed)
 	toolbar.add_child(delete_btn)
 
 	var back_btn := Button.new()
 	back_btn.text = "Back"
+	back_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	back_btn.pressed.connect(_on_back)
 	toolbar.add_child(back_btn)
+
+	_build_cover_slot(toolbar)
 
 	_deck_name_label = Label.new()
 	_deck_name_label.text = _deck_name
@@ -135,8 +143,6 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 	_deck_avg_destiny_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	deck_vbox.add_child(_deck_avg_destiny_label)
 	_update_average_destiny()
-
-	_build_cover_slot(deck_vbox)
 
 	var slot_scroll := ScrollContainer.new()
 	slot_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -152,61 +158,55 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 		_build_color_slot(slots_vbox, color_name)
 
 
-func _build_cover_slot(parent: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	parent.add_child(row)
+func _build_cover_slot(parent: HBoxContainer) -> void:
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(spacer)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 1)
+	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	parent.add_child(col)
+
+	var title := Label.new()
+	title.text = "Cover"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35, 1))
+	title.add_theme_font_size_override("font_size", 11)
+	col.add_child(title)
 
 	_cover_panel = PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.09, 0.14, 0.95)
 	style.border_color = Color(0.95, 0.82, 0.35, 1)
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(6)
-	style.set_content_margin_all(8)
+	style.set_corner_radius_all(5)
+	style.set_content_margin_all(3)
 	_cover_panel.add_theme_stylebox_override("panel", style)
-	_cover_panel.custom_minimum_size = Vector2(132, 168)
-	row.add_child(_cover_panel)
-
-	var cover_inner := VBoxContainer.new()
-	cover_inner.add_theme_constant_override("separation", 4)
-	_cover_panel.add_child(cover_inner)
-
-	var title := Label.new()
-	title.text = "Cover"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35, 1))
-	title.add_theme_font_size_override("font_size", 13)
-	cover_inner.add_child(title)
+	_cover_panel.custom_minimum_size = Vector2(56, 76)
+	_cover_panel.tooltip_text = "Table art only — not in your deck. Drag a card here. Click to remove."
+	col.add_child(_cover_panel)
 
 	_cover_tex = TextureRect.new()
-	_cover_tex.custom_minimum_size = Vector2(100, 140)
+	_cover_tex.custom_minimum_size = Vector2(48, 68)
 	_cover_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_cover_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	_cover_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	_cover_tex.mouse_filter = Control.MOUSE_FILTER_STOP
 	_cover_tex.gui_input.connect(_on_cover_card_input)
 	_cover_tex.mouse_entered.connect(_on_cover_mouse_entered)
 	_cover_tex.mouse_exited.connect(_on_deck_card_mouse_exited)
-	cover_inner.add_child(_cover_tex)
+	_cover_panel.add_child(_cover_tex)
 
 	_cover_empty_label = Label.new()
-	_cover_empty_label.text = "Drag a\ncard here"
+	_cover_empty_label.text = "Drag"
 	_cover_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cover_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cover_empty_label.add_theme_color_override("font_color", Color(0.7, 0.72, 0.8, 0.9))
-	_cover_empty_label.add_theme_font_size_override("font_size", 12)
+	_cover_empty_label.add_theme_font_size_override("font_size", 10)
 	_cover_empty_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_cover_empty_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cover_tex.add_child(_cover_empty_label)
-
-	var hint := Label.new()
-	hint.text = "Cover card is table art only.\nIt is not in your deck and does not count toward limits."
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hint.add_theme_color_override("font_color", Color(0.72, 0.75, 0.85, 1))
-	hint.add_theme_font_size_override("font_size", 13)
-	row.add_child(hint)
 	_refresh_cover_display()
 
 
@@ -580,12 +580,17 @@ func _start_drag(card_panel: Control, gpos: Vector2) -> void:
 	_drag_overlay.texture = tex
 	_drag_overlay.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	_drag_overlay.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
+	_drag_overlay.size_flags_horizontal = 0
+	_drag_overlay.size_flags_vertical = 0
+	_drag_overlay.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_drag_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	_drag_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	_drag_overlay.modulate = Color(1, 1, 1, 0.8)
+	_drag_overlay.modulate = Color(1, 1, 1, 0.85)
 	_drag_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_drag_overlay.z_index = 100
+	_drag_overlay.set_as_top_level(true)
 	add_child(_drag_overlay)
+	_drag_overlay.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	_drag_offset = Vector2(CARD_WIDTH / 2.0, CARD_HEIGHT / 2.0)
 	_drag_overlay.global_position = gpos - _drag_offset
 

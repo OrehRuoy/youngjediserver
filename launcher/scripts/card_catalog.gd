@@ -73,8 +73,8 @@ func get_card_info(card_id: String, side_hint: String = "", set_hint: String = "
 
 
 ## Returns an array of resource paths to try for loading this card's image.
-func get_card_image_paths(card_id: String, side_hint: String = "") -> Array[String]:
-	var info: Dictionary = get_card_info(card_id, side_hint)
+func get_card_image_paths(card_id: String, side_hint: String = "", set_hint: String = "") -> Array[String]:
+	var info: Dictionary = get_card_info(card_id, side_hint, set_hint)
 	var set_name: String = info.get("set", "menaceofdarthmaul")
 	var side: String = info.get("side", "")
 	var image_file: String = info.get("image", "")
@@ -90,3 +90,13 @@ func get_card_image_paths(card_id: String, side_hint: String = "") -> Array[Stri
 		if image_file.to_lower().ends_with(".gif"):
 			paths.append(base.replace(".gif", ".png").replace(".GIF", ".png"))
 	return paths
+
+
+func load_card_texture(card_id: String, side_hint: String = "", set_hint: String = "") -> Texture2D:
+	if card_id.is_empty():
+		return null
+	for p in get_card_image_paths(card_id, side_hint, set_hint):
+		var tex: Texture2D = load(p) as Texture2D
+		if tex:
+			return tex
+	return null

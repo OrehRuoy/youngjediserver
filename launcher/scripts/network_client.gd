@@ -122,16 +122,22 @@ func table_deck_select(deck_id: String) -> void:
 	send_message({ "type": "table_deck_select", "deckId": deck_id })
 
 
-func table_deck_select_custom(cards: Array) -> void:
-	send_message({ "type": "table_deck_select_custom", "name": "custom", "cards": cards })
+func table_deck_select_custom(cards: Array, cover_card: Dictionary = {}) -> void:
+	var msg: Dictionary = { "type": "table_deck_select_custom", "name": "custom", "cards": cards }
+	var cid: String = str(cover_card.get("id", "")).strip_edges()
+	if cid.is_empty():
+		msg["coverCard"] = null
+	else:
+		msg["coverCard"] = { "id": cid, "set": str(cover_card.get("set", "")).strip_edges() }
+	send_message(msg)
 
 
 func table_start() -> void:
 	send_message({ "type": "table_start" })
 
 
-func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array) -> void:
-	var payload: Dictionary = { "type": "start_bot_game", "playerSide": player_side }
+func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array, bot_style: String = "random") -> void:
+	var payload: Dictionary = { "type": "start_bot_game", "playerSide": player_side, "botStyle": bot_style }
 	if not player_deck_id.is_empty():
 		payload["playerDeckId"] = player_deck_id
 	if player_deck_custom.size() > 0:

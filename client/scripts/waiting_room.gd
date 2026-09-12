@@ -182,8 +182,8 @@ func _refresh() -> void:
 	dark_status_label.add_theme_color_override("font_color", Color(0.3, 0.85, 0.35) if dark_ready else Color(0.55, 0.6, 0.7))
 	_populate_deck_dropdown(light_deck_select, _light_decks, light_deck_id, _last_light_custom_deck_id)
 	_populate_deck_dropdown(dark_deck_select, _dark_decks, dark_deck_id, _last_dark_custom_deck_id)
-	_apply_seat_art(light_card_art, "light", table.get("lightCoverCard", {}))
-	_apply_seat_art(dark_card_art, "dark", table.get("darkCoverCard", {}))
+	_apply_seat_art(light_card_art, "light", _cover_for_seat("light", table))
+	_apply_seat_art(dark_card_art, "dark", _cover_for_seat("dark", table))
 	light_deck_select.disabled = state.my_side != "light" or light_name == "—"
 	dark_deck_select.disabled = state.my_side != "dark" or dark_name == "—"
 	var is_host: bool = table.get("hostId", "") == state.player_id
@@ -218,9 +218,10 @@ func _on_light_deck_selected(idx: int) -> void:
 	if _deck_select_ignore_change or idx < 0 or idx >= _light_decks.size():
 		return
 	var deck: Dictionary = _light_decks[idx]
+	_apply_seat_art(light_card_art, "light", deck.get("coverCard", {}))
 	if deck.get("is_custom", false):
 		_last_light_custom_deck_id = deck.get("id", "")
-		Connection.get_client().table_deck_select_custom(deck.get("cards", []), deck.get("coverCard", {}))
+		_send_custom_deck(deck)
 	else:
 		_last_light_custom_deck_id = ""
 		Connection.get_client().table_deck_select(deck.get("id", ""))
@@ -230,12 +231,24 @@ func _on_dark_deck_selected(idx: int) -> void:
 	if _deck_select_ignore_change or idx < 0 or idx >= _dark_decks.size():
 		return
 	var deck: Dictionary = _dark_decks[idx]
+	_apply_seat_art(dark_card_art, "dark", deck.get("coverCard", {}))
 	if deck.get("is_custom", false):
 		_last_dark_custom_deck_id = deck.get("id", "")
-		Connection.get_client().table_deck_select_custom(deck.get("cards", []), deck.get("coverCard", {}))
+		_send_custom_deck(deck)
 	else:
 		_last_dark_custom_deck_id = ""
 		Connection.get_client().table_deck_select(deck.get("id", ""))
+
+
+func _send_custom_deck(deck: Dictionary) -> void:
+	var msg: Dictionary = { "type": "table_deck_select_custom", "name": "custom", "cards": deck.get("cards", []) }
+	var cover: Dictionary = _cover_from_raw(deck.get("coverCard", {}))
+	var cid: String = str(cover.get("id", "")).strip_edges()
+	if cid.is_empty():
+		msg["coverCard"] = null
+	else:
+		msg["coverCard"] = { "id": cid, "set": str(cover.get("set", "")).strip_edges() }
+	Connection.get_client().send_message(msg)
 
 
 func _cover_from_raw(raw: Variant) -> Dictionary:
@@ -247,17 +260,28 @@ func _cover_from_raw(raw: Variant) -> Dictionary:
 	return {}
 
 
+func _cover_for_seat(side: String, table: Dictionary) -> Dictionary:
+	var key := "lightCoverCard" if side == "light" else "darkCoverCard"
+	var from_table: Variant = table.get(key, {})
+	if from_table is Dictionary:
+		var parsed: Dictionary = _cover_from_raw(from_table)
+		if not parsed.is_empty():
+			return parsed
+	var decks: Array[Dictionary] = _light_decks if side == "light" else _dark_decks
+	var btn: OptionButton = light_deck_select if side == "light" else dark_deck_select
+	var idx: int = btn.selected
+	if idx >= 0 and idx < decks.size():
+		return _cover_from_raw(decks[idx].get("coverCard", {}))
+	return {}
+
+
 func _apply_seat_art(tex_rect: TextureRect, side: String, cover_var: Variant) -> void:
 	if tex_rect == null:
 		return
-	var cover_id := ""
-	var cover_set := ""
-	if cover_var is Dictionary:
-		cover_id = str(cover_var.get("id", "")).strip_edges()
-		cover_set = str(cover_var.get("set", "")).strip_edges()
-	if not cover_id.is_empty() and CardCatalog:
-		var info: Dictionary = CardCatalog.get_card_info(cover_id, "", cover_set)
-		var tex: Texture2D = CardCatalog.load_card_texture(cover_id, str(info.get("side", side)), cover_set)
+	var cover: Dictionary = _cover_from_raw(cover_var)
+	var cover_id: String = str(cover.get("id", "")).strip_edges()
+	if not cover_id.is_empty():
+		var tex: Texture2D = CoverArt.load_texture(cover_id, side, str(cover.get("set", "")))
 		if tex:
 			tex_rect.texture = tex
 			return

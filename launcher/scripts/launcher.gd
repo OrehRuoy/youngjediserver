@@ -1,6 +1,6 @@
 ## Young Jedi Launcher: fetches version from server, downloads game_data.pck when needed, then runs the game.
-## Tries localhost first (for same-machine dev), then remote URL for everyone else.
-## PCK download uses HTTPRequest + download_file (reliable HTTPS); raw HTTPClient+TLS often stalled with no progress.
+## Default: Render. Set YOUNG_JEDI_UPDATES_REMOTE_ONLY=0 to try localhost first (same-machine dev).
+## PCK download uses HTTPRequest + download_file; progress is polled from get_downloaded_bytes().
 
 extends Control
 
@@ -14,11 +14,13 @@ const GAME_WINDOW_MIN_HEIGHT := 600
 const PCK_PATH := "user://game_data.pck"
 const VERSION_PATH := "user://version.txt"
 const LOCAL_TIMEOUT := 2.0
-const REMOTE_TIMEOUT := 30.0
+## Render free tier can take ~60s to wake; HTTP timeout is a bit longer so we don't give up early.
+const SERVER_WAKE_WAIT_SEC := 60.0
+const REMOTE_TIMEOUT := 90.0
 const DOWNLOAD_TIMEOUT_SEC := 600.0
 
-@onready var status_label: Label = $VBox/Status
-@onready var progress_bar: ProgressBar = $VBox/ProgressBar
+@onready var status_label: Label = %Status
+@onready var progress_bar: ProgressBar = %ProgressBar
 
 var _version_request: HTTPRequest
 var _download_http: HTTPRequest
@@ -27,15 +29,29 @@ var _version_check_failed: bool = false
 var _trying_local: bool = false
 var _used_local_version: bool = false
 var _server_pck_bytes: int = 0
+var _server_wait_left: float = -1.0
 
 
 func _ready() -> void:
 	if progress_bar:
-		progress_bar.visible = false
+		progress_bar.value = 0.0
 	_version_request = HTTPRequest.new()
 	add_child(_version_request)
 	_version_request.request_completed.connect(_on_version_request_completed)
 	_check_version()
+
+
+func _process(delta: float) -> void:
+	if _server_wait_left >= 0.0:
+		_server_wait_left = maxf(_server_wait_left - delta, 0.0)
+		_update_server_wait_status()
+	if _download_http == null or not is_instance_valid(_download_http):
+		return
+	var done: int = _download_http.get_downloaded_bytes()
+	var total: int = _download_http.get_body_size()
+	if total <= 0:
+		total = _server_pck_bytes
+	_update_download_progress(done, total)
 
 
 func _check_version() -> void:
@@ -44,42 +60,61 @@ func _check_version() -> void:
 		_set_status("Dev mode: skipping update check.")
 		_run_game()
 		return
-	_set_status("Checking for updates...")
-	# If you always run the game server locally, localhost version wins — bump local server/data/version.json + PCK too,
-	# or set env YOUNG_JEDI_UPDATES_REMOTE_ONLY=1 to check the public URL first.
+	# Local server first only when explicitly requested. Itch testers always hit Render.
 	var ro := OS.get_environment("YOUNG_JEDI_UPDATES_REMOTE_ONLY").to_lower()
-	if ro == "1" or ro == "true" or ro == "yes":
+	# Default: Render. Set YOUNG_JEDI_UPDATES_REMOTE_ONLY=0 to try localhost first.
+	var try_local_first := ro == "0" or ro == "false" or ro == "no"
+	if not try_local_first:
 		_try_remote_version()
 		return
+	_set_status("Looking for a local server…")
 	_trying_local = true
 	_version_request.timeout = LOCAL_TIMEOUT
 	var err := _version_request.request(VERSION_URL_LOCAL)
 	if err != OK:
 		_trying_local = false
-		_set_status("Failed to check for updates (error %d). Playing cached game." % err)
-		_run_game()
-		return
+		_try_remote_version()
 
 
 func _try_remote_version() -> void:
-	_set_status("Checking for updates (remote)...")
 	_trying_local = false
+	_server_wait_left = SERVER_WAKE_WAIT_SEC
+	_update_server_wait_status()
 	_version_request.timeout = REMOTE_TIMEOUT
 	var err := _version_request.request(VERSION_URL_REMOTE)
 	if err != OK:
+		_stop_server_wait()
 		_version_check_failed = true
-		_set_status("Could not reach update server. Please run the standalone game or get game data from the developer.")
+		_set_status("Could not reach the server. Check your internet and try again.")
 		_run_game()
 		return
 
 
+func _stop_server_wait() -> void:
+	_server_wait_left = -1.0
+
+
+func _update_server_wait_status() -> void:
+	if progress_bar:
+		var elapsed := SERVER_WAKE_WAIT_SEC - _server_wait_left
+		progress_bar.value = clampf(elapsed / SERVER_WAKE_WAIT_SEC, 0.0, 0.92)
+	var secs: int = maxi(ceili(_server_wait_left), 0)
+	if secs <= 0:
+		_set_status("Firing up the server… almost there.")
+	elif secs == 1:
+		_set_status("Firing up the server… 1 second remaining")
+	else:
+		_set_status("Firing up the server… %d seconds remaining" % secs)
+
+
 func _on_version_request_completed(result: int, _response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_stop_server_wait()
 	if result != HTTPRequest.RESULT_SUCCESS:
 		if _trying_local:
 			_try_remote_version()
 			return
 		_version_check_failed = true
-		_set_status("Could not reach update server (error %d). Playing cached game if available." % result)
+		_set_status("Could not reach the server (error %d). Playing cached game if available." % result)
 		_run_game()
 		return
 
@@ -127,22 +162,28 @@ func _on_version_request_completed(result: int, _response_code: int, _headers: P
 			if lf != null:
 				lf.close()
 			if local_sz == _server_pck_bytes:
-				_set_status("Up to date. Starting game...")
-				_run_game()
+				if progress_bar:
+					progress_bar.value = 1.0
+				_set_status("Server is ready. Game is up to date. Starting…")
+				_run_game_soon()
 				return
-			_set_status("Game data size mismatch — re-downloading…")
+			_set_status("Server is ready. Refreshing game data…")
 		else:
-			_set_status("Up to date. Starting game...")
-			_run_game()
+			if progress_bar:
+				progress_bar.value = 1.0
+			_set_status("Server is ready. Game is up to date. Starting…")
+			_run_game_soon()
 			return
 
-	_set_status("Downloading update…")
+	_set_status("Server is ready. Downloading game data…")
 	_start_download()
 
 
 func _set_progress_bar_visible(vis: bool) -> void:
 	if progress_bar:
 		progress_bar.visible = vis
+		if vis and progress_bar.value <= 0.0:
+			progress_bar.value = 0.0
 
 
 func _rewrite_url_to_localhost(url: String) -> String:
@@ -196,14 +237,24 @@ func _start_download() -> void:
 
 
 func _on_pck_download_progress(bytes_done: int, total_bytes: int) -> void:
+	_update_download_progress(bytes_done, total_bytes)
+
+
+func _update_download_progress(bytes_done: int, total_bytes: int) -> void:
 	if progress_bar == null:
 		return
+	if not progress_bar.visible:
+		progress_bar.visible = true
+	var done_mb := float(bytes_done) / (1024.0 * 1024.0)
 	if total_bytes > 0:
 		progress_bar.value = clampf(float(bytes_done) / float(total_bytes), 0.0, 1.0)
-		_set_status("Downloading update… %d%%" % int(progress_bar.value * 100.0))
+		var total_mb := float(total_bytes) / (1024.0 * 1024.0)
+		_set_status("Downloading game data… %d%% (%.1f / %.1f MB)" % [
+			int(progress_bar.value * 100.0), done_mb, total_mb
+		])
 	else:
-		var mb := float(bytes_done) / (1024.0 * 1024.0)
-		_set_status("Downloading update… %.1f MB" % mb)
+		progress_bar.value = 0.0
+		_set_status("Downloading game data… %.1f MB" % done_mb)
 
 
 func _on_pck_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
@@ -227,7 +278,6 @@ func _on_pck_download_completed(result: int, response_code: int, _headers: Packe
 		return
 	_save_version(_server_version)
 	_set_status("Update complete. Starting game…")
-	_set_progress_bar_visible(false)
 	if _download_http != null:
 		_download_http.queue_free()
 		_download_http = null
@@ -296,6 +346,12 @@ func _apply_game_display_settings() -> void:
 	get_tree().root.size = Vector2i(GAME_WINDOW_WIDTH, GAME_WINDOW_HEIGHT)
 
 
+func _run_game_soon() -> void:
+	# Up-to-date checks finish instantly; keep the ready message on screen briefly.
+	await get_tree().create_timer(0.8).timeout
+	_run_game()
+
+
 func _run_game() -> void:
 	if not _has_pck():
 		if not _version_check_failed:
@@ -310,7 +366,9 @@ func _run_game() -> void:
 	if not ProjectSettings.load_resource_pack(pck_abs, true):
 		_set_status("Failed to load game data. The game may need to be re-exported with the same Godot version as the launcher.")
 		return
-	ProjectSettings.set_setting("application/config/use_local_server", true)
+	# Game defaults to Render. Do not force localhost — itch testers have no local server,
+	# and a failed local WebSocket never emits "disconnected", so remote fallback never ran.
+	ProjectSettings.set_setting("application/config/use_local_server", false)
 	var card_catalog = get_tree().root.get_node_or_null("CardCatalog")
 	if card_catalog != null and card_catalog.has_method("_load_index"):
 		card_catalog._load_index()
