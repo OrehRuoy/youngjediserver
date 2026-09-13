@@ -1175,6 +1175,8 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
     publicState.battleCardDeclareSide = state.battleCardDeclareSide;
     publicState.lightBattleCardCount = state.lightDeclaredBattleCards?.length ?? 0;
     publicState.darkBattleCardCount = state.darkDeclaredBattleCards?.length ?? 0;
+    publicState.lightBattleCardsDeclared = state.lightDeclaredBattleCards !== undefined;
+    publicState.darkBattleCardsDeclared = state.darkDeclaredBattleCards !== undefined;
   }
   if (state.battlePlanPhase) {
     publicState.battlePlanPhase = true;
@@ -1182,6 +1184,8 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
     publicState.darkBattlePlanReady = state.darkBattlePlanReady === true;
     publicState.lightBattleCardCount = state.lightDeclaredBattleCards?.length ?? 0;
     publicState.darkBattleCardCount = state.darkDeclaredBattleCards?.length ?? 0;
+    publicState.lightBattleCardsDeclared = state.lightDeclaredBattleCards !== undefined;
+    publicState.darkBattleCardsDeclared = state.darkDeclaredBattleCards !== undefined;
   }
   if (state.battleRevealSequence && state.battleRevealSequence.length > 0) {
     publicState.battleRevealSequence = state.battleRevealSequence;

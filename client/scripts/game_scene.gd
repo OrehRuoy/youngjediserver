@@ -113,6 +113,10 @@ const BATTLE_REVEAL_DELAY_SEC: float = 10.0
 var _evacuation_overlay: CanvasLayer = null
 var _evacuation_panel: PanelContainer = null
 
+var _announced_opp_battle_cards: bool = false
+var _battle_notice_layer: CanvasLayer = null
+var _battle_notice_timer: Timer = null
+
 
 func _ready() -> void:
 	var client: RefCounted = Connection.get_client()
@@ -2067,16 +2071,18 @@ func _refresh() -> void:
 			if battle_plan_ready_btn:
 				battle_plan_ready_btn.visible = not my_ready
 				# disabled state set after _build_in_play so _battle_plan_order is populated
+			var opp_bc_phrase: String = _opp_battle_card_phrase(pub, my_side)
+			var opp_bc_prefix: String = (opp_bc_phrase + " ") if not opp_bc_phrase.is_empty() else ""
 			if battle_plan_row and my_ready and opp_ready:
-				status_label.text = "Both ready — resolving battle..."
+				status_label.text = opp_bc_prefix + "Both ready — resolving battle..."
 			elif my_ready:
-				status_label.text = "Waiting for opponent to set battle plan..."
+				status_label.text = opp_bc_prefix + "Waiting for opponent to set battle plan..."
 			else:
 				var bc_count: int = _battle_cards_in_plan.size()
 				if bc_count > 0:
-					status_label.text = "Drag to reorder. %d Battle card%s added. Click Ready." % [bc_count, "s" if bc_count > 1 else ""]
+					status_label.text = opp_bc_prefix + "Drag to reorder. %d Battle card%s added. Click Ready." % [bc_count, "s" if bc_count > 1 else ""]
 				else:
-					status_label.text = "Drag cards to set battle order, then click Battle Plan Ready."
+					status_label.text = opp_bc_prefix + "Drag cards to set battle order, then click Battle Plan Ready."
 		else:
 			var old_declare_ui2: Node = battle_plan_section.get_node_or_null("BattleCardDeclareUI")
 			if old_declare_ui2:
@@ -2467,9 +2473,13 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 	container.add_theme_constant_override("separation", 10)
 	section.add_child(container)
 	section.move_child(container, 0)
+	var opp_bc_phrase: String = _opp_battle_card_phrase(pub, my_side)
 	if is_my_turn:
 		var prompt_label: Label = Label.new()
-		prompt_label.text = "Drag Battle cards from your hand onto the table, then click Confirm."
+		if opp_bc_phrase.is_empty():
+			prompt_label.text = "Drag Battle cards from your hand onto the table, then click Confirm."
+		else:
+			prompt_label.text = opp_bc_phrase + " Drag yours from your hand onto the table, then click Confirm."
 		prompt_label.add_theme_font_size_override("font_size", 14)
 		prompt_label.add_theme_color_override("font_color", Color(0.85, 0.75, 0.4, 1))
 		container.add_child(prompt_label)
@@ -2485,7 +2495,10 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 			undo_btn.text = "Remove All"
 			undo_btn.pressed.connect(_on_declare_battle_cards_clear)
 			btn_row.add_child(undo_btn)
-		status_label.text = "Declare your Battle cards. Drag from hand onto the table."
+		if opp_bc_phrase.is_empty():
+			status_label.text = "Declare your Battle cards. Drag from hand onto the table."
+		else:
+			status_label.text = opp_bc_phrase + " Declare yours, then Confirm."
 	else:
 		var wait_label: Label = Label.new()
 		wait_label.text = "Waiting for opponent to declare Battle cards..."
@@ -3709,7 +3722,8 @@ func _build_in_play(state: RefCounted) -> void:
 	var in_declare_or_plan: bool = pub.get("battleCardDeclareSide", "") != "" or pub.get("battlePlanPhase", false)
 	var in_battle_plan: bool = pub.get("battlePlanPhase", false)
 	var in_battle_card_declare: bool = (pub.get("battleCardDeclareSide", "") != "") and not in_battle_plan
-	var opp_bc_count: int = int(pub.get("darkBattleCardCount", 0)) if my_side == "light" else int(pub.get("lightBattleCardCount", 0))
+	var opp_bc_count: int = _opp_battle_card_count(pub, my_side)
+	var opp_bc_declared: bool = _opp_battle_cards_declared(pub, my_side)
 	if your_play_container:
 		if in_battle_plan:
 			_build_your_play_battle_plan_order(state, pub, my_in_play, starting_inst_id, my_turn_count)
@@ -3762,16 +3776,123 @@ func _build_in_play(state: RefCounted) -> void:
 			var face_down: bool = opp_face_down or card.get("faceDown", false)
 			cp.set_card(card.get("cardId", "?"), card.get("instanceId", ""), opp_side, card.get("set", ""), face_down, false)
 			_animate_in_play_card(cp, opp_turn_count, face_down)
-		if in_declare_or_plan and opp_bc_count > 0:
+		if in_declare_or_plan and opp_bc_declared and opp_bc_count > 0:
 			for i in range(opp_bc_count):
 				var cp: Control = CardPlaceholderScene.instantiate()
 				opp_play_container.add_child(cp)
 				cp.set_card("", "", opp_side, "", true, false)
-		# Show "(X battle cards)" by opponent's face-down cards during battle plan; hide when cards turn face up
+				_tag_face_down_battle_card(cp)
 		if opponent_battle_cards_label:
-			opponent_battle_cards_label.visible = in_battle_plan and opp_bc_count > 0
-			if opponent_battle_cards_label.visible:
-				opponent_battle_cards_label.text = "(%d battle card%s)" % [opp_bc_count, "s" if opp_bc_count != 1 else ""]
+			if in_declare_or_plan and opp_bc_declared:
+				opponent_battle_cards_label.visible = true
+				opponent_battle_cards_label.text = _opp_battle_card_phrase(pub, my_side).trim_suffix(".")
+			elif in_battle_card_declare and pub.get("battleCardDeclareSide", "") != my_side:
+				opponent_battle_cards_label.visible = true
+				opponent_battle_cards_label.text = "Waiting for opponent to play battle cards..."
+			else:
+				opponent_battle_cards_label.visible = false
+	_maybe_announce_opp_battle_cards(pub, my_side, in_declare_or_plan, opp_bc_declared)
+
+
+func _opp_battle_card_count(pub: Dictionary, my_side: String) -> int:
+	return int(pub.get("darkBattleCardCount", 0)) if my_side == "light" else int(pub.get("lightBattleCardCount", 0))
+
+
+func _opp_battle_cards_declared(pub: Dictionary, my_side: String) -> bool:
+	var key: String = "darkBattleCardsDeclared" if my_side == "light" else "lightBattleCardsDeclared"
+	if pub.has(key):
+		return bool(pub.get(key, false))
+	if pub.get("battlePlanPhase", false):
+		return true
+	return _opp_battle_card_count(pub, my_side) > 0
+
+
+func _opp_battle_card_phrase(pub: Dictionary, my_side: String) -> String:
+	if not _opp_battle_cards_declared(pub, my_side):
+		return ""
+	var n: int = _opp_battle_card_count(pub, my_side)
+	if n <= 0:
+		return "Opponent played no battle cards."
+	if n == 1:
+		return "Opponent played 1 battle card."
+	return "Opponent played %d battle cards." % n
+
+
+func _tag_face_down_battle_card(cp: Control) -> void:
+	var tag: Label = Label.new()
+	tag.text = "BATTLE"
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tag.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	tag.add_theme_font_size_override("font_size", 11)
+	tag.add_theme_color_override("font_color", Color(0.95, 0.82, 0.25, 1))
+	tag.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+	tag.add_theme_constant_override("shadow_offset_x", 1)
+	tag.add_theme_constant_override("shadow_offset_y", 1)
+	cp.add_child(tag)
+
+
+func _maybe_announce_opp_battle_cards(pub: Dictionary, my_side: String, in_declare_or_plan: bool, opp_declared: bool) -> void:
+	if not in_declare_or_plan:
+		_announced_opp_battle_cards = false
+		_hide_battle_notice()
+		return
+	if not opp_declared or _announced_opp_battle_cards:
+		return
+	var phrase: String = _opp_battle_card_phrase(pub, my_side)
+	if phrase.is_empty():
+		return
+	_announced_opp_battle_cards = true
+	_show_battle_notice(phrase)
+	_append_chat_line("System", phrase)
+
+
+func _show_battle_notice(message: String) -> void:
+	_hide_battle_notice()
+	_battle_notice_layer = CanvasLayer.new()
+	_battle_notice_layer.layer = 80
+	add_child(_battle_notice_layer)
+	var wrap: CenterContainer = CenterContainer.new()
+	wrap.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	wrap.anchor_left = 0.0
+	wrap.anchor_right = 1.0
+	wrap.offset_top = 36
+	wrap.offset_bottom = 120
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_battle_notice_layer.add_child(wrap)
+	var panel: PanelContainer = PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.14, 0.94)
+	style.border_color = Color(0.9, 0.75, 0.25, 1)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(16)
+	panel.add_theme_stylebox_override("panel", style)
+	wrap.add_child(panel)
+	var lbl: Label = Label.new()
+	lbl.text = message
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 22)
+	lbl.add_theme_color_override("font_color", Color(0.98, 0.86, 0.35, 1))
+	panel.add_child(lbl)
+	_battle_notice_timer = Timer.new()
+	_battle_notice_timer.one_shot = true
+	_battle_notice_timer.wait_time = 5.0
+	_battle_notice_timer.timeout.connect(_hide_battle_notice)
+	add_child(_battle_notice_timer)
+	_battle_notice_timer.start()
+
+
+func _hide_battle_notice() -> void:
+	if _battle_notice_timer and is_instance_valid(_battle_notice_timer):
+		_battle_notice_timer.stop()
+		_battle_notice_timer.queue_free()
+	_battle_notice_timer = null
+	if _battle_notice_layer and is_instance_valid(_battle_notice_layer):
+		_battle_notice_layer.queue_free()
+	_battle_notice_layer = null
 
 
 func _get_starting_location_card_id(pub: Dictionary, my_in_play: Array, opp_in_play: Array, starting_inst_id: String) -> String:
