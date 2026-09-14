@@ -120,6 +120,44 @@ text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="OppHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft"]
+visible = false
+custom_minimum_size = Vector2(56, 62)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 0
+
+[node name="OppHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("4_card_dark")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OppHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -12.0
+offset_right = 20.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="OpponentForceLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft" unique_id=1277261623]
 visible = false
 layout_mode = 2
@@ -209,14 +247,6 @@ alignment = 1
 [node name="TableTopSpacer" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/TableSection" unique_id=300000001]
 layout_mode = 2
 size_flags_vertical = 3
-
-[node name="OpponentBattleCardsLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/TableSection" unique_id=300000014]
-visible = false
-layout_mode = 2
-theme_override_colors/font_color = Color(0.95, 0.82, 0.3, 1)
-theme_override_font_sizes/font_size = 16
-text = "Opponent played 0 battle cards"
-horizontal_alignment = 1
 
 [node name="OpponentInPlayScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection" unique_id=300000022]
 layout_mode = 2
@@ -376,6 +406,44 @@ text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="YourHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft"]
+visible = false
+custom_minimum_size = Vector2(56, 62)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 0
+
+[node name="YourHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("3_card_light")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="YourHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -12.0
+offset_right = 20.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="YourDeckLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft" unique_id=1951833642]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85, 0.9, 0.95, 1)
@@ -412,6 +480,11 @@ text = "Pass phase"
 [node name="BattleBtn" type="Button" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight" unique_id=17253338]
 layout_mode = 2
 text = "Initiate battle"
+
+[node name="DuelBtn" type="Button" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight"]
+visible = false
+layout_mode = 2
+text = "Duel"
 
 [node name="DiscardHandBtn" type="Button" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight" unique_id=1509379211]
 layout_mode = 2
@@ -477,6 +550,8 @@ text = "Game chat"
 custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
 size_flags_vertical = 3
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
 
 [node name="Messages" type="VBoxContainer" parent="HBoxContainer/ChatPanel/Margin/VBox/ChatScroll" unique_id=1062278714]
 layout_mode = 2

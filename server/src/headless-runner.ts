@@ -77,6 +77,20 @@ function getActor(
     if (!side) return false;
     if (g.evacuationState?.awaitingInterception && g.evacuationState.evacuatingSide !== side) return true;
     if (g.evacuationResult) return true;
+    if (g.planetEffectFetch?.chooserSide === side) return true;
+    if (g.planetEffectFetch && g.planetEffectFetch.chooserSide !== side) return false;
+    if (g.deployFromDeckPending?.side === side) return true;
+    if (g.deployFromDeckPending && g.deployFromDeckPending.side !== side) return false;
+    if (g.duelState) {
+      const d = g.duelState;
+      if (d.step === "choose_target" && d.initiator === side) return true;
+      if (d.step === "defender_respond" && d.initiator !== side) return true;
+      if (d.step === "play") {
+        if (!d.pendingAttack && d.currentAttacker === side) return true;
+        if (d.pendingAttack && d.pendingAttack.side !== side) return true;
+      }
+      return false;
+    }
     if (g.battleCardDeclareSide === side) return true;
     if (g.battlePlanPhase && (side === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) return true;
     const other: Side = side === "light" ? "dark" : "light";

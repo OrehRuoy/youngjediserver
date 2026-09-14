@@ -20,7 +20,8 @@ const COLOR_VALUES: Dictionary = {
 }
 const CARD_TYPES: Array[String] = ["All", "Character", "Weapon", "Location", "Battle", "Effect", "Starship"]
 const REQUIRED_LOCATION_PLANETS: Array[String] = ["Tatooine", "Coruscant", "Naboo"]
-const MIN_LOCATIONS := 3
+const DECK_THEME: Theme = preload("res://theme/lobby_theme.tres")
+const GOLD := Color(0.95, 0.82, 0.35, 1)
 
 var _deck_name: String = "New Deck"
 var _deck_slots: Dictionary = {}
@@ -29,6 +30,7 @@ var _filtered_cards: Array = []
 var _card_grid: GridContainer
 var _deck_name_label: Label
 var _deck_avg_destiny_label: Label
+var _location_warning_label: Label
 var _slot_containers: Dictionary = {}
 var _slot_counters: Dictionary = {}
 var _side_filter: OptionButton
@@ -70,6 +72,7 @@ func _on_server_message(msg: Dictionary) -> void:
 
 
 func _build_ui() -> void:
+	theme = DECK_THEME
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(PRESET_FULL_RECT)
 	margin.add_theme_constant_override("margin_left", 16)
@@ -110,6 +113,7 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 	save_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	save_btn.pressed.connect(_on_save_deck)
 	toolbar.add_child(save_btn)
+	_style_accent_button(save_btn, GOLD)
 
 	var load_btn := Button.new()
 	load_btn.text = "Load"
@@ -120,9 +124,9 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 	var delete_btn := Button.new()
 	delete_btn.text = "Delete"
 	delete_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	delete_btn.add_theme_color_override("font_color", Color(1, 0.3, 0.3))
 	delete_btn.pressed.connect(_on_delete_deck_pressed)
 	toolbar.add_child(delete_btn)
+	_style_accent_button(delete_btn, DropdownStyle.DARK_ACCENT)
 
 	var back_btn := Button.new()
 	back_btn.text = "Back"
@@ -143,6 +147,13 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 	_deck_avg_destiny_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
 	deck_vbox.add_child(_deck_avg_destiny_label)
 	_update_average_destiny()
+
+	_location_warning_label = Label.new()
+	_location_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_location_warning_label.add_theme_font_size_override("font_size", 13)
+	_location_warning_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.32, 1))
+	deck_vbox.add_child(_location_warning_label)
+	_update_location_warning()
 
 	var slot_scroll := ScrollContainer.new()
 	slot_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -287,6 +298,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	_side_filter.add_item("Dark")
 	_side_filter.item_selected.connect(_on_filter_changed)
 	filter_row1.add_child(_side_filter)
+	_style_dropdown(_side_filter)
 
 	var type_label := Label.new()
 	type_label.text = "Type:"
@@ -298,6 +310,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 		_type_filter.add_item(t)
 	_type_filter.item_selected.connect(_on_filter_changed)
 	filter_row1.add_child(_type_filter)
+	_style_dropdown(_type_filter)
 
 	var color_label := Label.new()
 	color_label.text = "Color:"
@@ -311,6 +324,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	_color_filter.add_item("Wild Card")
 	_color_filter.item_selected.connect(_on_filter_changed)
 	filter_row1.add_child(_color_filter)
+	_style_dropdown(_color_filter)
 
 	# Filter row 2: Set, Destiny
 	var filter_row2_setdest := HBoxContainer.new()
@@ -334,6 +348,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 		_set_filter.add_item(s)
 	_set_filter.item_selected.connect(_on_filter_changed)
 	filter_row2_setdest.add_child(_set_filter)
+	_style_dropdown(_set_filter)
 
 	var destiny_label := Label.new()
 	destiny_label.text = "Destiny:"
@@ -346,6 +361,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 		_destiny_filter.add_item(str(d))
 	_destiny_filter.item_selected.connect(_on_filter_changed)
 	filter_row2_setdest.add_child(_destiny_filter)
+	_style_dropdown(_destiny_filter)
 
 	var trait_label := Label.new()
 	trait_label.text = "Trait:"
@@ -371,6 +387,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 		_trait_filter.add_item(tr)
 	_trait_filter.item_selected.connect(_on_filter_changed)
 	filter_row2_setdest.add_child(_trait_filter)
+	_style_dropdown(_trait_filter)
 
 	# Filter row 3: Title search, Gametext search
 	var filter_row2 := HBoxContainer.new()
@@ -413,6 +430,42 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	_card_scroll.add_child(_card_grid)
 
 
+func _style_dropdown(btn: OptionButton) -> void:
+	DropdownStyle.apply(btn, GOLD, DECK_THEME)
+
+
+func _style_accent_button(btn: Button, accent: Color) -> void:
+	var fill := Color(0.04, 0.06, 0.14, 0.96)
+	if accent.r > accent.b + 0.15:
+		fill = Color(0.14, 0.08, 0.04, 0.96)
+	elif accent.r > accent.g:
+		fill = Color(0.14, 0.04, 0.05, 0.96)
+	btn.add_theme_stylebox_override("normal", _control_box(fill, accent))
+	btn.add_theme_stylebox_override("hover", _control_box(fill.lightened(0.1), accent.lightened(0.12)))
+	btn.add_theme_stylebox_override("pressed", _control_box(fill.darkened(0.08), accent.darkened(0.1)))
+	btn.add_theme_stylebox_override("focus", _control_box(fill.lightened(0.1), accent.lightened(0.12)))
+	btn.add_theme_color_override("font_color", Color(0.96, 0.94, 0.85, 1))
+	btn.add_theme_color_override("font_hover_color", GOLD)
+	btn.add_theme_color_override("font_pressed_color", GOLD)
+
+
+func _control_box(bg: Color, border: Color) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(8)
+	s.content_margin_left = 14
+	s.content_margin_top = 8
+	s.content_margin_right = 14
+	s.content_margin_bottom = 8
+	return s
+
+
+func _themed_dialog(dialog: Window) -> void:
+	dialog.theme = DECK_THEME
+
+
 func _populate_card_grid() -> void:
 	for c in _card_grid.get_children():
 		c.queue_free()
@@ -423,7 +476,7 @@ func _populate_card_grid() -> void:
 		if card_id.is_empty():
 			continue
 
-		var tex := _load_card_texture(card_id, side)
+		var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
 		if tex == null:
 			continue
 
@@ -491,7 +544,7 @@ func _show_hover_preview_for_card(card: Dictionary) -> void:
 	_hide_hover_preview()
 	var card_id: String = card.get("id", "")
 	var side: String = card.get("side", "")
-	var tex := _load_card_texture(card_id, side)
+	var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
 	if tex == null:
 		return
 
@@ -735,7 +788,7 @@ func _refresh_cover_display() -> void:
 		_cover_tex.tooltip_text = "Optional cover — drag a card here for table art"
 		return
 	var side: String = str(_cover_card.get("side", ""))
-	var tex := _load_card_texture(cid, side)
+	var tex := _load_card_texture(cid, side, str(_cover_card.get("set", "")))
 	if tex == null and CardCatalog:
 		tex = CardCatalog.load_card_texture(cid, side, str(_cover_card.get("set", "")))
 	_cover_tex.texture = tex
@@ -788,19 +841,33 @@ func _get_all_locations_in_deck() -> Array:
 	return locations
 
 
-func _has_required_locations() -> bool:
-	var locations: Array = _get_all_locations_in_deck()
-	if locations.size() < MIN_LOCATIONS:
-		return false
-	var planets_found: Dictionary = {}
-	for loc in locations:
-		var planet: String = loc.get("planet", "")
+func _missing_location_planets() -> Array[String]:
+	var found: Dictionary = {}
+	for loc in _get_all_locations_in_deck():
+		var planet: String = str(loc.get("planet", "")).strip_edges()
 		if planet in REQUIRED_LOCATION_PLANETS:
-			planets_found[planet] = true
+			found[planet] = true
+	var missing: Array[String] = []
 	for required in REQUIRED_LOCATION_PLANETS:
-		if not planets_found.get(required, false):
-			return false
-	return true
+		if not found.get(required, false):
+			missing.append(required)
+	return missing
+
+
+func _has_required_locations() -> bool:
+	return _missing_location_planets().is_empty()
+
+
+func _update_location_warning() -> void:
+	if _location_warning_label == null:
+		return
+	var missing := _missing_location_planets()
+	if missing.is_empty():
+		_location_warning_label.text = "Locations: Tatooine, Naboo, and Coruscant."
+		_location_warning_label.add_theme_color_override("font_color", Color(0.55, 0.85, 0.6, 1))
+	else:
+		_location_warning_label.text = "Need a location from: %s." % ", ".join(missing)
+		_location_warning_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.32, 1))
 
 
 func _get_drop_target(gpos: Vector2) -> String:
@@ -843,12 +910,13 @@ func _refresh_slot_display(color_name: String) -> void:
 	var cards: Array = _deck_slots[color_name]
 	_slot_counters[color_name].text = "%d / %d" % [cards.size(), MAX_PER_COLOR]
 	_update_average_destiny()
+	_update_location_warning()
 
 	for i in range(cards.size()):
 		var card: Dictionary = cards[i]
 		var card_id: String = card.get("id", "")
 		var side: String = card.get("side", "")
-		var tex := _load_card_texture(card_id, side)
+		var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
 		if tex == null:
 			continue
 
@@ -953,6 +1021,15 @@ func _apply_filters() -> void:
 				continue
 		_filtered_cards.append(card)
 
+	if not color_filter.is_empty():
+		_filtered_cards.sort_custom(func(a, b):
+			var a_wild: bool = _is_wild_card(a)
+			var b_wild: bool = _is_wild_card(b)
+			if a_wild != b_wild:
+				return a_wild
+			return str(a.get("name", "")) < str(b.get("name", ""))
+		)
+
 	_populate_card_grid()
 
 
@@ -967,11 +1044,13 @@ func _on_new_deck() -> void:
 		_deck_slots[c].clear()
 		_refresh_slot_display(c)
 	_update_average_destiny()
+	_update_location_warning()
 
 
 func _on_save_deck() -> void:
 	if not _has_required_locations():
-		_show_toast("You must play a location from Tatooine, Naboo, and Coruscant in your deck.")
+		var missing := _missing_location_planets()
+		_show_toast("You need one location from each of Tatooine, Naboo, and Coruscant. Missing: %s." % ", ".join(missing))
 		return
 	_show_name_dialog()
 
@@ -999,6 +1078,7 @@ func _show_name_dialog() -> void:
 	dialog.canceled.connect(func(): dialog.queue_free())
 
 	add_child(dialog)
+	_themed_dialog(dialog)
 	dialog.popup_centered()
 
 
@@ -1109,6 +1189,7 @@ func _show_load_dialog(decks: Array) -> void:
 	vbox.add_child(cancel_btn)
 
 	add_child(dialog)
+	_themed_dialog(dialog)
 	dialog.popup_centered()
 
 
@@ -1172,6 +1253,7 @@ func _show_delete_confirmation() -> void:
 	dialog.canceled.connect(func(): dialog.queue_free())
 
 	add_child(dialog)
+	_themed_dialog(dialog)
 	dialog.popup_centered()
 
 
@@ -1193,10 +1275,10 @@ func _on_back() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
-func _load_card_texture(card_id: String, side: String) -> Texture2D:
+func _load_card_texture(card_id: String, side: String, set_hint: String = "") -> Texture2D:
 	if card_id.is_empty() or not CardCatalog:
 		return null
-	var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side)
+	var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side, set_hint)
 	for p in paths_to_try:
 		var tex: Texture2D = load(p) as Texture2D
 		if tex:

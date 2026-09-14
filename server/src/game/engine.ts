@@ -71,6 +71,7 @@ export function startGame(
     darkCustomCards
   );
   g.phaseStartedAt = Date.now();
+  g.ruleset = "dotf";
   registerGame(g);
   return g;
 }
@@ -141,6 +142,12 @@ export function advancePhase(gameId: string, onPhaseChange: (game: GameStateData
     g.darkBattlePlanOrder = undefined;
     g.lightBattlePlanReady = false;
     g.darkBattlePlanReady = false;
+    g.duelState = undefined;
+  }
+
+  if (nextPhase === "battle") {
+    g.duelUsedThisTurn = false;
+    g.foughtThisTurn = undefined;
   }
 
   if (nextPhase === "deploy") {
@@ -168,13 +175,13 @@ export function startPhaseTimer(
       stopPhaseTimer(gameId);
       return;
     }
-    if (g.battlePlanPhase || g.battleCardDeclareSide) {
+    if (g.battlePlanPhase || g.battleCardDeclareSide || g.starshipBattlePhase) {
       return;
     }
     if (g.evacuationState || g.evacuationResult) {
       return;
     }
-    if (g.effectActivationPending) {
+    if (g.effectActivationPending || g.planetEffectFetch || g.deployFromDeckPending || g.duelState) {
       return;
     }
     const elapsed = Date.now() - g.phaseStartedAt;

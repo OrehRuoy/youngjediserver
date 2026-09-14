@@ -268,7 +268,7 @@ func table_start() -> void:
 	send_message({ "type": "table_start" })
 
 
-func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array, bot_style: String = "random") -> void:
+func start_bot_game(player_side: String, player_deck_id: String, player_deck_custom: Array, bot_deck_id: String, bot_deck_custom: Array, bot_style: String = "auto") -> void:
 	var payload: Dictionary = { "type": "start_bot_game", "playerSide": player_side, "botStyle": bot_style }
 	if not player_deck_id.is_empty():
 		payload["playerDeckId"] = player_deck_id

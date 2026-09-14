@@ -303,12 +303,12 @@ func _fill_style_dropdown() -> void:
 	bot_style_select.add_item("Style: Neutral", 2)
 	bot_style_select.add_item("Style: Aggressive", 3)
 	bot_style_select.add_item("Style: Passive", 4)
-	bot_style_select.selected = 0
+	bot_style_select.selected = 1
 
 
 func _get_bot_style() -> String:
 	if bot_style_select == null:
-		return "random"
+		return "auto"
 	match bot_style_select.selected:
 		1:
 			return "auto"

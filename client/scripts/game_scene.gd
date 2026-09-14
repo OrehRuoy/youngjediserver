@@ -24,7 +24,6 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 @onready var hand_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll/HandList
 @onready var your_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourInPlayScroll/YourInPlayCenter/YourInPlayRow
 @onready var opp_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentInPlayScroll/OpponentInPlayCenter/OpponentInPlayRow
-@onready var opponent_battle_cards_label: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentBattleCardsLabel
 @onready var play_card_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PlayCardBtn
 @onready var pass_phase_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PassPhaseBtn
 @onready var battle_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/BattleBtn
@@ -32,6 +31,13 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 @onready var even_up_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/EvenUpBtn
 @onready var discard_location_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DiscardLocationBtn
 @onready var evacuate_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/EvacuateBtn
+@onready var duel_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DuelBtn
+@onready var your_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper
+@onready var your_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper/YourHyperspace
+@onready var your_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper/YourHyperspaceCount
+@onready var opp_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper
+@onready var opp_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper/OppHyperspace
+@onready var opp_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper/OppHyperspaceCount
 @onready var surrender_planet_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/SurrenderPlanetBtn
 @onready var concede_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ConcedeBtn
 @onready var return_to_lobby_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ReturnToLobbyBtn
@@ -54,6 +60,7 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 @onready var opp_force_label: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OpponentForceLabel
 @onready var your_force_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourForceLabel
 @onready var chat_messages: VBoxContainer = $HBoxContainer/ChatPanel/Margin/VBox/ChatScroll/Messages
+@onready var chat_scroll: ScrollContainer = $HBoxContainer/ChatPanel/Margin/VBox/ChatScroll
 @onready var chat_input: LineEdit = $HBoxContainer/ChatPanel/Margin/VBox/ChatInputRow/ChatInput
 @onready var chat_send_btn: Button = $HBoxContainer/ChatPanel/Margin/VBox/ChatInputRow/ChatSendBtn
 
@@ -112,10 +119,14 @@ const BATTLE_REVEAL_DELAY_SEC: float = 10.0
 
 var _evacuation_overlay: CanvasLayer = null
 var _evacuation_panel: PanelContainer = null
+var _dotf_overlay: CanvasLayer = null
+var _dotf_overlay_kind: String = ""
+var _hs_browse_overlay: CanvasLayer = null
+var _picking_duel: bool = false
+var _duel_char_id: String = ""
+var _duel_weapon_id: String = ""
 
 var _announced_opp_battle_cards: bool = false
-var _battle_notice_layer: CanvasLayer = null
-var _battle_notice_timer: Timer = null
 
 
 func _ready() -> void:
@@ -138,6 +149,12 @@ func _ready() -> void:
 		discard_location_btn.pressed.connect(_on_discard_location_pressed)
 	if evacuate_btn:
 		evacuate_btn.pressed.connect(_on_evacuate_pressed)
+	if duel_btn:
+		duel_btn.pressed.connect(_on_duel_pressed)
+	if your_hs_wrapper:
+		your_hs_wrapper.gui_input.connect(_on_your_hs_gui_input)
+	if opp_hs_wrapper:
+		opp_hs_wrapper.gui_input.connect(_on_opp_hs_gui_input)
 	if surrender_planet_btn:
 		surrender_planet_btn.pressed.connect(_on_surrender_planet_pressed)
 	concede_btn.pressed.connect(_on_concede_pressed)
@@ -151,6 +168,9 @@ func _ready() -> void:
 	if chat_input:
 		chat_input.text_submitted.connect(_on_chat_submitted)
 		chat_input.gui_input.connect(_on_chat_input_gui_input)
+	if chat_scroll:
+		chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		chat_scroll.resized.connect(_refit_chat_lines)
 	# Deck hover: connect to wrappers (mouse_filter STOP) so hover is detected
 	if opp_deck_wrapper:
 		opp_deck_wrapper.mouse_entered.connect(_on_opp_deck_mouse_entered)
@@ -538,6 +558,21 @@ func _show_stranded_cards(planet_data: Dictionary) -> void:
 # Evacuation UI
 # ---------------------------------------------------------------------------
 
+func _uses_hyperspace(pub: Dictionary) -> bool:
+	return str(pub.get("ruleset", "dotf")) != "classic"
+
+
+func _has_transport_in_hyperspace(pub: Dictionary, my_side: String) -> bool:
+	var ships: Array = pub.get("lightHyperspace" if my_side == "light" else "darkHyperspace", [])
+	for entry in ships:
+		var card_id: String = entry.get("cardId", "")
+		if CardCatalog:
+			var info: Dictionary = CardCatalog.get_card_info(card_id, "")
+			if info.get("type", "") == "starship" and str(info.get("trait", "")).to_lower() == "transport":
+				return true
+	return false
+
+
 func _has_transport_in_hand(state: RefCounted) -> bool:
 	var hand: Array = state.hand_with_instances
 	for entry in hand:
@@ -609,7 +644,9 @@ func _update_evacuation_ui(state: RefCounted, pub: Dictionary, phase: String, my
 	# Show evacuate button during deploy when conditions met
 	if evacuate_btn:
 		if phase == "deploy" and is_my_turn and evac_state.size() == 0 and evac_result.size() == 0:
-			var has_transport: bool = _has_transport_in_hand(state)
+			var has_transport: bool = _uses_hyperspace(pub) and _has_transport_in_hyperspace(pub, my_side)
+			if not _uses_hyperspace(pub):
+				has_transport = _has_transport_in_hand(state)
 			var evacuatable: Array = _get_evacuatable_planet_info(pub, my_side)
 			evacuate_btn.visible = has_transport and evacuatable.size() > 0
 		else:
@@ -619,22 +656,40 @@ func _update_evacuation_ui(state: RefCounted, pub: Dictionary, phase: String, my
 		var evac_side: String = evac_state.get("evacuatingSide", "")
 		if evac_side == my_side:
 			status_label.text = "Evacuating... waiting for opponent to respond."
+			if _uses_hyperspace(pub) and _dotf_overlay_kind == "intercept":
+				_clear_dotf_overlay()
 		else:
-			_show_interception_prompt(state, evac_state)
+			if _uses_hyperspace(pub):
+				_show_dotf_intercept_bar(state, evac_state)
+			else:
+				_show_interception_prompt(state, evac_state)
 	elif evac_result.size() > 0:
+		if _dotf_overlay_kind == "intercept":
+			_clear_dotf_overlay()
 		if not evac_result.get("intercepted", false) and evac_result.get("outcome", "") == "success":
 			_show_transport_complete_then_dismiss(evac_result, my_side)
 		else:
 			_show_evacuation_result(evac_result, my_side)
+	elif _dotf_overlay_kind == "intercept":
+		_clear_dotf_overlay()
 
 
 func _on_evacuate_pressed() -> void:
 	var state: RefCounted = Connection.get_state()
 	var pub: Dictionary = state.game_state.get("publicState", {})
 	var my_side: String = state.game_side
-	var transports: Array = _get_transport_cards_in_hand(state)
 	var planets: Array = _get_evacuatable_planet_info(pub, my_side)
-	if transports.is_empty() or planets.is_empty():
+	if planets.is_empty():
+		status_label.text = "No cards to evacuate."
+		return
+	if _uses_hyperspace(pub):
+		if not _has_transport_in_hyperspace(pub, my_side):
+			status_label.text = "Need a transport in Hyperspace."
+			return
+		_show_evacuation_picker([], planets, my_side)
+		return
+	var transports: Array = _get_transport_cards_in_hand(state)
+	if transports.is_empty():
 		status_label.text = "No transport or no cards to evacuate."
 		return
 	_show_evacuation_picker(transports, planets, my_side)
@@ -682,72 +737,78 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 	vbox.add_theme_constant_override("separation", 10)
 	_evacuation_panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "Evacuation — Select Transport & Planet"
+	title.text = "Evacuation — Select Planet" if transports.is_empty() else "Evacuation — Select Transport & Planet"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4, 1))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
-	# Transport selection — card images
-	var transport_label := Label.new()
-	transport_label.text = "Select Transport Ship:"
-	transport_label.add_theme_font_size_override("font_size", 13)
-	vbox.add_child(transport_label)
-	var transport_row := HBoxContainer.new()
-	transport_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	transport_row.add_theme_constant_override("separation", 10)
-	vbox.add_child(transport_row)
-	var selected_transport: Dictionary = transports[0]
-	var _transport_highlight_border: Panel = null
-	for t in transports:
-		var card_id: String = t.get("cardId", "")
-		var wrapper := Panel.new()
-		wrapper.custom_minimum_size = Vector2(78, 112)
-		var wrapper_style := StyleBoxFlat.new()
-		wrapper_style.bg_color = Color(0, 0, 0, 0)
-		wrapper_style.border_width_left = 3
-		wrapper_style.border_width_right = 3
-		wrapper_style.border_width_top = 3
-		wrapper_style.border_width_bottom = 3
-		wrapper_style.corner_radius_top_left = 4
-		wrapper_style.corner_radius_top_right = 4
-		wrapper_style.corner_radius_bottom_left = 4
-		wrapper_style.corner_radius_bottom_right = 4
-		if t == transports[0]:
-			wrapper_style.border_color = Color(0.4, 0.9, 0.4)
-			_transport_highlight_border = wrapper
-		else:
-			wrapper_style.border_color = Color(0.3, 0.3, 0.3, 0.5)
-		wrapper.add_theme_stylebox_override("panel", wrapper_style)
-		var tex := TextureRect.new()
-		tex.custom_minimum_size = Vector2(72, 106)
-		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
-		tex.offset_left = 3
-		tex.offset_top = 3
-		tex.offset_right = -3
-		tex.offset_bottom = -3
-		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		tex.texture = _load_card_texture_for_id(card_id, my_side)
-		wrapper.add_child(tex)
-		var click_btn := Button.new()
-		click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
-		click_btn.flat = true
-		click_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		var t_copy: Dictionary = t.duplicate()
-		var w_ref := wrapper
-		click_btn.pressed.connect(func() -> void:
-			selected_transport = t_copy
-			for ch in transport_row.get_children():
-				var s: StyleBoxFlat = ch.get_theme_stylebox("panel") as StyleBoxFlat
-				if s:
-					s.border_color = Color(0.3, 0.3, 0.3, 0.5)
-			var ws: StyleBoxFlat = w_ref.get_theme_stylebox("panel") as StyleBoxFlat
-			if ws:
-				ws.border_color = Color(0.4, 0.9, 0.4)
-			w_ref.queue_redraw()
-		)
-		wrapper.add_child(click_btn)
-		transport_row.add_child(wrapper)
+	if transports.is_empty():
+		var hs_note := Label.new()
+		hs_note.text = "Your entire Hyperspace pile will attempt this evacuation. All characters and weapons at the planet go."
+		hs_note.add_theme_font_size_override("font_size", 12)
+		hs_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vbox.add_child(hs_note)
+	var selected_transport: Dictionary = {} if transports.is_empty() else transports[0]
+	if not transports.is_empty():
+		var transport_label := Label.new()
+		transport_label.text = "Select Transport Ship:"
+		transport_label.add_theme_font_size_override("font_size", 13)
+		vbox.add_child(transport_label)
+		var transport_row := HBoxContainer.new()
+		transport_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		transport_row.add_theme_constant_override("separation", 10)
+		vbox.add_child(transport_row)
+		var _transport_highlight_border: Panel = null
+		for t in transports:
+			var card_id: String = t.get("cardId", "")
+			var wrapper := Panel.new()
+			wrapper.custom_minimum_size = Vector2(78, 112)
+			var wrapper_style := StyleBoxFlat.new()
+			wrapper_style.bg_color = Color(0, 0, 0, 0)
+			wrapper_style.border_width_left = 3
+			wrapper_style.border_width_right = 3
+			wrapper_style.border_width_top = 3
+			wrapper_style.border_width_bottom = 3
+			wrapper_style.corner_radius_top_left = 4
+			wrapper_style.corner_radius_top_right = 4
+			wrapper_style.corner_radius_bottom_left = 4
+			wrapper_style.corner_radius_bottom_right = 4
+			if t == transports[0]:
+				wrapper_style.border_color = Color(0.4, 0.9, 0.4)
+				_transport_highlight_border = wrapper
+			else:
+				wrapper_style.border_color = Color(0.3, 0.3, 0.3, 0.5)
+			wrapper.add_theme_stylebox_override("panel", wrapper_style)
+			var tex := TextureRect.new()
+			tex.custom_minimum_size = Vector2(72, 106)
+			tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+			tex.offset_left = 3
+			tex.offset_top = 3
+			tex.offset_right = -3
+			tex.offset_bottom = -3
+			tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			tex.texture = _load_card_texture_for_id(card_id, my_side)
+			wrapper.add_child(tex)
+			var click_btn := Button.new()
+			click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+			click_btn.flat = true
+			click_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			var t_copy: Dictionary = t.duplicate()
+			var w_ref := wrapper
+			click_btn.pressed.connect(func() -> void:
+				selected_transport = t_copy
+				for ch in transport_row.get_children():
+					var s: StyleBoxFlat = ch.get_theme_stylebox("panel") as StyleBoxFlat
+					if s:
+						s.border_color = Color(0.3, 0.3, 0.3, 0.5)
+				var ws: StyleBoxFlat = w_ref.get_theme_stylebox("panel") as StyleBoxFlat
+				if ws:
+					ws.border_color = Color(0.4, 0.9, 0.4)
+				w_ref.queue_redraw()
+			)
+			wrapper.add_child(click_btn)
+			transport_row.add_child(wrapper)
 	# Planet selection — card images with stranded cards below
 	var planet_label := Label.new()
 	planet_label.text = "Select Planet to Evacuate:"
@@ -1034,6 +1095,417 @@ func _show_interception_prompt(state: RefCounted, evac_state: Dictionary) -> voi
 			_evacuation_overlay = null
 	)
 	vbox.add_child(decline_btn)
+
+
+func _clear_dotf_overlay() -> void:
+	if _dotf_overlay and is_instance_valid(_dotf_overlay):
+		_dotf_overlay.queue_free()
+	_dotf_overlay = null
+	_dotf_overlay_kind = ""
+
+
+func _show_dotf_intercept_bar(state: RefCounted, evac_state: Dictionary) -> void:
+	if _dotf_overlay_kind == "intercept" and _dotf_overlay and is_instance_valid(_dotf_overlay):
+		return
+	_clear_dotf_overlay()
+	_dotf_overlay_kind = "intercept"
+	_dotf_overlay = CanvasLayer.new()
+	_dotf_overlay.layer = 80
+	add_child(_dotf_overlay)
+	var bar := PanelContainer.new()
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_left = 80
+	bar.offset_right = -80
+	bar.offset_top = 8
+	bar.offset_bottom = 88
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.18, 0.1, 0.1, 0.94)
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(0.9, 0.45, 0.3, 0.9)
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 12
+	style.content_margin_right = 12
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
+	bar.add_theme_stylebox_override("panel", style)
+	_dotf_overlay.add_child(bar)
+	var vbox := VBoxContainer.new()
+	bar.add_child(vbox)
+	var n: int = (evac_state.get("stackedCardIds", []) as Array).size()
+	var lbl := Label.new()
+	lbl.text = "Opponent is evacuating %d cards. Deploy starships to Hyperspace, then intercept with your whole pile — or let them go." % n
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(lbl)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	vbox.add_child(row)
+	var intercept_btn := Button.new()
+	intercept_btn.text = "Intercept with Hyperspace"
+	intercept_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "intercept_transport"}})
+		_clear_dotf_overlay()
+	)
+	row.add_child(intercept_btn)
+	var decline_btn := Button.new()
+	decline_btn.text = "Let them evacuate"
+	decline_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_intercept"}})
+		_clear_dotf_overlay()
+	)
+	row.add_child(decline_btn)
+	status_label.text = "You may still play starships into Hyperspace, then intercept."
+
+
+func _begin_choice_overlay(kind: String, title_text: String) -> VBoxContainer:
+	_clear_dotf_overlay()
+	_dotf_overlay_kind = kind
+	_dotf_overlay = CanvasLayer.new()
+	_dotf_overlay.layer = 190
+	add_child(_dotf_overlay)
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.05, 0.05, 0.12, 0.82)
+	_dotf_overlay.add_child(bg)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -320
+	panel.offset_top = -220
+	panel.offset_right = 320
+	panel.offset_bottom = 220
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.14, 0.22, 0.98)
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(0.45, 0.65, 0.95, 0.9)
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 16
+	style.content_margin_right = 16
+	style.content_margin_top = 16
+	style.content_margin_bottom = 16
+	panel.add_theme_stylebox_override("panel", style)
+	_dotf_overlay.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+	var title := Label.new()
+	title.text = title_text
+	title.add_theme_font_size_override("font_size", 16)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	return vbox
+
+
+func _add_card_row(parent: Node, cards: Array, side: String, on_pick: Callable) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(560, 140)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	parent.add_child(scroll)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	scroll.add_child(row)
+	for entry in cards:
+		var card_id: String = entry.get("cardId", "")
+		var inst: String = entry.get("instanceId", "")
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(84, 120)
+		btn.icon = _load_card_texture_for_id(card_id, side)
+		btn.expand_icon = true
+		btn.pressed.connect(on_pick.bind(inst, card_id))
+		row.add_child(btn)
+
+
+func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
+	var fetch: Variant = pub.get("planetEffectFetch", null)
+	if fetch is Dictionary and str(fetch.get("chooserSide", "")) == my_side:
+		if _dotf_overlay_kind != "planet_effect":
+			var vbox := _begin_choice_overlay("planet_effect", "Take one Effect from your deck? (optional)")
+			var choices: Array = fetch.get("effectChoices", [])
+			if choices.is_empty():
+				var none := Label.new()
+				none.text = "No Effects in your deck."
+				none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				vbox.add_child(none)
+			else:
+				_add_card_row(vbox, choices, my_side, func(inst: String, _cid: String) -> void:
+					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "fetch_planet_effect", "instanceId": inst}})
+					_clear_dotf_overlay()
+				)
+			var skip := Button.new()
+			skip.text = "Skip"
+			skip.pressed.connect(func() -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "skip_planet_effect"}})
+				_clear_dotf_overlay()
+			)
+			vbox.add_child(skip)
+		return
+	if fetch is Dictionary and str(fetch.get("chooserSide", "")) != my_side:
+		if _dotf_overlay_kind == "planet_effect":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent may take an Effect from their deck..."
+		return
+
+	var dfd: Variant = pub.get("deployFromDeckPending", null)
+	if dfd is Dictionary and str(dfd.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "deploy_from_deck":
+			var found: bool = bool(dfd.get("found", false))
+			var vbox := _begin_choice_overlay("deploy_from_deck", "Deploy from deck")
+			var note := Label.new()
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			if found:
+				note.text = "Found a matching card. Deploy it now, or skip (1 DAMAGE)."
+			else:
+				note.text = "No matching card in your deck. Continue."
+			vbox.add_child(note)
+			if found:
+				var cid: String = str(dfd.get("foundCardId", ""))
+				var tex := TextureRect.new()
+				tex.custom_minimum_size = Vector2(90, 130)
+				tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+				tex.texture = _load_card_texture_for_id(cid, my_side)
+				vbox.add_child(tex)
+				var deploy_btn := Button.new()
+				deploy_btn.text = "Deploy"
+				deploy_btn.pressed.connect(func() -> void:
+					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_deploy_from_deck"}})
+					_clear_dotf_overlay()
+				)
+				vbox.add_child(deploy_btn)
+			var skip := Button.new()
+			skip.text = "Skip" if found else "Continue"
+			skip.pressed.connect(func() -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_deploy_from_deck"}})
+				_clear_dotf_overlay()
+			)
+			vbox.add_child(skip)
+		return
+	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck":
+		if not (fetch is Dictionary) and not (dfd is Dictionary):
+			_clear_dotf_overlay()
+
+	_update_duel_ui(state, pub, my_side)
+
+
+func _is_lightsaber_card(card_id: String) -> bool:
+	var info: Dictionary = CardCatalog.get_card_info(card_id, "") if CardCatalog else {}
+	var idl: String = card_id.to_lower()
+	var name_s: String = str(info.get("name", "")).to_lower()
+	return idl.contains("lightsaber") or name_s.contains("lightsaber")
+
+
+func _is_duelist_card(card_id: String, side: String) -> bool:
+	var info: Dictionary = CardCatalog.get_card_info(card_id, "") if CardCatalog else {}
+	if str(info.get("type", "")).to_lower() != "character":
+		return false
+	var idl: String = card_id.to_lower()
+	if side == "light":
+		if idl.contains("anakinskywalker") or str(info.get("persona", "")).to_lower() == "anakin":
+			return false
+		return "jedi" in str(info.get("trait", "")).to_lower()
+	return idl.begins_with("darthmaul") or idl.begins_with("darthsidious") or idl.begins_with("aurrasing")
+
+
+func _on_duel_pressed() -> void:
+	_picking_duel = true
+	_duel_char_id = ""
+	_duel_weapon_id = ""
+	status_label.text = "Click your Jedi/Sith, then their lightsaber."
+
+
+func _try_send_initiate_duel() -> void:
+	if _duel_char_id.is_empty() or _duel_weapon_id.is_empty():
+		return
+	Connection.get_client().send_message({
+		"type": "game_action",
+		"action": {"kind": "initiate_duel", "charInstanceId": _duel_char_id, "weaponInstanceId": _duel_weapon_id}
+	})
+	_picking_duel = false
+	_duel_char_id = ""
+	_duel_weapon_id = ""
+
+
+func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
+	var d: Variant = pub.get("duelState", null)
+	if not (d is Dictionary):
+		if _dotf_overlay_kind.begins_with("duel"):
+			_clear_dotf_overlay()
+		return
+	var step: String = str(d.get("step", ""))
+	var initiator: String = str(d.get("initiator", ""))
+	if step == "choose_target" and initiator == my_side and _dotf_overlay_kind != "duel_target":
+		var vbox := _begin_choice_overlay("duel_target", "Choose an opposing character to duel")
+		var opp_side: String = "dark" if my_side == "light" else "light"
+		var opp_play: Array = pub.get("lightInPlay" if opp_side == "light" else "darkInPlay", [])
+		var chars: Array = []
+		for c in opp_play:
+			var info: Dictionary = CardCatalog.get_card_info(c.get("cardId", ""), "") if CardCatalog else {}
+			if str(info.get("type", "")).to_lower() == "character" and not c.get("faceDown", false):
+				chars.append(c)
+		_add_card_row(vbox, chars, opp_side, func(inst: String, _cid: String) -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "choose_duel_target", "defenderCharInstanceId": inst}})
+			_clear_dotf_overlay()
+		)
+		return
+	if step == "defender_respond" and initiator != my_side and _dotf_overlay_kind != "duel_defend":
+		var vbox := _begin_choice_overlay("duel_defend", "Duel — you may swap to a duelist and attach a weapon")
+		var accept := Button.new()
+		accept.text = "Accept duel"
+		accept.pressed.connect(func() -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
+			_clear_dotf_overlay()
+		)
+		vbox.add_child(accept)
+		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+		var duelists: Array = []
+		var weapons: Array = []
+		for c in mine:
+			var cid: String = c.get("cardId", "")
+			if _is_duelist_card(cid, my_side):
+				duelists.append(c)
+			var info: Dictionary = CardCatalog.get_card_info(cid, "") if CardCatalog else {}
+			if str(info.get("type", "")).to_lower() == "weapon":
+				weapons.append(c)
+		if not duelists.is_empty():
+			var dl := Label.new()
+			dl.text = "Optional: swap defender"
+			vbox.add_child(dl)
+			_add_card_row(vbox, duelists, my_side, func(inst: String, _cid: String) -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "swapCharInstanceId": inst}})
+				_clear_dotf_overlay()
+			)
+		if not weapons.is_empty():
+			var wl := Label.new()
+			wl.text = "Or attach a weapon and accept"
+			vbox.add_child(wl)
+			_add_card_row(vbox, weapons, my_side, func(inst: String, _cid: String) -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "weaponInstanceId": inst}})
+				_clear_dotf_overlay()
+			)
+		return
+	if step == "play":
+		var kind: String = "duel_play"
+		if _dotf_overlay_kind != kind:
+			_clear_dotf_overlay()
+			_dotf_overlay_kind = kind
+			_dotf_overlay = CanvasLayer.new()
+			_dotf_overlay.layer = 185
+			add_child(_dotf_overlay)
+		var existing: Node = _dotf_overlay.get_child(0) if _dotf_overlay.get_child_count() > 0 else null
+		if existing:
+			existing.queue_free()
+		var panel := PanelContainer.new()
+		panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		panel.offset_left = 60
+		panel.offset_right = -60
+		panel.offset_top = -210
+		panel.offset_bottom = -8
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.1, 0.12, 0.2, 0.96)
+		style.content_margin_left = 10
+		style.content_margin_right = 10
+		style.content_margin_top = 8
+		style.content_margin_bottom = 8
+		panel.add_theme_stylebox_override("panel", style)
+		_dotf_overlay.add_child(panel)
+		var vbox := VBoxContainer.new()
+		panel.add_child(vbox)
+		var pending: Variant = d.get("pendingAttack", null)
+		var info := Label.new()
+		var lhits: int = int(d.get("lightHits", 0))
+		var dhits: int = int(d.get("darkHits", 0))
+		info.text = "Duel  Light hits %d (power %d)  Dark hits %d (power %d)" % [lhits, int(d.get("lightPower", 0)), dhits, int(d.get("darkPower", 0))]
+		vbox.add_child(info)
+		if pending is Dictionary:
+			var plbl := Label.new()
+			plbl.text = "Attack destiny %d — play a matching destiny to block (that card becomes your attack)." % int(pending.get("destiny", 0))
+			vbox.add_child(plbl)
+		var hand: Array = d.get("yourDuelHand", [])
+		_add_card_row(vbox, hand, my_side, func(inst: String, _cid: String) -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_play_card", "instanceId": inst}})
+		)
+
+
+func _on_your_hs_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_browse_hyperspace(true)
+
+
+func _on_opp_hs_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_browse_hyperspace(false)
+
+
+func _browse_hyperspace(yours: bool) -> void:
+	var state: RefCounted = Connection.get_state()
+	var pub: Dictionary = state.game_state.get("publicState", {})
+	var my_side: String = state.game_side
+	var key: String = ("lightHyperspace" if my_side == "light" else "darkHyperspace") if yours else ("darkHyperspace" if my_side == "light" else "lightHyperspace")
+	var side: String = my_side if yours else ("dark" if my_side == "light" else "light")
+	var ships: Array = pub.get(key, [])
+	if _hs_browse_overlay and is_instance_valid(_hs_browse_overlay):
+		_hs_browse_overlay.queue_free()
+	_hs_browse_overlay = CanvasLayer.new()
+	_hs_browse_overlay.layer = 170
+	add_child(_hs_browse_overlay)
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0, 0, 0, 0.65)
+	bg.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.pressed:
+			if _hs_browse_overlay:
+				_hs_browse_overlay.queue_free()
+				_hs_browse_overlay = null
+	)
+	_hs_browse_overlay.add_child(bg)
+	var vbox := _begin_choice_overlay("hs_browse", "Hyperspace")
+	# _begin_choice_overlay replaced _dotf_overlay; attach browse to that overlay instead
+	_add_card_row(vbox, ships, side, func(_inst: String, _cid: String) -> void:
+		pass
+	)
+	var close_btn := Button.new()
+	close_btn.text = "Close"
+	close_btn.pressed.connect(func() -> void:
+		_clear_dotf_overlay()
+		if _hs_browse_overlay:
+			_hs_browse_overlay.queue_free()
+			_hs_browse_overlay = null
+	)
+	vbox.add_child(close_btn)
+
+
+func _update_hyperspace_piles(pub: Dictionary, my_side: String) -> void:
+	var use_hs: bool = _uses_hyperspace(pub)
+	if your_hs_wrapper:
+		your_hs_wrapper.visible = use_hs
+	if opp_hs_wrapper:
+		opp_hs_wrapper.visible = use_hs
+	if not use_hs:
+		return
+	var my_ships: Array = pub.get("lightHyperspace" if my_side == "light" else "darkHyperspace", [])
+	var opp_ships: Array = pub.get("darkHyperspace" if my_side == "light" else "lightHyperspace", [])
+	if your_hs_count:
+		your_hs_count.text = str(my_ships.size())
+		your_hs_count.visible = my_ships.size() > 0
+	if opp_hs_count:
+		opp_hs_count.text = str(opp_ships.size())
+		opp_hs_count.visible = opp_ships.size() > 0
+	if your_hs_tex and my_ships.size() > 0:
+		your_hs_tex.texture = _load_card_texture_for_id(my_ships[my_ships.size() - 1].get("cardId", ""), my_side)
+	if opp_hs_tex and opp_ships.size() > 0:
+		var opp_side: String = "dark" if my_side == "light" else "light"
+		opp_hs_tex.texture = _load_card_texture_for_id(opp_ships[opp_ships.size() - 1].get("cardId", ""), opp_side)
 
 
 const EVAC_TRANSPORT_COMPLETE_DELAY: float = 4.5
@@ -1605,6 +2077,9 @@ func _on_hand_card_drag_started(instance_id: String) -> void:
 func _on_hand_card_drag_ended(instance_id: String) -> void:
 	if _dragging_instance_id.is_empty():
 		_clear_drag_preview()
+		# Drag is not valid in this phase (e.g. Even Up). Treat the release as a click
+		# so discard-location / even-up discards still work if the mouse moved a little.
+		_on_card_selected(instance_id)
 		return
 	_handle_drag_released(instance_id, get_global_mouse_position())
 	_dragging_instance_id = ""
@@ -1685,9 +2160,13 @@ func _try_deploy_dragged_card() -> void:
 	var phase: String = g.get("phase", "")
 	var turn_side: String = g.get("turnSide", "")
 	var my_side: String = Connection.get_state().game_side
-	if phase != "deploy" or turn_side != my_side:
-		return
 	var pub_drag: Dictionary = g.get("publicState", {})
+	var evac_drag: Dictionary = pub_drag.get("evacuationState", {})
+	var intercept_window: bool = evac_drag.get("awaitingInterception", false) and str(evac_drag.get("evacuatingSide", "")) != my_side and _uses_hyperspace(pub_drag)
+	if phase != "deploy":
+		return
+	if turn_side != my_side and not intercept_window:
+		return
 	var ep_drag: Variant = pub_drag.get("effectActivationPending", null)
 	if ep_drag is Dictionary and str(ep_drag.get("side", "")) == my_side:
 		status_label.text = "Cancel the effect or discard for it before playing other cards."
@@ -1703,7 +2182,19 @@ func _try_deploy_dragged_card() -> void:
 			status_label.text = "Battle cards can only be used during battle."
 			return
 		if card_type == "starship":
-			status_label.text = "Starships are played via Evacuate (transport) or interception (starfighter)."
+			if not _uses_hyperspace(pub_drag):
+				status_label.text = "Starships are played via Evacuate (transport) or interception (starfighter)."
+				return
+			if turn_side != my_side and not intercept_window:
+				return
+			Connection.get_client().send_message({
+				"type": "game_action",
+				"action": { "kind": "play_card", "instanceId": _dragging_instance_id }
+			})
+			_selected_instance_id = ""
+			_refresh()
+			return
+		if intercept_window:
 			return
 		if card_type == "location":
 			if _can_replace_location_with(card_id):
@@ -1870,11 +2361,35 @@ func _append_chat_line(from: String, text: String) -> void:
 	line.text = "%s: %s" % [from, text]
 	line.add_theme_font_size_override("font_size", 13)
 	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	line.custom_minimum_size.x = 240
+	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if from == "System":
+		line.add_theme_color_override("font_color", Color(0.85, 0.78, 0.5, 1))
+	_fit_chat_line_width(line)
 	chat_messages.add_child(line)
-	var scroll: ScrollContainer = chat_messages.get_parent() as ScrollContainer
-	if scroll:
-		call_deferred("_scroll_chat_to_bottom", scroll)
+	if chat_scroll:
+		call_deferred("_scroll_chat_to_bottom", chat_scroll)
+
+
+func _chat_wrap_width() -> float:
+	if chat_scroll == null:
+		return 180.0
+	var w: float = chat_scroll.size.x
+	if w < 80.0:
+		w = 180.0
+	return w
+
+
+func _fit_chat_line_width(line: Label) -> void:
+	line.custom_minimum_size.x = _chat_wrap_width()
+
+
+func _refit_chat_lines() -> void:
+	if chat_messages == null:
+		return
+	var w: float = _chat_wrap_width()
+	for child in chat_messages.get_children():
+		if child is Label:
+			(child as Label).custom_minimum_size.x = w
 
 
 func _on_chat_send() -> void:
@@ -2033,7 +2548,7 @@ func _refresh() -> void:
 	play_card_btn.visible = false
 	var battle_active: bool = pub.get("battlePlanPhase", false) or pub.get("battleCardDeclareSide", "") != ""
 	var evac_in_progress: bool = pub.get("evacuationState", {}).size() > 0
-	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active))
+	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active)) and not (pub.get("planetEffectFetch") is Dictionary) and not (pub.get("deployFromDeckPending") is Dictionary) and not (pub.get("duelState") is Dictionary)
 	var any_face_down: bool = false
 	for card in pub.get("lightInPlay", []):
 		if card.get("faceDown", false):
@@ -2045,10 +2560,13 @@ func _refresh() -> void:
 				any_face_down = true
 				break
 	var declare_side: String = pub.get("battleCardDeclareSide", "")
-	var in_declare_phase: bool = (phase == "battle" and declare_side != "")
-	battle_btn.visible = is_my_turn and phase == "battle" and not any_face_down and not pub.get("battlePlanPhase", false) and not in_declare_phase
+	var starship_battle: bool = bool(pub.get("starshipBattlePhase", false))
+	var in_declare_phase: bool = (declare_side != "") and ((phase == "battle") or starship_battle)
+	battle_btn.visible = is_my_turn and phase == "battle" and not any_face_down and not pub.get("battlePlanPhase", false) and not in_declare_phase and not (pub.get("duelState") is Dictionary)
+	if duel_btn:
+		duel_btn.visible = is_my_turn and phase == "battle" and _uses_hyperspace(pub) and not bool(pub.get("duelUsedThisTurn", false)) and not (pub.get("duelState") is Dictionary) and not pub.get("battlePlanPhase", false) and not in_declare_phase and not any_face_down
 	if battle_plan_section:
-		var in_battle_plan: bool = (phase == "battle" and pub.get("battlePlanPhase", false))
+		var in_battle_plan: bool = pub.get("battlePlanPhase", false) and ((phase == "battle") or starship_battle)
 		battle_plan_section.visible = in_battle_plan or in_declare_phase
 		if in_declare_phase:
 			_build_battle_card_declare_ui(state, pub, declare_side)
@@ -2071,18 +2589,16 @@ func _refresh() -> void:
 			if battle_plan_ready_btn:
 				battle_plan_ready_btn.visible = not my_ready
 				# disabled state set after _build_in_play so _battle_plan_order is populated
-			var opp_bc_phrase: String = _opp_battle_card_phrase(pub, my_side)
-			var opp_bc_prefix: String = (opp_bc_phrase + " ") if not opp_bc_phrase.is_empty() else ""
 			if battle_plan_row and my_ready and opp_ready:
-				status_label.text = opp_bc_prefix + "Both ready — resolving battle..."
+				status_label.text = "Both ready — resolving battle..."
 			elif my_ready:
-				status_label.text = opp_bc_prefix + "Waiting for opponent to set battle plan..."
+				status_label.text = "Waiting for opponent to set battle plan..."
 			else:
 				var bc_count: int = _battle_cards_in_plan.size()
 				if bc_count > 0:
-					status_label.text = opp_bc_prefix + "Drag to reorder. %d Battle card%s added. Click Ready." % [bc_count, "s" if bc_count > 1 else ""]
+					status_label.text = "Drag to reorder. %d Battle card%s added. Click Ready." % [bc_count, "s" if bc_count > 1 else ""]
 				else:
-					status_label.text = opp_bc_prefix + "Drag cards to set battle order, then click Battle Plan Ready."
+					status_label.text = "Drag cards to set battle order, then click Battle Plan Ready."
 		else:
 			var old_declare_ui2: Node = battle_plan_section.get_node_or_null("BattleCardDeclareUI")
 			if old_declare_ui2:
@@ -2097,12 +2613,16 @@ func _refresh() -> void:
 		discard_location_btn.visible = false
 		pass_phase_btn.visible = false
 		battle_btn.visible = false
+		if duel_btn:
+			duel_btn.visible = false
 		if battle_plan_section:
 			battle_plan_section.visible = false
 	else:
 		discard_hand_btn.visible = is_my_turn and phase == "even_up"
 		even_up_btn.visible = is_my_turn and phase == "even_up"
 		discard_location_btn.visible = is_my_turn and phase == "even_up"
+		if discard_location_btn:
+			discard_location_btn.text = "Cancel Discard" if _discard_location_mode else "Discard Location"
 	if surrender_planet_btn:
 		if _game_over_received:
 			surrender_planet_btn.visible = false
@@ -2242,11 +2762,13 @@ func _refresh() -> void:
 	# In-play areas
 	_build_in_play(state)
 	# Battle plan ready button: enable only after _build_in_play has populated _battle_plan_order
-	if phase == "battle" and pub.get("battlePlanPhase", false) and battle_plan_ready_btn and battle_plan_ready_btn.visible:
+	if pub.get("battlePlanPhase", false) and battle_plan_ready_btn and battle_plan_ready_btn.visible:
 		battle_plan_ready_btn.disabled = _battle_plan_order.is_empty()
 	play_card_btn.text = "Play Card"
 	_update_controlled_planets_display(pub)
+	_update_hyperspace_piles(pub, my_side)
 	_update_evacuation_ui(state, pub, phase, my_side)
+	_update_dotf_choice_ui(state, pub, my_side)
 	_previous_phase = phase
 
 
@@ -2325,6 +2847,9 @@ func _on_effect_decline_pressed() -> void:
 
 
 func _on_my_in_play_effect_clicked(instance_id: String) -> void:
+	if _picking_duel:
+		_on_my_table_card_clicked(instance_id)
+		return
 	var g: Dictionary = Connection.get_state().game_state
 	var phase: String = g.get("phase", "")
 	var turn_side: String = g.get("turnSide", "")
@@ -2344,6 +2869,31 @@ func _on_my_in_play_effect_clicked(instance_id: String) -> void:
 		"type": "game_action",
 		"action": { "kind": "effect_offer", "effectInstanceId": instance_id }
 	})
+
+
+func _on_my_table_card_clicked(instance_id: String) -> void:
+	if not _picking_duel:
+		return
+	var pub: Dictionary = Connection.get_state().game_state.get("publicState", {})
+	var my_side: String = Connection.get_state().game_side
+	var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+	var card_id: String = ""
+	for c in mine:
+		if c.get("instanceId", "") == instance_id:
+			card_id = c.get("cardId", "")
+			break
+	if card_id.is_empty():
+		return
+	if _is_lightsaber_card(card_id):
+		_duel_weapon_id = instance_id
+		status_label.text = "Lightsaber chosen. Click your duelist if you haven't yet."
+	elif _is_duelist_card(card_id, my_side):
+		_duel_char_id = instance_id
+		status_label.text = "Duelist chosen. Click their lightsaber."
+	else:
+		status_label.text = "Click a Jedi/Sith and a lightsaber."
+		return
+	_try_send_initiate_duel()
 
 
 func _on_card_selected(instance_id: String) -> void:
@@ -2373,11 +2923,16 @@ func _on_card_selected(instance_id: String) -> void:
 		return
 	if phase == "even_up" and turn_side == my_side and _discard_location_mode:
 		var card_id: String = ""
+		var card_set: String = ""
 		for entry in Connection.get_state().hand_with_instances:
 			if entry.get("instanceId", "") == instance_id:
 				card_id = entry.get("cardId", "")
+				card_set = entry.get("set", "")
 				break
-		if card_id and CardCatalog and CardCatalog.get_card_info(card_id, my_side).get("type", "") == "location":
+		var is_loc: bool = false
+		if card_id and CardCatalog:
+			is_loc = str(CardCatalog.get_card_info(card_id, my_side, card_set).get("type", "")).to_lower() == "location"
+		if is_loc:
 			_discard_location_mode = false
 			Connection.get_client().send_message({
 				"type": "game_action",
@@ -2385,6 +2940,8 @@ func _on_card_selected(instance_id: String) -> void:
 			})
 			_refresh()
 			return
+		status_label.text = "That's not a location. Click a location card in your hand."
+		return
 	if _selected_instance_id == instance_id:
 		_selected_instance_id = ""
 	else:
@@ -2473,13 +3030,9 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 	container.add_theme_constant_override("separation", 10)
 	section.add_child(container)
 	section.move_child(container, 0)
-	var opp_bc_phrase: String = _opp_battle_card_phrase(pub, my_side)
 	if is_my_turn:
 		var prompt_label: Label = Label.new()
-		if opp_bc_phrase.is_empty():
-			prompt_label.text = "Drag Battle cards from your hand onto the table, then click Confirm."
-		else:
-			prompt_label.text = opp_bc_phrase + " Drag yours from your hand onto the table, then click Confirm."
+		prompt_label.text = "Drag Battle cards from your hand onto the table, then click Confirm."
 		prompt_label.add_theme_font_size_override("font_size", 14)
 		prompt_label.add_theme_color_override("font_color", Color(0.85, 0.75, 0.4, 1))
 		container.add_child(prompt_label)
@@ -2495,10 +3048,7 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 			undo_btn.text = "Remove All"
 			undo_btn.pressed.connect(_on_declare_battle_cards_clear)
 			btn_row.add_child(undo_btn)
-		if opp_bc_phrase.is_empty():
-			status_label.text = "Declare your Battle cards. Drag from hand onto the table."
-		else:
-			status_label.text = opp_bc_phrase + " Declare yours, then Confirm."
+		status_label.text = "Declare your Battle cards. Drag from hand onto the table."
 	else:
 		var wait_label: Label = Label.new()
 		wait_label.text = "Waiting for opponent to declare Battle cards..."
@@ -3722,6 +4272,11 @@ func _build_in_play(state: RefCounted) -> void:
 	var in_declare_or_plan: bool = pub.get("battleCardDeclareSide", "") != "" or pub.get("battlePlanPhase", false)
 	var in_battle_plan: bool = pub.get("battlePlanPhase", false)
 	var in_battle_card_declare: bool = (pub.get("battleCardDeclareSide", "") != "") and not in_battle_plan
+	var starship_battle: bool = bool(pub.get("starshipBattlePhase", false))
+	if starship_battle:
+		my_in_play = pub.get("lightHyperspace" if my_side == "light" else "darkHyperspace", [])
+		opp_in_play = pub.get("darkHyperspace" if my_side == "light" else "lightHyperspace", [])
+		starting_inst_id = ""
 	var opp_bc_count: int = _opp_battle_card_count(pub, my_side)
 	var opp_bc_declared: bool = _opp_battle_cards_declared(pub, my_side)
 	if your_play_container:
@@ -3746,6 +4301,8 @@ func _build_in_play(state: RefCounted) -> void:
 					var ct: String = str(CardCatalog.get_card_info(card.get("cardId", ""), my_side, card.get("set", "")).get("type", "")).to_lower()
 					if ct == "effect" and cp.has_signal("card_selected"):
 						cp.card_selected.connect(_on_my_in_play_effect_clicked)
+					elif cp.has_signal("card_selected"):
+						cp.card_selected.connect(_on_my_table_card_clicked)
 			if in_declare_or_plan:
 				for inst_id in _declared_battle_cards:
 					var card_id: String = ""
@@ -3769,6 +4326,8 @@ func _build_in_play(state: RefCounted) -> void:
 				var oty: String = str(CardCatalog.get_card_info(card.get("cardId", ""), opp_side, card.get("set", "")).get("type", "")).to_lower()
 				if oty == "location":
 					continue
+				if oty == "battle":
+					continue
 				if in_battle_card_declare and oty == "effect":
 					continue
 			var cp: Control = CardPlaceholderScene.instantiate()
@@ -3782,15 +4341,6 @@ func _build_in_play(state: RefCounted) -> void:
 				opp_play_container.add_child(cp)
 				cp.set_card("", "", opp_side, "", true, false)
 				_tag_face_down_battle_card(cp)
-		if opponent_battle_cards_label:
-			if in_declare_or_plan and opp_bc_declared:
-				opponent_battle_cards_label.visible = true
-				opponent_battle_cards_label.text = _opp_battle_card_phrase(pub, my_side).trim_suffix(".")
-			elif in_battle_card_declare and pub.get("battleCardDeclareSide", "") != my_side:
-				opponent_battle_cards_label.visible = true
-				opponent_battle_cards_label.text = "Waiting for opponent to play battle cards..."
-			else:
-				opponent_battle_cards_label.visible = false
 	_maybe_announce_opp_battle_cards(pub, my_side, in_declare_or_plan, opp_bc_declared)
 
 
@@ -3836,7 +4386,6 @@ func _tag_face_down_battle_card(cp: Control) -> void:
 func _maybe_announce_opp_battle_cards(pub: Dictionary, my_side: String, in_declare_or_plan: bool, opp_declared: bool) -> void:
 	if not in_declare_or_plan:
 		_announced_opp_battle_cards = false
-		_hide_battle_notice()
 		return
 	if not opp_declared or _announced_opp_battle_cards:
 		return
@@ -3844,55 +4393,7 @@ func _maybe_announce_opp_battle_cards(pub: Dictionary, my_side: String, in_decla
 	if phrase.is_empty():
 		return
 	_announced_opp_battle_cards = true
-	_show_battle_notice(phrase)
 	_append_chat_line("System", phrase)
-
-
-func _show_battle_notice(message: String) -> void:
-	_hide_battle_notice()
-	_battle_notice_layer = CanvasLayer.new()
-	_battle_notice_layer.layer = 80
-	add_child(_battle_notice_layer)
-	var wrap: CenterContainer = CenterContainer.new()
-	wrap.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	wrap.anchor_left = 0.0
-	wrap.anchor_right = 1.0
-	wrap.offset_top = 36
-	wrap.offset_bottom = 120
-	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_battle_notice_layer.add_child(wrap)
-	var panel: PanelContainer = PanelContainer.new()
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = Color(0.08, 0.08, 0.14, 0.94)
-	style.border_color = Color(0.9, 0.75, 0.25, 1)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
-	style.set_content_margin_all(16)
-	panel.add_theme_stylebox_override("panel", style)
-	wrap.add_child(panel)
-	var lbl: Label = Label.new()
-	lbl.text = message
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.add_theme_color_override("font_color", Color(0.98, 0.86, 0.35, 1))
-	panel.add_child(lbl)
-	_battle_notice_timer = Timer.new()
-	_battle_notice_timer.one_shot = true
-	_battle_notice_timer.wait_time = 5.0
-	_battle_notice_timer.timeout.connect(_hide_battle_notice)
-	add_child(_battle_notice_timer)
-	_battle_notice_timer.start()
-
-
-func _hide_battle_notice() -> void:
-	if _battle_notice_timer and is_instance_valid(_battle_notice_timer):
-		_battle_notice_timer.stop()
-		_battle_notice_timer.queue_free()
-	_battle_notice_timer = null
-	if _battle_notice_layer and is_instance_valid(_battle_notice_layer):
-		_battle_notice_layer.queue_free()
-	_battle_notice_layer = null
 
 
 func _get_starting_location_card_id(pub: Dictionary, my_in_play: Array, opp_in_play: Array, starting_inst_id: String) -> String:
@@ -3940,10 +4441,12 @@ func _add_location_bonus_label(cp: Control, card_id: String, location_card_id: S
 
 
 func _is_battle_plan_in_play_card(card: Dictionary, my_side: String) -> bool:
-	# Must match server getCharactersAtLocation: only character + weapon (effects/starships/etc. stay at location but do not go in the pile).
 	if not CardCatalog:
 		return false
 	var t: String = str(CardCatalog.get_card_info(card.get("cardId", ""), my_side).get("type", "")).to_lower()
+	var pub: Dictionary = Connection.get_state().game_state.get("publicState", {})
+	if bool(pub.get("starshipBattlePhase", false)):
+		return t == "starship"
 	return t == "character" or t == "weapon"
 
 
@@ -4192,19 +4695,33 @@ func _show_surrender_confirm(planet_name: String) -> void:
 
 
 func _on_discard_location_pressed() -> void:
+	if _discard_location_mode:
+		_discard_location_mode = false
+		if discard_location_btn:
+			discard_location_btn.text = "Discard Location"
+		var g: Dictionary = Connection.get_state().game_state
+		var pub: Dictionary = g.get("publicState", {})
+		var my_side: String = Connection.get_state().game_side
+		if str(pub.get("surrenderPending", "")) == my_side:
+			status_label.text = "Surrendering planet after Even Up."
+		else:
+			status_label.text = ""
+		return
 	var state: RefCounted = Connection.get_state()
 	var has_location_in_hand: bool = false
 	for entry in state.hand_with_instances:
 		var card_id: String = entry.get("cardId", "")
-		if CardCatalog and CardCatalog.get_card_info(card_id, state.game_side).get("type", "") == "location":
+		var card_set: String = entry.get("set", "")
+		if CardCatalog and str(CardCatalog.get_card_info(card_id, state.game_side, card_set).get("type", "")).to_lower() == "location":
 			has_location_in_hand = true
 			break
 	if not has_location_in_hand:
 		status_label.text = "You have no location cards in hand to discard."
 		return
 	_discard_location_mode = true
+	if discard_location_btn:
+		discard_location_btn.text = "Cancel Discard"
 	status_label.text = "Click a location card in your hand to discard it."
-	_refresh()
 
 
 func _on_concede_pressed() -> void:

@@ -171,7 +171,7 @@ export interface CardInstance {
   /** Set the card came from (for correct lookup when same id exists in multiple sets). */
   cardSet?: string;
   ownerSide: "light" | "dark";
-  zone: "deck" | "hand" | "in_play" | "discard";
+  zone: "deck" | "hand" | "in_play" | "discard" | "hyperspace";
   position?: number;  // order in zone
   /** True when deployed face down (turn 1); flipped face up at start of turn 2. */
   faceDown?: boolean;

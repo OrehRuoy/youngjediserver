@@ -4,11 +4,15 @@
  */
 
 import type { GameAction } from "../types";
-import type { GameStateData } from "./state";
 import type { Side } from "../types";
 import * as engine from "./engine";
 import * as state from "./state";
 import { getCard } from "../cards/loader";
+import { usesHyperspace, usesPlanetEffectFetch, usesDueling, usesDeployFromDeck } from "./ruleset";
+import * as hyperspace from "./hyperspace";
+import * as planetEffect from "./planet-effect";
+import * as deployFromDeck from "./deploy-from-deck";
+import * as duel from "./duel";
 
 export interface GameActionResult {
   applied: boolean;
@@ -31,8 +35,10 @@ export function handleGameAction(
     const instanceId = action.instanceId as string | undefined;
     if (!instanceId) return { applied: false, error: "Missing instanceId" };
     if (g.phase !== "deploy") return { applied: false, error: "Can only play cards in deploy phase" };
-    if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
-    if (g.evacuationState) return { applied: false, error: "Cannot play cards during an evacuation" };
+    if (g.planetEffectFetch) return { applied: false, error: "Finish taking or skipping an Effect from deck first" };
+    if (g.deployFromDeckPending?.side === side) return { applied: false, error: "Finish your deploy-from-deck search first" };
+    if (g.duelState) return { applied: false, error: "Finish the duel first" };
+    if (g.starshipBattlePhase) return { applied: false, error: "Cannot play cards during a starship battle" };
     if (g.effectActivationPending?.side === side) {
       return {
         applied: false,
@@ -47,6 +53,14 @@ export function handleGameAction(
       if (sideSuffixed && sideSuffixed.side === side) def = sideSuffixed;
     }
     if (!def) return { applied: false, error: "Unknown card" };
+    const cardType = (def as { type?: string }).type;
+    const interceptWindow =
+      usesHyperspace(g) &&
+      !!g.evacuationState?.awaitingInterception &&
+      g.evacuationState.evacuatingSide !== side &&
+      cardType === "starship";
+    if (g.turnSide !== side && !interceptWindow) return { applied: false, error: "Not your turn" };
+    if (g.evacuationState && !interceptWindow) return { applied: false, error: "Cannot play cards during an evacuation" };
     if ((def as { type?: string }).type === "location") {
       const currentLoc = state.getCurrentLocationCard(g);
       const newPlanet = state.getLocationPlanet(card.cardId);
@@ -61,15 +75,22 @@ export function handleGameAction(
       }
       return { applied: false, error: "Location cards cannot be played during deploy" };
     }
-    if ((def as { type?: string }).type === "starship") {
-      return { applied: false, error: "Starship cards are played via evacuation or interception" };
+    if (cardType === "starship") {
+      if (!usesHyperspace(g)) {
+        return { applied: false, error: "Starship cards are played via evacuation or interception" };
+      }
+      if (def.side !== side) return { applied: false, error: "Wrong side" };
+      if (hyperspace.wouldViolateStarshipUniqueness(g, side, card.cardId, card.cardSet)) {
+        return { applied: false, error: "This unique starship is already in Hyperspace" };
+      }
+      const ok = hyperspace.playCardToHyperspace(g, side, instanceId);
+      return ok ? { applied: true } : { applied: false, error: "Could not deploy starship to Hyperspace" };
     }
     if (def.side !== side) {
       const sideSuffixed = getCard(card.cardId + "_" + side);
       if (sideSuffixed && sideSuffixed.side === side) def = sideSuffixed;
       else return { applied: false, error: "Wrong side" };
     }
-    const cardType = (def as { type?: string }).type;
     const cost = cardType === "character"
       ? state.getDeployCostWithGametextBonus(g, side, card.cardId, card.cardSet)
       : (Math.floor(Number((def as { cost?: number }).cost)) || 0);
@@ -105,11 +126,19 @@ export function handleGameAction(
       state.addForce(g, side, cost);
       return { applied: false, error: "Could not play card" };
     }
+    const played = (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === instanceId);
+    if (usesDeployFromDeck(g) && played && !played.faceDown) {
+      deployFromDeck.maybeBeginDeployFromDeck(g, side, instanceId, card.cardId, card.cardSet, played.faceDown);
+    }
     return { applied: true };
   }
 
   if (action.kind === "pass_phase") {
     if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
+    if (g.planetEffectFetch) return { applied: false, error: "Finish taking or skipping an Effect from deck first" };
+    if (g.deployFromDeckPending?.side === side) return { applied: false, error: "Finish your deploy-from-deck search first" };
+    if (g.duelState) return { applied: false, error: "Finish the duel first" };
+    if (g.starshipBattlePhase) return { applied: false, error: "Cannot pass during a starship battle" };
     if (g.effectActivationPending?.side === side) {
       return { applied: false, error: "Cancel the effect ability or discard a card for it before passing" };
     }
@@ -123,6 +152,7 @@ export function handleGameAction(
   if (action.kind === "initiate_battle") {
     if (g.phase !== "battle") return { applied: false, error: "Can only battle in battle phase" };
     if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
+    if (g.duelState) return { applied: false, error: "Finish the duel first" };
     if (g.battlePlanPhase || g.battleCardDeclareSide) return { applied: false, error: "Battle plan already in progress" };
     const lightChars = state.getCharactersAtLocation(g, "light", true);
     const darkChars = state.getCharactersAtLocation(g, "dark", true);
@@ -146,7 +176,8 @@ export function handleGameAction(
   }
 
   if (action.kind === "declare_battle_cards") {
-    if (g.phase !== "battle" || !g.battleCardDeclareSide) {
+    const inStarship = !!g.starshipBattlePhase;
+    if ((!inStarship && g.phase !== "battle") || !g.battleCardDeclareSide) {
       return { applied: false, error: "Not in battle card declaration phase" };
     }
     if (g.battleCardDeclareSide !== side) {
@@ -183,14 +214,17 @@ export function handleGameAction(
   }
 
   if (action.kind === "battle_plan_ready") {
-    if (g.phase !== "battle" || !g.battlePlanPhase) {
+    const inStarship = !!g.starshipBattlePhase;
+    if ((!inStarship && g.phase !== "battle") || !g.battlePlanPhase) {
       return { applied: false, error: "Not in battle plan phase" };
     }
     const instanceIds = action.instanceIds as string[] | undefined;
     if (!Array.isArray(instanceIds)) return { applied: false, error: "Missing instanceIds" };
 
     const declaredBattleCards = (side === "light" ? g.lightDeclaredBattleCards : g.darkDeclaredBattleCards) ?? [];
-    const inPlayCards = state.getCharactersAtLocation(g, side, true);
+    const inPlayCards = inStarship
+      ? hyperspace.getHyperspace(g, side)
+      : state.getCharactersAtLocation(g, side, true);
     const inPlayIdSet = new Set(inPlayCards.map((c) => c.instanceId));
     const declaredSet = new Set(declaredBattleCards);
 
@@ -201,7 +235,12 @@ export function handleGameAction(
     }
     const inPlayInOrder = instanceIds.filter((id) => inPlayIdSet.has(id));
     if (inPlayInOrder.length !== inPlayIdSet.size) {
-      return { applied: false, error: "Battle plan must include all your face-up characters/weapons at the location" };
+      return {
+        applied: false,
+        error: inStarship
+          ? "Battle plan must include all of your Hyperspace ships"
+          : "Battle plan must include all your face-up characters/weapons at the location",
+      };
     }
 
     if (side === "light") {
@@ -212,9 +251,15 @@ export function handleGameAction(
       g.darkBattlePlanReady = true;
     }
     if (g.lightBattlePlanReady && g.darkBattlePlanReady) {
-      state.resolveBattlePlan(g);
-      const advResultBattle = engine.advancePhase(g.id, () => {});
-      if (advResultBattle?.gameOver) return { applied: true, gameOver: { winner: advResultBattle.winner!, reason: advResultBattle.reason } };
+      if (inStarship) {
+        hyperspace.resolveStarshipBattle(g);
+        const deckWinner = state.getDeckEmptyWinner(g);
+        if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+      } else {
+        state.resolveBattlePlan(g);
+        const advResultBattle = engine.advancePhase(g.id, () => {});
+        if (advResultBattle?.gameOver) return { applied: true, gameOver: { winner: advResultBattle.winner!, reason: advResultBattle.reason } };
+      }
     }
     return { applied: true };
   }
@@ -225,7 +270,9 @@ export function handleGameAction(
     if (g.phase !== "choose_next_planet") return { applied: false, error: "Not choosing next planet" };
     if (g.nextPlanetChooserSide !== side) return { applied: false, error: "Only the losing player chooses" };
     const ok = state.applyNextPlanetChoice(g, side, instanceId);
-    return ok ? { applied: true } : { applied: false, error: "Invalid choice" };
+    if (!ok) return { applied: false, error: "Invalid choice" };
+    if (usesPlanetEffectFetch(g)) planetEffect.beginPlanetEffectFetch(g, side);
+    return { applied: true };
   }
 
   if (action.kind === "choose_starting_location") {
@@ -234,7 +281,9 @@ export function handleGameAction(
     if (g.phase !== "choose_starting_location") return { applied: false, error: "Not choosing starting location" };
     if (g.turnSide !== side) return { applied: false, error: "Only the first player chooses" };
     const ok = state.applyStartingLocationChoice(g, side, instanceId);
-    return ok ? { applied: true } : { applied: false, error: "Invalid choice" };
+    if (!ok) return { applied: false, error: "Invalid choice" };
+    if (usesPlanetEffectFetch(g)) planetEffect.beginPlanetEffectFetch(g, side);
+    return { applied: true };
   }
 
   if (action.kind === "discard_hand") {
@@ -281,7 +330,7 @@ export function handleGameAction(
     const p = side === "light" ? g.light : g.dark;
     const handCard = p.hand.find((c) => c.instanceId === instanceId);
     if (!handCard) return { applied: false, error: "Card not in hand" };
-    const def = getCard(handCard.cardId);
+    const def = getCard(handCard.cardId, handCard.cardSet);
     if (!def || (def as { type?: string }).type !== "location") {
       return { applied: false, error: "Only location cards in your hand can be discarded with Discard Location" };
     }
@@ -325,11 +374,17 @@ export function handleGameAction(
   if (action.kind === "evacuate_start") {
     const transportInstanceId = action.transportInstanceId as string | undefined;
     const targetPlanetIndex = action.targetPlanetIndex as number | undefined;
-    if (!transportInstanceId || targetPlanetIndex === undefined)
-      return { applied: false, error: "Missing transportInstanceId or targetPlanetIndex" };
+    if (targetPlanetIndex === undefined)
+      return { applied: false, error: "Missing targetPlanetIndex" };
     if (g.phase !== "deploy") return { applied: false, error: "Can only evacuate during deploy phase" };
     if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
     if (g.evacuationState) return { applied: false, error: "Evacuation already in progress" };
+    if (usesHyperspace(g)) {
+      const ok = hyperspace.startHyperspaceEvacuation(g, side, targetPlanetIndex);
+      if (!ok) return { applied: false, error: "Need a transport in Hyperspace and characters or weapons to evacuate (all of them)" };
+      return { applied: true };
+    }
+    if (!transportInstanceId) return { applied: false, error: "Missing transportInstanceId" };
     const card = state.findInHand(g, side, transportInstanceId);
     if (!card) return { applied: false, error: "Transport not in hand" };
     const ok = state.startEvacuation(g, side, transportInstanceId, targetPlanetIndex);
@@ -338,12 +393,17 @@ export function handleGameAction(
   }
 
   if (action.kind === "intercept_transport") {
-    const starfighterInstanceId = action.starfighterInstanceId as string | undefined;
-    if (!starfighterInstanceId) return { applied: false, error: "Missing starfighterInstanceId" };
     if (!g.evacuationState || !g.evacuationState.awaitingInterception)
       return { applied: false, error: "No evacuation awaiting interception" };
     if (g.evacuationState.evacuatingSide === side)
       return { applied: false, error: "Cannot intercept your own evacuation" };
+    if (usesHyperspace(g)) {
+      const ok = hyperspace.beginHyperspaceIntercept(g, side);
+      if (!ok) return { applied: false, error: "Deploy at least one starship to Hyperspace to intercept" };
+      return { applied: true };
+    }
+    const starfighterInstanceId = action.starfighterInstanceId as string | undefined;
+    if (!starfighterInstanceId) return { applied: false, error: "Missing starfighterInstanceId" };
     const result = state.interceptTransport(g, side, starfighterInstanceId);
     if (!result) return { applied: false, error: "Invalid starfighter or interception failed" };
     return { applied: true };
@@ -354,7 +414,7 @@ export function handleGameAction(
       return { applied: false, error: "No evacuation awaiting interception" };
     if (g.evacuationState.evacuatingSide === side)
       return { applied: false, error: "Cannot decline your own evacuation" };
-    const result = state.declineIntercept(g);
+    const result = usesHyperspace(g) ? hyperspace.declineHyperspaceIntercept(g) : state.declineIntercept(g);
     if (!result) return { applied: false, error: "Failed to decline interception" };
     return { applied: true };
   }
@@ -401,6 +461,72 @@ export function handleGameAction(
     if (!cardInstanceId) return { applied: false, error: "Missing cardInstanceId" };
     const result = state.applyEffectDiscardAndAddCounters(g, side, cardInstanceId);
     return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "fetch_planet_effect") {
+    if (!usesPlanetEffectFetch(g)) return { applied: false, error: "Planet Effect fetch is not used in this game" };
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const ok = planetEffect.fetchPlanetEffect(g, side, instanceId);
+    return ok ? { applied: true } : { applied: false, error: "Could not take that Effect" };
+  }
+
+  if (action.kind === "skip_planet_effect") {
+    if (!usesPlanetEffectFetch(g)) return { applied: false, error: "Planet Effect fetch is not used in this game" };
+    const ok = planetEffect.skipPlanetEffect(g, side);
+    return ok ? { applied: true } : { applied: false, error: "Not your turn to skip" };
+  }
+
+  if (action.kind === "confirm_deploy_from_deck") {
+    if (!usesDeployFromDeck(g)) return { applied: false, error: "Deploy from deck is not used in this game" };
+    const ok = deployFromDeck.confirmDeployFromDeck(g, side);
+    if (!ok) return { applied: false, error: "Could not deploy the searched card (check Force cost)" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "decline_deploy_from_deck") {
+    if (!usesDeployFromDeck(g)) return { applied: false, error: "Deploy from deck is not used in this game" };
+    const ok = deployFromDeck.declineDeployFromDeck(g, side);
+    if (!ok) return { applied: false, error: "No deploy-from-deck search to decline" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "initiate_duel") {
+    if (!usesDueling(g)) return { applied: false, error: "Dueling is not used in this game" };
+    const charInstanceId = action.charInstanceId as string | undefined;
+    const weaponInstanceId = action.weaponInstanceId as string | undefined;
+    if (!charInstanceId || !weaponInstanceId) return { applied: false, error: "Missing duelist or lightsaber" };
+    const ok = duel.initiateDuel(g, side, charInstanceId, weaponInstanceId);
+    return ok ? { applied: true } : { applied: false, error: "Cannot start a duel with those cards" };
+  }
+
+  if (action.kind === "choose_duel_target") {
+    const defenderCharInstanceId = action.defenderCharInstanceId as string | undefined;
+    if (!defenderCharInstanceId) return { applied: false, error: "Missing defender" };
+    const ok = duel.chooseDuelTarget(g, side, defenderCharInstanceId);
+    return ok ? { applied: true } : { applied: false, error: "Invalid duel target" };
+  }
+
+  if (action.kind === "duel_defender_ready") {
+    const ok = duel.defenderReadyDuel(g, side, {
+      swapCharInstanceId: action.swapCharInstanceId as string | undefined,
+      weaponInstanceId: action.weaponInstanceId as string | undefined,
+    });
+    return ok ? { applied: true } : { applied: false, error: "Cannot accept the duel that way" };
+  }
+
+  if (action.kind === "duel_play_card") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const ok = duel.playDuelCard(g, side, instanceId);
+    if (!ok) return { applied: false, error: "Cannot play that duel card" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
   }
 
   return { applied: false, error: "Unknown action" };

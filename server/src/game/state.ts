@@ -594,6 +594,8 @@ export interface PlayerGameState {
   hand: CardInstance[];
   inPlay: CardInstance[];
   discard: CardInstance[];
+  /** Face-up starships (Duel of the Fates Hyperspace). */
+  hyperspace: CardInstance[];
   life: number;
   /** Force (counters) remaining this deploy turn; 6 at start of deploy. */
   force: number;
@@ -716,6 +718,34 @@ export interface GameStateData {
   };
   /** Instance IDs of effects already activated this deploy phase (each effect usable once per turn). */
   usedEffectsThisTurn?: string[];
+  /** Official Duel of the Fates rules are the default; classic is 1v1 evacuate without Hyperspace/dueling. */
+  ruleset?: "dotf" | "classic";
+  /** Starship battle (Hyperspace intercept) uses battle-plan UI during deploy. */
+  starshipBattlePhase?: boolean;
+  starshipBattleAttacker?: Side;
+  /** After the first location of a new planet, each player may fetch one Effect from deck. */
+  planetEffectFetch?: {
+    chooserSide: Side;
+    locationChooser: Side;
+    lightDone: boolean;
+    darkDone: boolean;
+    lastFetched?: { side: Side; cardId: string; name: string };
+  };
+  /** On-deploy search for a related card (deployfromdeck gametext). */
+  deployFromDeckPending?: {
+    side: Side;
+    searcherInstanceId: string;
+    searcherCardId: string;
+    targetId: string;
+    cost: "normal" | "free" | number;
+    foundInstanceId?: string;
+    foundCardId?: string;
+    foundSet?: string;
+  };
+  /** Lightsaber duel in progress. */
+  duelState?: import("./duel").DuelState;
+  duelUsedThisTurn?: boolean;
+  foughtThisTurn?: string[];
   /** Bot personality for vs-computer games. */
   botStyle?: "balanced" | "aggressive" | "passive";
   /** Set when game has ended; players can return to lobby. */
@@ -838,7 +868,7 @@ function shuffle<T>(arr: T[]): void {
 }
 
 /** Shuffle deck and update each card's position to match its index (game knows order, player does not). */
-function shuffleDeck(deck: CardInstance[]): void {
+export function shuffleDeck(deck: CardInstance[]): void {
   shuffle(deck);
   for (let i = 0; i < deck.length; i++) {
     deck[i].position = i;
@@ -872,6 +902,7 @@ export function createGameState(
     hand: [],
     inPlay: [],
     discard: [],
+    hyperspace: [],
     life: 20,
     force: 0,
   };
@@ -882,6 +913,7 @@ export function createGameState(
     hand: [],
     inPlay: [],
     discard: [],
+    hyperspace: [],
     life: 20,
     force: 0,
   };
@@ -900,6 +932,7 @@ export function createGameState(
     dark,
     lightTurnCount: 0,
     darkTurnCount: 0,
+    ruleset: "dotf",
   };
 }
 
@@ -1122,6 +1155,7 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
   };
   const phaseEndsAt = state.phaseStartedAt + state.phaseDurationMs;
   const publicState: Record<string, unknown> = {
+    ruleset: state.ruleset ?? "dotf",
     lightInPlay: state.light.inPlay.map((c) => ({
       instanceId: c.instanceId,
       cardId: c.cardId,
@@ -1133,6 +1167,16 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
       cardId: c.cardId,
       ...(c.cardSet ? { set: c.cardSet } : {}),
       faceDown: c.faceDown === true,
+    })),
+    lightHyperspace: (state.light.hyperspace ?? []).map((c) => ({
+      instanceId: c.instanceId,
+      cardId: c.cardId,
+      ...(c.cardSet ? { set: c.cardSet } : {}),
+    })),
+    darkHyperspace: (state.dark.hyperspace ?? []).map((c) => ({
+      instanceId: c.instanceId,
+      cardId: c.cardId,
+      ...(c.cardSet ? { set: c.cardSet } : {}),
     })),
   };
   if (state.phase === "determine_first" && (state.destinyCompareRounds?.length ?? 0) > 0) {
@@ -1201,6 +1245,7 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
       targetPlanetIndex: evac.targetPlanetIndex,
       stackedCardIds: evac.stackedCards.map((c) => c.cardId),
       awaitingInterception: evac.awaitingInterception,
+      hyperspace: (state.ruleset ?? "dotf") !== "classic",
     };
   }
   if (state.evacuationResult) {
@@ -1212,6 +1257,77 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
   if (state.usedEffectsThisTurn && state.usedEffectsThisTurn.length > 0) {
     publicState.usedEffectsThisTurn = state.usedEffectsThisTurn;
   }
+  if (state.starshipBattlePhase) {
+    publicState.starshipBattlePhase = true;
+    publicState.starshipBattleAttacker = state.starshipBattleAttacker;
+  }
+  if (state.planetEffectFetch) {
+    publicState.planetEffectFetch = {
+      chooserSide: state.planetEffectFetch.chooserSide,
+      locationChooser: state.planetEffectFetch.locationChooser,
+      lightDone: state.planetEffectFetch.lightDone,
+      darkDone: state.planetEffectFetch.darkDone,
+      lastFetched: state.planetEffectFetch.lastFetched,
+      effectChoices:
+        forSide && state.planetEffectFetch.chooserSide === forSide
+          ? state[forSide].deck
+              .filter((c) => isEffectCard(c.cardId, c.cardSet))
+              .map((c) => ({
+                instanceId: c.instanceId,
+                cardId: c.cardId,
+                ...(c.cardSet ? { set: c.cardSet } : {}),
+              }))
+          : [],
+    };
+  }
+  if (state.deployFromDeckPending) {
+    const p = state.deployFromDeckPending;
+    publicState.deployFromDeckPending = {
+      side: p.side,
+      searcherCardId: p.searcherCardId,
+      targetId: p.targetId,
+      cost: p.cost,
+      foundCardId: p.foundCardId,
+      foundSet: p.foundSet,
+      found: !!p.foundInstanceId,
+    };
+  }
+  if (state.duelState) {
+    const d = state.duelState;
+    publicState.duelState = {
+      step: d.step,
+      initiator: d.initiator,
+      currentAttacker: d.currentAttacker,
+      attackerCharInstanceId: d.attackerCharInstanceId,
+      attackerWeaponInstanceId: d.attackerWeaponInstanceId,
+      defenderCharInstanceId: d.defenderCharInstanceId,
+      defenderWeaponInstanceId: d.defenderWeaponInstanceId,
+      lightPower: d.lightPower,
+      darkPower: d.darkPower,
+      lightHits: d.lightHits,
+      darkHits: d.darkHits,
+      lightHandCount: d.lightDuelHand.length,
+      darkHandCount: d.darkDuelHand.length,
+      pendingAttack: d.pendingAttack
+        ? { cardId: d.pendingAttack.cardId, destiny: d.pendingAttack.destiny, side: d.pendingAttack.side }
+        : undefined,
+      yourDuelHand:
+        forSide === "light"
+          ? d.lightDuelHand.map((c) => ({
+              instanceId: c.instanceId,
+              cardId: c.cardId,
+              ...(c.cardSet ? { set: c.cardSet } : {}),
+            }))
+          : forSide === "dark"
+            ? d.darkDuelHand.map((c) => ({
+                instanceId: c.instanceId,
+                cardId: c.cardId,
+                ...(c.cardSet ? { set: c.cardSet } : {}),
+              }))
+            : [],
+    };
+  }
+  publicState.duelUsedThisTurn = state.duelUsedThisTurn === true;
   return {
     phase: state.phase,
     turnSide: state.turnSide,

@@ -33,9 +33,28 @@ const DRAG_THRESHOLD: float = 8.0
 
 
 func _ready() -> void:
+	_apply_clear_card_chrome()
 	pressed.connect(_on_pressed)
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
+
+
+func _apply_clear_card_chrome() -> void:
+	var empty := StyleBoxEmpty.new()
+	add_theme_stylebox_override("normal", empty)
+	add_theme_stylebox_override("hover", empty)
+	add_theme_stylebox_override("pressed", empty)
+	add_theme_stylebox_override("disabled", empty)
+	add_theme_stylebox_override("focus", empty)
+	var panel: PanelContainer = get_node_or_null("Panel") as PanelContainer
+	if panel:
+		panel.add_theme_stylebox_override("panel", empty)
+	var margin: MarginContainer = get_node_or_null("Panel/Margin") as MarginContainer
+	if margin:
+		margin.add_theme_constant_override("margin_left", 0)
+		margin.add_theme_constant_override("margin_top", 0)
+		margin.add_theme_constant_override("margin_right", 0)
+		margin.add_theme_constant_override("margin_bottom", 0)
 
 
 func _exit_tree() -> void:
@@ -47,6 +66,7 @@ func _exit_tree() -> void:
 
 
 func set_card(card_id: String, instance_id: String = "", side_hint: String = "", set_hint: String = "", face_down: bool = false, is_mine: bool = true) -> void:
+	_apply_clear_card_chrome()
 	_card_id = card_id
 	_instance_id = instance_id
 	disabled = instance_id.is_empty()

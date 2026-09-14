@@ -10,6 +10,9 @@ import * as state from "./state";
 import { getCard } from "../cards/loader";
 import { BOT_PLAYER_ID } from "../lobby/lobby";
 import * as memory from "./bot-memory";
+import { usesHyperspace, usesDueling, usesPlanetEffectFetch, usesDeployFromDeck } from "./ruleset";
+import * as hyperspace from "./hyperspace";
+import * as duel from "./duel";
 
 export type BotStyle = "balanced" | "aggressive" | "passive";
 
@@ -42,7 +45,7 @@ export function parseBotStyleRequest(raw: unknown): "random" | "auto" | BotStyle
   const s = typeof raw === "string" ? raw.trim().toLowerCase() : "";
   if (s === "random" || s === "auto" || s === "balanced" || s === "aggressive" || s === "passive") return s;
   if (s === "neutral") return "balanced";
-  return "random";
+  return "auto";
 }
 
 /** Infer a style from deck makeup: battle/weapon-heavy → aggressive, location/destiny → passive. */
@@ -264,8 +267,24 @@ export function isBotActionRequired(g: GameStateData): boolean {
   if (g.phase === "game_over") return false;
   if (g.evacuationState?.awaitingInterception && g.evacuationState.evacuatingSide !== botSide) return true;
   if (g.evacuationResult) return true;
+  if (g.planetEffectFetch?.chooserSide === botSide) return true;
+  if (g.planetEffectFetch && g.planetEffectFetch.chooserSide !== botSide) return false;
+  if (g.deployFromDeckPending?.side === botSide) return true;
+  if (g.deployFromDeckPending && g.deployFromDeckPending.side !== botSide) return false;
+  if (g.duelState) {
+    const d = g.duelState;
+    if (d.step === "choose_target" && d.initiator === botSide) return true;
+    if (d.step === "defender_respond" && d.initiator !== botSide) return true;
+    if (d.step === "play") {
+      if (!d.pendingAttack && d.currentAttacker === botSide) return true;
+      if (d.pendingAttack && d.pendingAttack.side !== botSide) return true;
+    }
+    return false;
+  }
   if (g.battleCardDeclareSide === botSide) return true;
-  if (g.battlePlanPhase && (botSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) return true;
+  if ((g.battlePlanPhase || g.starshipBattlePhase) && (botSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) {
+    if (g.battlePlanPhase) return true;
+  }
   const humanSide: Side = botSide === "light" ? "dark" : "light";
   if (g.battleCardDeclareSide === humanSide) return false;
   if (g.battlePlanPhase && (humanSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) return false;
@@ -293,6 +312,57 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   const aggressive = style === "aggressive";
   const passive = style === "passive";
 
+  if (g.planetEffectFetch?.chooserSide === botSide && usesPlanetEffectFetch(g)) {
+    return { kind: "skip_planet_effect" };
+  }
+
+  if (g.deployFromDeckPending?.side === botSide && usesDeployFromDeck(g)) {
+    const pending = g.deployFromDeckPending;
+    if (pending.foundInstanceId) {
+      const cost =
+        pending.cost === "free" ? 0 : typeof pending.cost === "number" ? pending.cost : getCost(pending.foundCardId ?? "");
+      if (cost <= force) return { kind: "confirm_deploy_from_deck" };
+    }
+    return { kind: "decline_deploy_from_deck" };
+  }
+
+  if (g.duelState && usesDueling(g)) {
+    const d = g.duelState;
+    if (d.step === "choose_target" && d.initiator === botSide) {
+      const oppChars = oppCharsUp.filter((c) => getCardType(c.cardId) === "character");
+      const weakest = [...oppChars].sort((a, b) => getPower(a.cardId) - getPower(b.cardId))[0];
+      if (weakest) return { kind: "choose_duel_target", defenderCharInstanceId: weakest.instanceId };
+      return null;
+    }
+    if (d.step === "defender_respond" && d.initiator !== botSide) {
+      return { kind: "duel_defender_ready" };
+    }
+    if (d.step === "play") {
+      const hand = (botSide === "light" ? d.lightDuelHand : d.darkDuelHand) ?? [];
+      if (hand.length === 0) return null;
+      if (d.pendingAttack && d.pendingAttack.side !== botSide) {
+        const match = hand.find((c) => {
+          const def = getCard(c.cardId, c.cardSet) as { destiny?: number } | undefined;
+          return typeof def?.destiny === "number" && def.destiny === d.pendingAttack!.destiny;
+        });
+        return { kind: "duel_play_card", instanceId: (match ?? hand[0]).instanceId };
+      }
+      if (!d.pendingAttack && d.currentAttacker === botSide) {
+        return { kind: "duel_play_card", instanceId: hand[0].instanceId };
+      }
+    }
+    return null;
+  }
+
+  if (g.starshipBattlePhase && g.battleCardDeclareSide === botSide) {
+    return { kind: "declare_battle_cards", battleCardInstanceIds: [] };
+  }
+  if (g.starshipBattlePhase && g.battlePlanPhase && (botSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) {
+    const ships = hyperspace.getHyperspace(g, botSide);
+    const declared = (botSide === "light" ? g.lightDeclaredBattleCards : g.darkDeclaredBattleCards) ?? [];
+    return { kind: "battle_plan_ready", instanceIds: [...declared, ...ships.map((c) => c.instanceId)] };
+  }
+
   if (phase === "choose_starting_location") {
     const choices = g.startingLocationChoices ?? [];
     if (choices.length === 0) return null;
@@ -309,6 +379,18 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   }
 
   if (g.evacuationState?.awaitingInterception && g.evacuationState.evacuatingSide === oppSide) {
+    if (usesHyperspace(g)) {
+      const stacked = g.evacuationState.stackedCards ?? [];
+      const pullingUnique = stacked.some((c) => isUniqueCard(c.cardId) && isCharacter(c.cardId));
+      const cheapShip = p.hand.find((c) => getCardType(c.cardId) === "starship");
+      if (cheapShip && (pullingUnique || aggressive) && !hyperspace.wouldViolateStarshipUniqueness(g, botSide, cheapShip.cardId, cheapShip.cardSet)) {
+        return { kind: "play_card", instanceId: cheapShip.instanceId };
+      }
+      if (!hyperspace.hasStarshipInHyperspace(g, botSide)) return { kind: "decline_intercept" };
+      if (passive && !pullingUnique) return { kind: "decline_intercept" };
+      if (!aggressive && !pullingUnique && stacked.length < 3) return { kind: "decline_intercept" };
+      return { kind: "intercept_transport" };
+    }
     const starfighter = p.hand.find(
       (c) =>
         getCardType(c.cardId) === "starship" &&
@@ -327,8 +409,37 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   }
 
   if (phase === "deploy") {
+    if (force <= 0 && usesHyperspace(g)) {
+      const ship = p.hand.find((c) => getCardType(c.cardId) === "starship" && !hyperspace.wouldViolateStarshipUniqueness(g, botSide, c.cardId, c.cardSet));
+      if (ship) return { kind: "play_card", instanceId: ship.instanceId };
+    }
     if (force <= 0) return { kind: "pass_phase" };
-    if (!g.evacuationState && state.hasTransportInHand(g, botSide)) {
+    if (!g.evacuationState && usesHyperspace(g) && hyperspace.hasTransportInHyperspace(g, botSide)) {
+      const myPower = state.totalPowerInPlay(g, botSide);
+      const oppPower = state.totalPowerInPlay(g, oppSide);
+      const controlledCount = g.controlledPlanets?.length ?? 0;
+      const myPlanetsWon = botSide === "light" ? (g.lightPlanetsWon ?? 0) : (g.darkPlanetsWon ?? 0);
+      const evacRatio = aggressive ? 2.1 : passive ? 1.45 : 1.8;
+      const mayEvacuateCurrent =
+        lost ||
+        ((controlledCount === 0 || (controlledCount === 1 && myPlanetsWon === 1)) && oppPower > myPower * evacRatio);
+      const candidates: { planetIndex: number; priority: number }[] = [];
+      for (const planetIndex of state.getEvacuatablePlanets(g, botSide)) {
+        if (planetIndex === -1) {
+          if (!mayEvacuateCurrent) continue;
+          candidates.push({ planetIndex: -1, priority: lost ? 3 : 0 });
+          continue;
+        }
+        const cards = state.getEvacuatableCards(g, botSide, planetIndex);
+        const hasUnique = cards.some((c) => isUniqueCard(c.cardId));
+        candidates.push({ planetIndex, priority: hasUnique ? 2 : 1 });
+      }
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.priority - a.priority);
+        return { kind: "evacuate_start", targetPlanetIndex: candidates[0].planetIndex };
+      }
+    }
+    if (!g.evacuationState && !usesHyperspace(g) && state.hasTransportInHand(g, botSide)) {
       const transport = p.hand.find(
         (c) =>
           getCardType(c.cardId) === "starship" &&
@@ -368,7 +479,17 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     const playable: { instanceId: string; cardId: string; cost: number; type: string; score: number }[] = [];
     for (const c of p.hand) {
       const type = getCardType(c.cardId);
-      if (type === "starship") continue;
+      if (type === "starship") {
+        if (!usesHyperspace(g)) continue;
+        if (hyperspace.wouldViolateStarshipUniqueness(g, botSide, c.cardId, c.cardSet)) continue;
+        const def = getCard(c.cardId) as { side?: string; trait?: string };
+        if (def?.side && def.side !== botSide) continue;
+        const trait = (def?.trait ?? "").toLowerCase();
+        let score = trait === "transport" ? 2.4 : 2.0;
+        if (aggressive) score += 0.2;
+        playable.push({ instanceId: c.instanceId, cardId: c.cardId, cost: 0, type, score });
+        continue;
+      }
       if (type === "battle") continue;
 
       if (type === "location") {
@@ -537,6 +658,18 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     if (g.battleCardDeclareSide && g.battleCardDeclareSide !== botSide) return null;
     if (g.battlePlanPhase && (botSide === "light" ? g.lightBattlePlanReady : g.darkBattlePlanReady)) return null;
     if (myCharsUp.length > 0 && oppCharsUp.length > 0 && !g.battleCardDeclareSide && !g.battlePlanPhase) {
+      if (usesDueling(g) && !g.duelUsedThisTurn && duel.canInitiateDuel(g, botSide) && !passive) {
+        const mine = state.getCharactersAtLocation(g, botSide, true);
+        const duelist = mine.find((c) => duel.isDuelist(c.cardId, botSide, c.cardSet));
+        const saber = mine.find((c) => {
+          const id = c.cardId.toLowerCase();
+          const name = ((getCard(c.cardId) as { name?: string } | undefined)?.name ?? "").toLowerCase();
+          return id.includes("lightsaber") || name.includes("lightsaber");
+        });
+        if (duelist && saber && (aggressive || oppCharCount <= myCharCount)) {
+          return { kind: "initiate_duel", charInstanceId: duelist.instanceId, weaponInstanceId: saber.instanceId };
+        }
+      }
       const myPower = state.totalPowerInPlay(g, botSide);
       const oppPower = state.totalPowerInPlay(g, oppSide);
       const myC = charsOnly(myCharsUp).length;
