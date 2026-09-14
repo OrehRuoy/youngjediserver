@@ -1613,7 +1613,9 @@ function getGametextBonusForCharacter(
   characterSet: string | undefined,
   weaponCardId: string | undefined,
   opponentCharacterCardId?: string,
-  weaponSet?: string
+  weaponSet?: string,
+  battleCardId?: string,
+  battleCardSet?: string
 ): { bonus: number; label?: string } {
   const def = getCard(characterCardId, characterSet);
   if (!def || (def as { type?: string }).type !== "character") return { bonus: 0 };
@@ -1630,7 +1632,9 @@ function getGametextBonusForCharacter(
       else if (clause.condition === "handmaiden") label = "vs Handmaiden +" + clause.num;
       continue;
     }
-    if (weaponMatchesGametextCondition(weaponCardId, clause.condition, weaponSet)) bonus += clause.num;
+    const usingWeapon = weaponMatchesGametextCondition(weaponCardId, clause.condition, weaponSet);
+    const usingBattleCard = weaponMatchesGametextCondition(battleCardId, clause.condition, battleCardSet);
+    if (usingWeapon || usingBattleCard) bonus += clause.num;
   }
   return { bonus, label };
 }
@@ -1670,6 +1674,18 @@ export function getPowerForBattle(cardId: string): number {
   return 0;
 }
 
+function getCardSide(characterCardId: string): Side | "" {
+  const def = getCard(characterCardId);
+  const s = (def as { side?: string } | undefined)?.side;
+  return s === "light" || s === "dark" ? s : "";
+}
+
+function effectAffectsCharacter(effectDef: { affectsSide?: string }, characterCardId: string): boolean {
+  const required = (effectDef.affectsSide ?? "").toLowerCase();
+  if (required !== "light" && required !== "dark") return true;
+  return getCardSide(characterCardId) === required;
+}
+
 /** Power bonus from effect cards at location: characters matching an effect's canUse get that effect's powerAdd in battle. */
 function getEffectPowerBonusForCharacter(state: GameStateData, side: Side, characterCardId: string): number {
   let total = 0;
@@ -1677,6 +1693,7 @@ function getEffectPowerBonusForCharacter(state: GameStateData, side: Side, chara
   for (const eff of effects) {
     const def = getCard(eff.cardId, eff.cardSet);
     if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
     const powerAdd = (def as { powerAdd?: number }).powerAdd;
     if (typeof powerAdd !== "number" || powerAdd <= 0) continue;
     const canUse = (def as { canUse?: string }).canUse;
@@ -1727,6 +1744,7 @@ function getEffectDamageReduction(state: GameStateData, side: Side, characterCar
   for (const eff of effects) {
     const def = getCard(eff.cardId, eff.cardSet);
     if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
     const effectsStr = (def as { effects?: string }).effects;
     if (!effectsStr || typeof effectsStr !== "string") continue;
     const regex = /damage-(\d+):([^:\s]+)/gi;
@@ -1748,6 +1766,7 @@ function getEffectDamageBonus(state: GameStateData, side: Side, characterCardId:
   for (const eff of effects) {
     const def = getCard(eff.cardId, eff.cardSet);
     if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
     const canUse = (def as { canUse?: string }).canUse;
     if (!canUse || !canUse.trim()) continue;
     const segments = canUse.split(",").map((s) => s.trim()).filter(Boolean);
@@ -2056,7 +2075,8 @@ function resolveBattleCardBonus(
   fighter: BattleFighter,
   opponentCharacterCardId: string,
   fighterIndex: number,
-  locationCardId: string
+  locationCardId: string,
+  weaponsCancelled = false
 ): { bonus: number; destinyDraws: { cardId: string; destiny: number }[] } {
   const empty = { bonus: 0, destinyDraws: [] as { cardId: string; destiny: number }[] };
   if (!fighter.battleCard) return empty;
@@ -2067,6 +2087,7 @@ function resolveBattleCardBonus(
   const validByCanUse = !!fighter.battleCardValid;
   const validByLocation = isAtCondition && atLocationMatch;
   if (!validByCanUse && !validByLocation) return empty;
+  const weaponForCondition = weaponsCancelled ? undefined : fighter.weapon?.cardId;
   let powerAdd = 0;
   if (conditionStr.toLowerCase().includes("fighttogether")) {
     const nMatch = conditionStr.toLowerCase().match(/^(\d+):fighttogether/);
@@ -2076,7 +2097,7 @@ function resolveBattleCardBonus(
     powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
   } else if (isAtCondition && (validByCanUse || validByLocation)) {
     powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
-  } else if (!battleCardConditionMet(fighter.battleCard.cardId, fighter.character.cardId, opponentCharacterCardId, fighterIndex, locationCardId, fighter.weapon?.cardId)) {
+  } else if (!battleCardConditionMet(fighter.battleCard.cardId, fighter.character.cardId, opponentCharacterCardId, fighterIndex, locationCardId, weaponForCondition)) {
     return empty;
   } else {
     powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
@@ -2194,15 +2215,17 @@ export function resolveBattlePlan(state: GameStateData): void {
 
     const lightFirstCharIndex = lightCharOrderMap.get(lf.character.instanceId) ?? li - 1;
     const darkFirstCharIndex = darkCharOrderMap.get(df.character.instanceId) ?? di - 1;
-    const lb = resolveBattleCardBonus(state, "light", lf, df.character.cardId, lightFirstCharIndex, locationCardId);
-    const db = resolveBattleCardBonus(state, "dark", df, lf.character.cardId, darkFirstCharIndex, locationCardId);
     const lightNoWeapon = lf.battleCard ? battleCardConditionNoWeapon(lf.battleCard.cardId) : false;
     const darkNoWeapon = df.battleCard ? battleCardConditionNoWeapon(df.battleCard.cardId) : false;
     const lightOppNoWeapon = !!(lf.battleCard && battleCardConditionOppNoWeapon(lf.battleCard.cardId) && !lf.weapon);
     const darkOppNoWeapon = !!(df.battleCard && battleCardConditionOppNoWeapon(df.battleCard.cardId) && !df.weapon);
+    const lightWeaponsCancelled = lightNoWeapon || darkOppNoWeapon;
+    const darkWeaponsCancelled = darkNoWeapon || lightOppNoWeapon;
+    const lb = resolveBattleCardBonus(state, "light", lf, df.character.cardId, lightFirstCharIndex, locationCardId, lightWeaponsCancelled);
+    const db = resolveBattleCardBonus(state, "dark", df, lf.character.cardId, darkFirstCharIndex, locationCardId, darkWeaponsCancelled);
     const emptyWeaponResult = { bonus: 0, destinyDraws: [] as { cardId: string; destiny: number }[] };
-    const lw = (lightNoWeapon || darkOppNoWeapon) ? emptyWeaponResult : resolveWeaponBonus(state, "light", lf);
-    const dw = (darkNoWeapon || lightOppNoWeapon) ? emptyWeaponResult : resolveWeaponBonus(state, "dark", df);
+    const lw = lightWeaponsCancelled ? emptyWeaponResult : resolveWeaponBonus(state, "light", lf);
+    const dw = darkWeaponsCancelled ? emptyWeaponResult : resolveWeaponBonus(state, "dark", df);
 
     let lightBasePower2 = 0, lightBonus2 = 0, darkBasePower2 = 0, darkBonus2 = 0;
     let lightBasePower3 = 0, lightBonus3 = 0, darkBasePower3 = 0, darkBonus3 = 0;
@@ -2243,16 +2266,14 @@ export function resolveBattlePlan(state: GameStateData): void {
       dw3 = (darkNoWeapon || lightOppNoWeapon) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "dark", df.weapon3, df.weapon3Valid, df.character3.cardId);
     }
 
-    const lightWeaponsCancelled = lightNoWeapon || darkOppNoWeapon;
-    const darkWeaponsCancelled = darkNoWeapon || lightOppNoWeapon;
-    const lgb1 = getGametextBonusForCharacter(lf.character.cardId, lf.character.cardSet, lightWeaponsCancelled ? undefined : lf.weapon?.cardId, df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon?.cardSet);
-    const lgb2 = lf.character2 ? getGametextBonusForCharacter(lf.character2.cardId, lf.character2.cardSet, lightWeaponsCancelled ? undefined : lf.weapon2?.cardId, df.character2?.cardId ?? df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon2?.cardSet) : { bonus: 0 };
-    const lgb3 = lf.character3 ? getGametextBonusForCharacter(lf.character3.cardId, lf.character3.cardSet, lightWeaponsCancelled ? undefined : lf.weapon3?.cardId, df.character3?.cardId ?? df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon3?.cardSet) : { bonus: 0 };
+    const lgb1 = getGametextBonusForCharacter(lf.character.cardId, lf.character.cardSet, lightWeaponsCancelled ? undefined : lf.weapon?.cardId, df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon?.cardSet, lf.battleCard?.cardId, lf.battleCard?.cardSet);
+    const lgb2 = lf.character2 ? getGametextBonusForCharacter(lf.character2.cardId, lf.character2.cardSet, lightWeaponsCancelled ? undefined : lf.weapon2?.cardId, df.character2?.cardId ?? df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon2?.cardSet, lf.battleCard?.cardId, lf.battleCard?.cardSet) : { bonus: 0 };
+    const lgb3 = lf.character3 ? getGametextBonusForCharacter(lf.character3.cardId, lf.character3.cardSet, lightWeaponsCancelled ? undefined : lf.weapon3?.cardId, df.character3?.cardId ?? df.character.cardId, lightWeaponsCancelled ? undefined : lf.weapon3?.cardSet, lf.battleCard?.cardId, lf.battleCard?.cardSet) : { bonus: 0 };
     const lightGametextBonus = lgb1.bonus + lgb2.bonus + lgb3.bonus;
     const lightGametextBonusLabel = lgb1.label ?? lgb2.label ?? lgb3.label;
-    const dgb1 = getGametextBonusForCharacter(df.character.cardId, df.character.cardSet, darkWeaponsCancelled ? undefined : df.weapon?.cardId, lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon?.cardSet);
-    const dgb2 = df.character2 ? getGametextBonusForCharacter(df.character2.cardId, df.character2.cardSet, darkWeaponsCancelled ? undefined : df.weapon2?.cardId, lf.character2?.cardId ?? lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon2?.cardSet) : { bonus: 0 };
-    const dgb3 = df.character3 ? getGametextBonusForCharacter(df.character3.cardId, df.character3.cardSet, darkWeaponsCancelled ? undefined : df.weapon3?.cardId, lf.character3?.cardId ?? lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon3?.cardSet) : { bonus: 0 };
+    const dgb1 = getGametextBonusForCharacter(df.character.cardId, df.character.cardSet, darkWeaponsCancelled ? undefined : df.weapon?.cardId, lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon?.cardSet, df.battleCard?.cardId, df.battleCard?.cardSet);
+    const dgb2 = df.character2 ? getGametextBonusForCharacter(df.character2.cardId, df.character2.cardSet, darkWeaponsCancelled ? undefined : df.weapon2?.cardId, lf.character2?.cardId ?? lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon2?.cardSet, df.battleCard?.cardId, df.battleCard?.cardSet) : { bonus: 0 };
+    const dgb3 = df.character3 ? getGametextBonusForCharacter(df.character3.cardId, df.character3.cardSet, darkWeaponsCancelled ? undefined : df.weapon3?.cardId, lf.character3?.cardId ?? lf.character.cardId, darkWeaponsCancelled ? undefined : df.weapon3?.cardSet, df.battleCard?.cardId, df.battleCard?.cardSet) : { bonus: 0 };
     const darkGametextBonus = dgb1.bonus + dgb2.bonus + dgb3.bonus;
     const darkGametextBonusLabel = dgb1.label ?? dgb2.label ?? dgb3.label;
     const lightPower = lightBasePower + lightBonus + lightBasePower2 + lightBonus2 + lightBasePower3 + lightBonus3 + lb.bonus + lw.bonus + lw2.bonus + lw3.bonus + lightGametextBonus;
@@ -2553,11 +2574,11 @@ export function resolveBattlePlan(state: GameStateData): void {
           dw2b = darkNoW2 ? emptyWeaponResult : resolveWeaponBonusForPair(state, "dark", df2.weapon2, df2.weapon2Valid, df2.character2.cardId);
         }
         const lightPower2 = lightBase2 + lightBonus2a + lightBase2b + lightBonus2b + lb2.bonus + lw2a.bonus + lw2b.bonus +
-          getGametextBonusForCharacter(lf2.character.cardId, lf2.character.cardSet, lightNoW2 ? undefined : lf2.weapon?.cardId, df2.character.cardId, lightNoW2 ? undefined : lf2.weapon?.cardSet).bonus +
-          (lf2.character2 ? getGametextBonusForCharacter(lf2.character2.cardId, lf2.character2.cardSet, lightNoW2 ? undefined : lf2.weapon2?.cardId, df2.character2?.cardId ?? df2.character.cardId, lightNoW2 ? undefined : lf2.weapon2?.cardSet).bonus : 0);
+          getGametextBonusForCharacter(lf2.character.cardId, lf2.character.cardSet, lightNoW2 ? undefined : lf2.weapon?.cardId, df2.character.cardId, lightNoW2 ? undefined : lf2.weapon?.cardSet, lf2.battleCard?.cardId, lf2.battleCard?.cardSet).bonus +
+          (lf2.character2 ? getGametextBonusForCharacter(lf2.character2.cardId, lf2.character2.cardSet, lightNoW2 ? undefined : lf2.weapon2?.cardId, df2.character2?.cardId ?? df2.character.cardId, lightNoW2 ? undefined : lf2.weapon2?.cardSet, lf2.battleCard?.cardId, lf2.battleCard?.cardSet).bonus : 0);
         const darkPower2 = darkBase2 + darkBonus2a + darkBase2b + darkBonus2b + db2.bonus + dw2a.bonus + dw2b.bonus +
-          getGametextBonusForCharacter(df2.character.cardId, df2.character.cardSet, darkNoW2 ? undefined : df2.weapon?.cardId, lf2.character.cardId, darkNoW2 ? undefined : df2.weapon?.cardSet).bonus +
-          (df2.character2 ? getGametextBonusForCharacter(df2.character2.cardId, df2.character2.cardSet, darkNoW2 ? undefined : df2.weapon2?.cardId, lf2.character2?.cardId ?? lf2.character.cardId, darkNoW2 ? undefined : df2.weapon2?.cardSet).bonus : 0);
+          getGametextBonusForCharacter(df2.character.cardId, df2.character.cardSet, darkNoW2 ? undefined : df2.weapon?.cardId, lf2.character.cardId, darkNoW2 ? undefined : df2.weapon?.cardSet, df2.battleCard?.cardId, df2.battleCard?.cardSet).bonus +
+          (df2.character2 ? getGametextBonusForCharacter(df2.character2.cardId, df2.character2.cardSet, darkNoW2 ? undefined : df2.weapon2?.cardId, lf2.character2?.cardId ?? lf2.character.cardId, darkNoW2 ? undefined : df2.weapon2?.cardSet, df2.battleCard?.cardId, df2.battleCard?.cardSet).bonus : 0);
 
         const winner2: "light" | "dark" | "tie" = lightPower2 > darkPower2 ? "light" : darkPower2 > lightPower2 ? "dark" : "tie";
         let lightMill2 = 0;

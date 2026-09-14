@@ -2936,6 +2936,7 @@
       "powerAdd": 1,
       "lore": "Ni chuba na? - Sebulba",
       "canUse": "podracepilot",
+      "affectsSide": "dark",
       "effects": "damage-1:podracepilot",
       "destiny": 5,
       "image": "130dadugchaaa.gif",

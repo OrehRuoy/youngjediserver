@@ -170,7 +170,7 @@ func _build_cover_slot(parent: HBoxContainer) -> void:
 	parent.add_child(col)
 
 	var title := Label.new()
-	title.text = "Cover"
+	title.text = "Cover (optional)"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35, 1))
 	title.add_theme_font_size_override("font_size", 11)
@@ -185,7 +185,7 @@ func _build_cover_slot(parent: HBoxContainer) -> void:
 	style.set_content_margin_all(3)
 	_cover_panel.add_theme_stylebox_override("panel", style)
 	_cover_panel.custom_minimum_size = Vector2(56, 76)
-	_cover_panel.tooltip_text = "Table art only — not in your deck. Drag a card here. Click to remove."
+	_cover_panel.tooltip_text = "Optional table art — not in your deck. Leave empty if you want. Drag a card here, click to remove."
 	col.add_child(_cover_panel)
 
 	_cover_tex = TextureRect.new()
@@ -199,7 +199,7 @@ func _build_cover_slot(parent: HBoxContainer) -> void:
 	_cover_panel.add_child(_cover_tex)
 
 	_cover_empty_label = Label.new()
-	_cover_empty_label.text = "Drag"
+	_cover_empty_label.text = "Optional"
 	_cover_empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cover_empty_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cover_empty_label.add_theme_color_override("font_color", Color(0.7, 0.72, 0.8, 0.9))
@@ -308,6 +308,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	_color_filter.add_item("All")
 	for cn in COLOR_NAMES:
 		_color_filter.add_item(cn.capitalize())
+	_color_filter.add_item("Wild Card")
 	_color_filter.item_selected.connect(_on_filter_changed)
 	filter_row1.add_child(_color_filter)
 
@@ -433,11 +434,14 @@ func _populate_card_grid() -> void:
 func _create_draggable_card(card: Dictionary, tex: Texture2D) -> Control:
 	var container := Panel.new()
 	var style := StyleBoxFlat.new()
-	var dot_color_name: String = card.get("dotColor", "")
-	if COLOR_VALUES.has(dot_color_name):
-		style.border_color = COLOR_VALUES[dot_color_name]
+	if _is_wild_card(card):
+		style.border_color = Color(0.95, 0.95, 0.95)
 	else:
-		style.border_color = Color(0.4, 0.4, 0.4)
+		var dot_color_name: String = card.get("dotColor", "")
+		if COLOR_VALUES.has(dot_color_name):
+			style.border_color = COLOR_VALUES[dot_color_name]
+		else:
+			style.border_color = Color(0.4, 0.4, 0.4)
 	style.border_width_bottom = 2
 	style.bg_color = Color(0, 0, 0, 0)
 	style.corner_radius_bottom_left = 2
@@ -601,8 +605,6 @@ func _end_drag(gpos: Vector2) -> void:
 		_drag_overlay = null
 
 	var card: Dictionary = _drag_preview_card
-	var dot_color: String = card.get("dotColor", "")
-
 	var dropped_target := _get_drop_target(gpos)
 	if dropped_target == "cover":
 		_set_cover_card(card)
@@ -614,8 +616,13 @@ func _end_drag(gpos: Vector2) -> void:
 		_show_toast("Drag card to a color slot, or onto Cover for table art.")
 		return
 
-	if dropped_target != dot_color:
-		_show_toast("This card is %s — it must go in the %s slot." % [dot_color.capitalize(), dot_color.capitalize()])
+	var allowed := _card_allowed_colors(card)
+	if dropped_target not in allowed:
+		if _is_wild_card(card):
+			_show_toast("This wild card can go in: %s." % _join_color_names(allowed))
+		else:
+			var dot_color: String = card.get("dotColor", "")
+			_show_toast("This card is %s — it must go in the %s slot." % [dot_color.capitalize(), dot_color.capitalize()])
 		return
 
 	_try_add_card_to_slot(card, dropped_target)
@@ -623,12 +630,55 @@ func _end_drag(gpos: Vector2) -> void:
 	_drag_preview_card = {}
 
 
+func _card_allowed_colors(card: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	var listed: Variant = card.get("dotColors", [])
+	if listed is Array:
+		for c in listed:
+			var name_str := str(c)
+			if COLOR_NAMES.has(name_str) and name_str not in out:
+				out.append(name_str)
+	if out.size() >= 2:
+		return out
+	var single: String = card.get("dotColor", "")
+	if COLOR_NAMES.has(single):
+		var one: Array[String] = []
+		one.append(single)
+		return one
+	return out
+
+
+func _is_wild_card(card: Dictionary) -> bool:
+	return _card_allowed_colors(card).size() >= 2
+
+
+func _slot_has_wild(color_name: String) -> bool:
+	for c in _deck_slots[color_name]:
+		if _is_wild_card(c):
+			return true
+	return false
+
+
+func _join_color_names(colors: Array[String]) -> String:
+	var parts: PackedStringArray = PackedStringArray()
+	for c in colors:
+		parts.append(c.capitalize())
+	return ", ".join(parts)
+
+
 func _add_card_to_deck(card: Dictionary) -> void:
-	var dot_color: String = card.get("dotColor", "")
-	if not COLOR_VALUES.has(dot_color):
+	var allowed := _card_allowed_colors(card)
+	if allowed.is_empty():
 		_show_toast("This card has no valid color.")
 		return
-	_try_add_card_to_slot(card, dot_color)
+	if allowed.size() == 1:
+		_try_add_card_to_slot(card, allowed[0])
+		return
+	for color_name in allowed:
+		if _deck_slots[color_name].size() < MAX_PER_COLOR and not _slot_has_wild(color_name):
+			_try_add_card_to_slot(card, color_name)
+			return
+	_show_toast("No open color for this wild card (one wild per color, 10 cards max).")
 
 
 func _try_add_card_to_slot(card: Dictionary, color_name: String) -> void:
@@ -636,6 +686,18 @@ func _try_add_card_to_slot(card: Dictionary, color_name: String) -> void:
 	var card_side: String = card.get("side", "")
 	if not deck_side.is_empty() and card_side != deck_side:
 		_show_toast("You can't play cards from both Light and Dark side in a deck.")
+		return
+
+	var allowed := _card_allowed_colors(card)
+	if color_name not in allowed:
+		if _is_wild_card(card):
+			_show_toast("This wild card can go in: %s." % _join_color_names(allowed))
+		else:
+			_show_toast("This card is %s — it must go in the %s slot." % [card.get("dotColor", "").capitalize(), color_name.capitalize()])
+		return
+
+	if _is_wild_card(card) and _slot_has_wild(color_name):
+		_show_toast("Already have a wild card in %s (only one wild per color)." % color_name.capitalize())
 		return
 
 	if _deck_slots[color_name].size() >= MAX_PER_COLOR:
@@ -650,7 +712,10 @@ func _try_add_card_to_slot(card: Dictionary, color_name: String) -> void:
 
 	_deck_slots[color_name].append(card)
 	_refresh_slot_display(color_name)
-	_show_toast("Added %s to %s slot." % [card_name, color_name.capitalize()])
+	if _is_wild_card(card):
+		_show_toast("Added wild card %s to %s slot." % [card_name, color_name.capitalize()])
+	else:
+		_show_toast("Added %s to %s slot." % [card_name, color_name.capitalize()])
 
 
 func _set_cover_card(card: Dictionary) -> void:
@@ -667,7 +732,7 @@ func _refresh_cover_display() -> void:
 		_cover_tex.texture = null
 		if _cover_empty_label:
 			_cover_empty_label.visible = true
-		_cover_tex.tooltip_text = "Cover card — drag a card here for table art"
+		_cover_tex.tooltip_text = "Optional cover — drag a card here for table art"
 		return
 	var side: String = str(_cover_card.get("side", ""))
 	var tex := _load_card_texture(cid, side)
@@ -834,7 +899,10 @@ func _apply_filters() -> void:
 
 	var color_idx: int = _color_filter.selected
 	var color_filter: String = ""
-	if color_idx > 0 and color_idx <= COLOR_NAMES.size():
+	var wild_only := false
+	if color_idx == COLOR_NAMES.size() + 1:
+		wild_only = true
+	elif color_idx > 0 and color_idx <= COLOR_NAMES.size():
 		color_filter = COLOR_NAMES[color_idx - 1]
 
 	var set_filter: String = ""
@@ -858,7 +926,9 @@ func _apply_filters() -> void:
 			continue
 		if not type_filter.is_empty() and card.get("type", "") != type_filter:
 			continue
-		if not color_filter.is_empty() and card.get("dotColor", "") != color_filter:
+		if wild_only and not _is_wild_card(card):
+			continue
+		if not color_filter.is_empty() and color_filter not in _card_allowed_colors(card):
 			continue
 		if not set_filter.is_empty() and card.get("set", "") != set_filter:
 			continue
@@ -877,7 +947,9 @@ func _apply_filters() -> void:
 			if card.get("name", "").to_lower().find(title_text) == -1:
 				continue
 		if not gametext_text.is_empty():
-			if card.get("lore", "").to_lower().find(gametext_text) == -1:
+			var lore_text: String = str(card.get("lore", "")).to_lower()
+			var gt_text: String = str(card.get("gametext", "")).to_lower()
+			if lore_text.find(gametext_text) == -1 and gt_text.find(gametext_text) == -1:
 				continue
 		_filtered_cards.append(card)
 

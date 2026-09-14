@@ -29,6 +29,11 @@ export interface CardDefinitionBase {
   image?: string;
   /** Set identifier (e.g. "menaceofdarthmaul") */
   set?: string;
+  /**
+   * Allowed deckbuilding colors. If two or more, this is a wild card (Enhanced Menace of Darth Maul):
+   * it may go in any listed color, but only one wild card per color in a deck.
+   */
+  dotColors?: CardDotColor[];
 }
 
 /** Character: title, side, color, cost, power, bonus1–3, damage, lore/gametext, destiny, uniqueness, image */
