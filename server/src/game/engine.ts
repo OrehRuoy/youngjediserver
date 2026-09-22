@@ -181,7 +181,7 @@ export function startPhaseTimer(
     if (g.evacuationState || g.evacuationResult) {
       return;
     }
-    if (g.effectActivationPending || g.planetEffectFetch || g.deployFromDeckPending || g.duelState) {
+    if (g.effectActivationPending || g.planetEffectFetch || g.deployFromDeckPending || g.deployDrawPending || g.duelState || g.winControlPending || g.destinySwapPending || g.jediTrainingPending || g.poundedPending) {
       return;
     }
     const elapsed = Date.now() - g.phaseStartedAt;

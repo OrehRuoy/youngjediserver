@@ -120,44 +120,6 @@ text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="OppHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft"]
-visible = false
-custom_minimum_size = Vector2(56, 62)
-layout_mode = 2
-size_flags_horizontal = 4
-mouse_filter = 0
-
-[node name="OppHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-texture = ExtResource("4_card_dark")
-expand_mode = 1
-stretch_mode = 5
-
-[node name="OppHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -12.0
-offset_right = 20.0
-offset_bottom = 12.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 18
-text = "0"
-horizontal_alignment = 1
-vertical_alignment = 1
-
 [node name="OpponentForceLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft" unique_id=1277261623]
 visible = false
 layout_mode = 2
@@ -248,17 +210,73 @@ alignment = 1
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="OpponentInPlayScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection" unique_id=300000022]
+[node name="OpponentPlayBand" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection"]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 90)
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="OppHyperspaceCol" type="VBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 0
+
+[node name="OppHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol"]
+custom_minimum_size = Vector2(56, 62)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 0
+
+[node name="OppHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OppHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -12.0
+offset_right = 20.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="OppHyperspaceLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.82, 0.95, 0.85)
+theme_override_font_sizes/font_size = 11
+text = "HS"
+horizontal_alignment = 1
+
+[node name="OpponentInPlayScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand" unique_id=300000022]
+layout_mode = 2
+size_flags_horizontal = 3
 horizontal_scroll_mode = 1
 vertical_scroll_mode = 0
 custom_minimum_size = Vector2(0, 90)
 
-[node name="OpponentInPlayCenter" type="CenterContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentInPlayScroll" unique_id=300000024]
+[node name="OpponentInPlayCenter" type="CenterContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OpponentInPlayScroll" unique_id=300000024]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="OpponentInPlayRow" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentInPlayScroll/OpponentInPlayCenter" unique_id=876022013]
+[node name="OpponentInPlayRow" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OpponentInPlayScroll/OpponentInPlayCenter" unique_id=876022013]
 layout_mode = 2
 size_flags_horizontal = 8
 alignment = 1
@@ -280,17 +298,73 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 60)
 layout_mode = 2
 
-[node name="YourInPlayScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection" unique_id=300000023]
+[node name="YourPlayBand" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection"]
 layout_mode = 2
+custom_minimum_size = Vector2(0, 90)
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="YourHyperspaceCol" type="VBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_constants/separation = 0
+
+[node name="YourHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol"]
+custom_minimum_size = Vector2(56, 62)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 0
+
+[node name="YourHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="YourHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -20.0
+offset_top = -12.0
+offset_right = 20.0
+offset_bottom = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+text = "0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="YourHyperspaceLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.82, 0.95, 0.85)
+theme_override_font_sizes/font_size = 11
+text = "HS"
+horizontal_alignment = 1
+
+[node name="YourInPlayScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand" unique_id=300000023]
+layout_mode = 2
+size_flags_horizontal = 3
 horizontal_scroll_mode = 1
 vertical_scroll_mode = 0
 custom_minimum_size = Vector2(0, 90)
 
-[node name="YourInPlayCenter" type="CenterContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourInPlayScroll" unique_id=300000025]
+[node name="YourInPlayCenter" type="CenterContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourInPlayScroll" unique_id=300000025]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="YourInPlayRow" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourInPlayScroll/YourInPlayCenter" unique_id=1791205869]
+[node name="YourInPlayRow" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourInPlayScroll/YourInPlayCenter" unique_id=1791205869]
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
 size_flags_horizontal = 8
@@ -402,44 +476,6 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 24
-text = "0"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="YourHyperspaceWrapper" type="Control" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft"]
-visible = false
-custom_minimum_size = Vector2(56, 62)
-layout_mode = 2
-size_flags_horizontal = 4
-mouse_filter = 0
-
-[node name="YourHyperspace" type="TextureRect" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-texture = ExtResource("3_card_light")
-expand_mode = 1
-stretch_mode = 5
-
-[node name="YourHyperspaceCount" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -20.0
-offset_top = -12.0
-offset_right = 20.0
-offset_bottom = 12.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 18
 text = "0"
 horizontal_alignment = 1
 vertical_alignment = 1

@@ -22,8 +22,8 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 @onready var your_deck_count_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourDeckWrapper/YourDeckCount
 @onready var hand_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/HandLabel
 @onready var hand_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll/HandList
-@onready var your_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourInPlayScroll/YourInPlayCenter/YourInPlayRow
-@onready var opp_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentInPlayScroll/OpponentInPlayCenter/OpponentInPlayRow
+@onready var your_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourInPlayScroll/YourInPlayCenter/YourInPlayRow
+@onready var opp_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OpponentInPlayScroll/OpponentInPlayCenter/OpponentInPlayRow
 @onready var play_card_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PlayCardBtn
 @onready var pass_phase_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PassPhaseBtn
 @onready var battle_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/BattleBtn
@@ -32,12 +32,12 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 @onready var discard_location_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DiscardLocationBtn
 @onready var evacuate_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/EvacuateBtn
 @onready var duel_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DuelBtn
-@onready var your_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper
-@onready var your_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper/YourHyperspace
-@onready var your_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourHyperspaceWrapper/YourHyperspaceCount
-@onready var opp_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper
-@onready var opp_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper/OppHyperspace
-@onready var opp_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppHyperspaceWrapper/OppHyperspaceCount
+@onready var your_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper
+@onready var your_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper/YourHyperspace
+@onready var your_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper/YourHyperspaceCount
+@onready var opp_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper
+@onready var opp_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper/OppHyperspace
+@onready var opp_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper/OppHyperspaceCount
 @onready var surrender_planet_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/SurrenderPlanetBtn
 @onready var concede_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ConcedeBtn
 @onready var return_to_lobby_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ReturnToLobbyBtn
@@ -98,6 +98,9 @@ var _controlled_planets_layer: CanvasLayer = null
 var _controlled_planets_panel: PanelContainer = null
 var _stranded_popup_layer: CanvasLayer = null
 var _stranded_popup_panel: PanelContainer = null
+var _stranded_popup_planet_index: int = -1
+var _win_control_selected: Array = []
+var _win_control_needed: int = 0
 
 var _dragging_instance_id: String = ""
 var _drag_preview: Control = null
@@ -362,10 +365,10 @@ func _build_stranded_popup() -> void:
 	_stranded_popup_layer.add_child(bg)
 	_stranded_popup_panel = PanelContainer.new()
 	_stranded_popup_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_stranded_popup_panel.offset_left = -250
-	_stranded_popup_panel.offset_top = -200
-	_stranded_popup_panel.offset_right = 250
-	_stranded_popup_panel.offset_bottom = 200
+	_stranded_popup_panel.offset_left = -280
+	_stranded_popup_panel.offset_top = -240
+	_stranded_popup_panel.offset_right = 280
+	_stranded_popup_panel.offset_bottom = 240
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.15, 0.18, 0.26, 0.98)
 	style.border_width_left = 2
@@ -415,7 +418,9 @@ func _update_controlled_planets_display(pub: Dictionary) -> void:
 	title.add_theme_color_override("font_color", Color(0.7, 0.75, 0.9, 1))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
-	for planet_data in planets:
+	for i in range(planets.size()):
+		var planet_data: Dictionary = planets[i]
+		var planet_index: int = i
 		var loc_card_id: String = planet_data.get("locationCardId", "")
 		var winner: String = planet_data.get("controlledBy", "")
 		var planet_name: String = planet_data.get("planet", "")
@@ -470,14 +475,28 @@ func _update_controlled_planets_display(pub: Dictionary) -> void:
 		var pd: Dictionary = planet_data
 		wrapper.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-				_show_stranded_cards(pd)
+				_show_stranded_cards(pd, planet_index)
 		)
 		vbox.add_child(wrapper)
 
 
-func _show_stranded_cards(planet_data: Dictionary) -> void:
+func _win_control_hand_cost(card_id: String) -> int:
+	if not CardCatalog:
+		return -1
+	var bonus := str(CardCatalog.get_card_info(card_id, "").get("gametextbonus", "")).to_lower().replace(" ", "")
+	if not bonus.contains("wincontrol"):
+		return -1
+	var marker := "discardhand:"
+	var i := bonus.find(marker)
+	if i < 0:
+		return 0
+	return int(bonus.substr(i + marker.length()))
+
+
+func _show_stranded_cards(planet_data: Dictionary, planet_index: int = -1) -> void:
 	if not _stranded_popup_layer or not _stranded_popup_panel:
 		return
+	_stranded_popup_planet_index = planet_index
 	var content: VBoxContainer = _stranded_popup_panel.find_child("StrandedContent", true, false) as VBoxContainer
 	if not content:
 		return
@@ -486,6 +505,13 @@ func _show_stranded_cards(planet_data: Dictionary) -> void:
 	var planet_name: String = planet_data.get("planet", "Unknown")
 	var winner: String = planet_data.get("controlledBy", "")
 	var loc_card_id: String = planet_data.get("locationCardId", "")
+	var state: RefCounted = Connection.get_state()
+	var pub: Dictionary = state.game_state.get("publicState", {}) if state else {}
+	var my_side: String = state.game_side if state else ""
+	var phase: String = str(pub.get("phase", ""))
+	var turn_side: String = str(pub.get("turnSide", ""))
+	var hand_n: int = state.hand_with_instances.size() if state else 0
+	var pending_busy: bool = pub.get("winControlPending") is Dictionary or pub.get("deployFromDeckPending") is Dictionary or pub.get("duelState") is Dictionary or pub.get("destinySwapPending") is Dictionary
 	var title := Label.new()
 	var winner_text: String = "LIGHT" if winner == "light" else "DARK"
 	title.text = "%s — Controlled by %s" % [planet_name, winner_text]
@@ -538,13 +564,46 @@ func _show_stranded_cards(planet_data: Dictionary) -> void:
 				var info: Dictionary = CardCatalog.get_card_info(card_id, "")
 				if info.get("type", "") == "location":
 					continue
-			var card_tex := TextureRect.new()
-			card_tex.custom_minimum_size = Vector2(60, 86)
-			card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			var instance_id: String = str(card_data.get("instanceId", ""))
 			var face_down: bool = card_data.get("faceDown", false)
-			card_tex.texture = (CARD_BACK_LIGHT if side_str == "light" else CARD_BACK_DARK) if face_down else _load_card_texture_for_id(card_id, side_str)
-			cards_row.add_child(card_tex)
+			var needed: int = _win_control_hand_cost(card_id)
+			var mine_on_won: bool = side_str == my_side and winner == my_side and not face_down and needed >= 0 and not instance_id.is_empty()
+			var can_use: bool = mine_on_won and phase == "deploy" and turn_side == my_side and hand_n >= needed and not pending_busy
+			var wrap := VBoxContainer.new()
+			wrap.add_theme_constant_override("separation", 2)
+			if can_use:
+				var btn := Button.new()
+				btn.custom_minimum_size = Vector2(72, 104)
+				btn.icon = _load_card_texture_for_id(card_id, side_str)
+				btn.expand_icon = true
+				btn.tooltip_text = "Discard this character and %d cards from hand, then draw %d" % [needed, needed]
+				var activate_id: String = instance_id
+				var activate_idx: int = planet_index
+				btn.pressed.connect(func() -> void:
+					_try_activate_win_control(activate_id, activate_idx)
+				)
+				wrap.add_child(btn)
+				var hint := Label.new()
+				hint.text = "Click to use"
+				hint.add_theme_font_size_override("font_size", 10)
+				hint.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35, 1))
+				hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				wrap.add_child(hint)
+			else:
+				var card_tex := TextureRect.new()
+				card_tex.custom_minimum_size = Vector2(60, 86)
+				card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+				card_tex.texture = (CARD_BACK_LIGHT if side_str == "light" else CARD_BACK_DARK) if face_down else _load_card_texture_for_id(card_id, side_str)
+				wrap.add_child(card_tex)
+				if mine_on_won and needed > hand_n:
+					var hint := Label.new()
+					hint.text = "Need %d in hand" % needed
+					hint.add_theme_font_size_override("font_size", 10)
+					hint.add_theme_color_override("font_color", Color(0.85, 0.55, 0.45, 1))
+					hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+					wrap.add_child(hint)
+			cards_row.add_child(wrap)
 	var close_label := Label.new()
 	close_label.text = "(click outside to close)"
 	close_label.add_theme_font_size_override("font_size", 11)
@@ -552,6 +611,17 @@ func _show_stranded_cards(planet_data: Dictionary) -> void:
 	close_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	content.add_child(close_label)
 	_stranded_popup_layer.visible = true
+
+
+func _try_activate_win_control(instance_id: String, planet_index: int) -> void:
+	if instance_id.is_empty() or planet_index < 0:
+		return
+	Connection.get_client().send_message({
+		"type": "game_action",
+		"action": {"kind": "activate_win_control", "instanceId": instance_id, "planetIndex": planet_index}
+	})
+	if _stranded_popup_layer:
+		_stranded_popup_layer.visible = false
 
 
 # ---------------------------------------------------------------------------
@@ -666,7 +736,16 @@ func _update_evacuation_ui(state: RefCounted, pub: Dictionary, phase: String, my
 	elif evac_result.size() > 0:
 		if _dotf_overlay_kind == "intercept":
 			_clear_dotf_overlay()
-		if not evac_result.get("intercepted", false) and evac_result.get("outcome", "") == "success":
+		if _battle_reveal_sequence.size() > 0:
+			pass
+		elif _evacuation_overlay and is_instance_valid(_evacuation_overlay):
+			pass
+		elif _uses_hyperspace(pub):
+			if evac_result.get("outcome", "") == "success":
+				_show_transport_complete_then_dismiss(evac_result, my_side)
+			else:
+				_show_hyperspace_evac_failed(evac_result, my_side)
+		elif not evac_result.get("intercepted", false) and evac_result.get("outcome", "") == "success":
 			_show_transport_complete_then_dismiss(evac_result, my_side)
 		else:
 			_show_evacuation_result(evac_result, my_side)
@@ -1102,6 +1181,8 @@ func _clear_dotf_overlay() -> void:
 		_dotf_overlay.queue_free()
 	_dotf_overlay = null
 	_dotf_overlay_kind = ""
+	_win_control_selected.clear()
+	_win_control_needed = 0
 
 
 func _show_dotf_intercept_bar(state: RefCounted, evac_state: Dictionary) -> void:
@@ -1264,7 +1345,13 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 			var note := Label.new()
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			if found:
-				note.text = "Found a matching card. Deploy it now, or skip (1 DAMAGE)."
+				var dfd_cost: Variant = dfd.get("cost", "free")
+				if str(dfd_cost) == "free" or str(dfd_cost) == "0":
+					note.text = "Found a matching card. Deploy it now, or skip (1 DAMAGE)."
+				else:
+					note.text = "Found a matching card. Deploy it now (pays its cost), or skip (1 DAMAGE)."
+				if bool(dfd.get("discardSearcher", false)):
+					note.text += " Deploying it also discards this character."
 			else:
 				note.text = "No matching card in your deck. Continue."
 			vbox.add_child(note)
@@ -1291,11 +1378,331 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 			)
 			vbox.add_child(skip)
 		return
-	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck":
-		if not (fetch is Dictionary) and not (dfd is Dictionary):
+	var train: Variant = pub.get("jediTrainingPending", null)
+	if train is Dictionary and str(train.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "jedi_training":
+			_show_jedi_training(train, my_side)
+		return
+	if train is Dictionary and str(train.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "jedi_training":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent may deploy a lightsaber from their deck..."
+		return
+	var drawp: Variant = pub.get("deployDrawPending", null)
+	if drawp is Dictionary and str(drawp.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "deploy_draw":
+			var vbox := _begin_choice_overlay("deploy_draw", "Draw a card?")
+			var note := Label.new()
+			note.text = "He deployed to Coruscant. Draw a card, or skip."
+			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			vbox.add_child(note)
+			var yes := Button.new()
+			yes.text = "Draw"
+			yes.pressed.connect(func() -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_deploy_draw"}})
+				_clear_dotf_overlay()
+			)
+			var no := Button.new()
+			no.text = "Skip"
+			no.pressed.connect(func() -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_deploy_draw"}})
+				_clear_dotf_overlay()
+			)
+			vbox.add_child(yes)
+			vbox.add_child(no)
+		return
+	if drawp is Dictionary and str(drawp.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "deploy_draw":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent may draw a card..."
+		return
+	var pounded: Variant = pub.get("poundedPending", null)
+	if pounded is Dictionary and str(pounded.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "pounded":
+			_show_pounded(pounded, my_side)
+		return
+	if pounded is Dictionary and str(pounded.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "pounded":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is choosing a non-unique card to discard..."
+		return
+	var bottom: Variant = pub.get("effectActivationPending", null)
+	if bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand" and str(bottom.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "bottom_hand":
+			_show_bottom_hand(my_side)
+		return
+	if bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand" and str(bottom.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "bottom_hand":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is putting a card under their deck..."
+		return
+	var wcp: Variant = pub.get("winControlPending", null)
+	if wcp is Dictionary and str(wcp.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "win_control":
+			_begin_win_control_overlay(state, wcp, my_side)
+		return
+	if wcp is Dictionary and str(wcp.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "win_control":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is using a won-planet ability..."
+		return
+	var peek: Variant = pub.get("effectActivationPending", null)
+	if peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck" and str(peek.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "peek_opp_deck":
+			_show_opp_deck_peek(peek, my_side)
+		return
+	if peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck" and str(peek.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "peek_opp_deck":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is looking at the top card of your deck..."
+		return
+	var swap: Variant = pub.get("destinySwapPending", null)
+	if swap is Dictionary and str(swap.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "destiny_swap":
+			_show_destiny_swap(swap)
+		return
+	if swap is Dictionary and str(swap.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "destiny_swap":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is switching destiny numbers..."
+		return
+
+	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "win_control" or _dotf_overlay_kind == "destiny_swap" or _dotf_overlay_kind == "peek_opp_deck" or _dotf_overlay_kind == "jedi_training" or _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "pounded" or _dotf_overlay_kind == "deploy_draw":
+		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand") and not (pounded is Dictionary) and not (drawp is Dictionary):
 			_clear_dotf_overlay()
 
 	_update_duel_ui(state, pub, my_side)
+
+
+func _show_pounded(pending: Dictionary, my_side: String) -> void:
+	var vbox := _begin_choice_overlay("pounded", "Pounded Unto Death — discard one non-unique card")
+	var note := Label.new()
+	note.text = "This Effect is discarded. The card you pick is discarded. It does not lose damage."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(note)
+	var opp_side := "dark" if my_side == "light" else "light"
+	_add_card_row(vbox, pending.get("targets", []), opp_side, func(inst: String, _cid: String) -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_pounded", "instanceId": inst}})
+	)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_pounded"}})
+	)
+	vbox.add_child(cancel)
+
+
+func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
+	var vbox := _begin_choice_overlay("jedi_training", "Deploy a lightsaber from your deck")
+	var note := Label.new()
+	note.text = "Discard this Effect and pay the lightsaber's cost, or skip."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(note)
+	var choices: Array = pending.get("choices", [])
+	for entry in choices:
+		if not (entry is Dictionary):
+			continue
+		var cid := str(entry.get("cardId", ""))
+		var inst := str(entry.get("instanceId", ""))
+		var cost := int(entry.get("cost", 0))
+		var btn := Button.new()
+		btn.text = "Deploy (%d)" % cost
+		btn.icon = _load_card_texture_for_id(cid, my_side)
+		btn.expand_icon = true
+		btn.custom_minimum_size = Vector2(84, 120)
+		btn.pressed.connect((func(chosen: String) -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_jedi_training", "instanceId": chosen}})
+		).bind(inst))
+		vbox.add_child(btn)
+	var skip := Button.new()
+	skip.text = "Skip"
+	skip.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_jedi_training"}})
+	)
+	vbox.add_child(skip)
+
+
+func _show_bottom_hand(my_side: String) -> void:
+	var vbox := _begin_choice_overlay("bottom_hand", "Jedi Meditation — put one hand card under your deck")
+	var hand: Array = Connection.get_state().hand_with_instances
+	_add_card_row(vbox, hand, my_side, func(inst: String, _cid: String) -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "bottom_hand_card", "instanceId": inst}})
+	)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "effect_decline"}})
+	)
+	vbox.add_child(cancel)
+
+
+func _show_opp_deck_peek(pending: Dictionary, my_side: String) -> void:
+	var vbox := _begin_choice_overlay("peek_opp_deck", "Top card of your opponent's deck")
+	var cid := str(pending.get("peekedCardId", ""))
+	var opp_side := "dark" if my_side == "light" else "light"
+	_add_card_row(vbox, [{"instanceId": str(pending.get("peekedInstanceId", "")), "cardId": cid}], opp_side, func(_inst: String, _card: String) -> void:
+		pass
+	)
+	var top_btn := Button.new()
+	top_btn.text = "Leave it on top"
+	top_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "peek_deck_choice", "place": "top"}})
+	)
+	var bottom_btn := Button.new()
+	bottom_btn.text = "Put it on the bottom"
+	bottom_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "peek_deck_choice", "place": "bottom"}})
+	)
+	vbox.add_child(top_btn)
+	vbox.add_child(bottom_btn)
+
+
+func _card_bonus_text(card_id: String) -> String:
+	if not CardCatalog:
+		return ""
+	var info: Dictionary = CardCatalog.get_card_info(card_id, "")
+	return (str(info.get("gametextbonus", "")) + ";" + str(info.get("grayboxbonus", ""))).to_lower()
+
+
+func _show_destiny_swap(pending: Dictionary) -> void:
+	var vbox := _begin_choice_overlay("destiny_swap", "Twist of Fate — switch one of your destiny numbers with a higher one of theirs")
+	var picked_yours := ""
+	var picked_opps := ""
+	var yours_value := -1
+	var opps_value := -1
+	var status := Label.new()
+	status.text = "Pick one of yours, then one of theirs that is higher."
+	vbox.add_child(status)
+	var yours_row := HBoxContainer.new()
+	var opps_row := HBoxContainer.new()
+	vbox.add_child(yours_row)
+	vbox.add_child(opps_row)
+	var confirm := Button.new()
+	confirm.text = "Switch those numbers"
+	confirm.disabled = true
+	var refresh := func() -> void:
+		confirm.disabled = picked_yours.is_empty() or picked_opps.is_empty() or yours_value >= opps_value
+		if confirm.disabled and not picked_yours.is_empty() and not picked_opps.is_empty():
+			status.text = "Your number has to be lower than theirs."
+		elif not picked_yours.is_empty() and not picked_opps.is_empty():
+			status.text = "Ready to switch %d with %d." % [yours_value, opps_value]
+	confirm.pressed.connect(func() -> void:
+		if picked_yours.is_empty() or picked_opps.is_empty() or yours_value >= opps_value:
+			return
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_destiny_swap", "yourKey": picked_yours, "oppKey": picked_opps}})
+	)
+	for entry in pending.get("yours", []):
+		if not (entry is Dictionary):
+			continue
+		var btn := Button.new()
+		var value := int(entry.get("destiny", 0))
+		btn.text = "Yours %d" % value
+		var key := str(entry.get("key", ""))
+		btn.pressed.connect((func(k: String, v: int) -> void:
+			picked_yours = k
+			yours_value = v
+			status.text = "Yours %d selected. Now pick a higher opposing number." % v
+			refresh.call()
+		).bind(key, value))
+		yours_row.add_child(btn)
+	for entry in pending.get("opps", []):
+		if not (entry is Dictionary):
+			continue
+		var btn := Button.new()
+		var value := int(entry.get("destiny", 0))
+		btn.text = "Theirs %d" % value
+		var key := str(entry.get("key", ""))
+		btn.pressed.connect((func(k: String, v: int) -> void:
+			picked_opps = k
+			opps_value = v
+			refresh.call()
+		).bind(key, value))
+		opps_row.add_child(btn)
+	vbox.add_child(confirm)
+
+
+func _play_duel_card(instance_id: String, card_id: String, discard_for_extra_hits: bool) -> void:
+	Connection.get_client().send_message({
+		"type": "game_action",
+		"action": {"kind": "duel_play_card", "instanceId": instance_id, "discardForExtraHits": discard_for_extra_hits}
+	})
+
+
+func _begin_win_control_overlay(state: RefCounted, pending: Dictionary, my_side: String) -> void:
+	if _stranded_popup_layer:
+		_stranded_popup_layer.visible = false
+	var needed: int = int(pending.get("discardHand", 3))
+	var draw_n: int = int(pending.get("draw", 3))
+	var cname: String = str(pending.get("characterName", "this character"))
+	var vbox := _begin_choice_overlay("win_control", "Discard %d, then draw %d" % [needed, draw_n])
+	_win_control_selected.clear()
+	_win_control_needed = needed
+	if _dotf_overlay and _dotf_overlay.get_child_count() > 1:
+		var panel := _dotf_overlay.get_child(1) as PanelContainer
+		if panel:
+			panel.offset_left = -360
+			panel.offset_top = -250
+			panel.offset_right = 360
+			panel.offset_bottom = 250
+	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "Using %s. Select exactly %d cards from your hand to discard." % [cname, _win_control_needed]
+	vbox.add_child(note)
+	var count_label := Label.new()
+	count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	count_label.text = "Selected 0 / %d" % _win_control_needed
+	vbox.add_child(count_label)
+	var confirm := Button.new()
+	confirm.text = "Confirm"
+	confirm.disabled = true
+	var hand: Array = state.hand_with_instances
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(640, 150)
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	scroll.add_child(row)
+	for entry in hand:
+		var card_id: String = entry.get("cardId", "")
+		var inst: String = entry.get("instanceId", "")
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(84, 120)
+		btn.icon = _load_card_texture_for_id(card_id, my_side)
+		btn.expand_icon = true
+		btn.pressed.connect(func() -> void:
+			_toggle_win_control_card(inst, btn, confirm, count_label)
+		)
+		row.add_child(btn)
+	confirm.pressed.connect(func() -> void:
+		if _win_control_selected.size() != _win_control_needed:
+			return
+		Connection.get_client().send_message({
+			"type": "game_action",
+			"action": {"kind": "confirm_win_control", "instanceIds": _win_control_selected.duplicate()}
+		})
+		_clear_dotf_overlay()
+	)
+	vbox.add_child(confirm)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "cancel_win_control"}})
+		_clear_dotf_overlay()
+	)
+	vbox.add_child(cancel)
+
+
+func _toggle_win_control_card(instance_id: String, btn: Button, confirm: Button, count_label: Label) -> void:
+	var idx: int = _win_control_selected.find(instance_id)
+	if idx >= 0:
+		_win_control_selected.remove_at(idx)
+		btn.modulate = Color.WHITE
+	elif _win_control_selected.size() < _win_control_needed:
+		_win_control_selected.append(instance_id)
+		btn.modulate = Color(1.2, 1.12, 0.55)
+	count_label.text = "Selected %d / %d" % [_win_control_selected.size(), _win_control_needed]
+	confirm.disabled = _win_control_selected.size() != _win_control_needed
 
 
 func _is_lightsaber_card(card_id: String) -> bool:
@@ -1432,8 +1839,68 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 			plbl.text = "Attack destiny %d — play a matching destiny to block (that card becomes your attack)." % int(pending.get("destiny", 0))
 			vbox.add_child(plbl)
 		var hand: Array = d.get("yourDuelHand", [])
-		_add_card_row(vbox, hand, my_side, func(inst: String, _cid: String) -> void:
-			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_play_card", "instanceId": inst}})
+		var my_hits: int = lhits if my_side == "light" else dhits
+		var used: Array = d.get("hitRemovalUsed", [])
+		for c in hand:
+			if not (c is Dictionary):
+				continue
+			var rid: String = str(c.get("instanceId", ""))
+			var rcid: String = str(c.get("cardId", ""))
+			if my_hits > 0 and not used.has(rid) and _card_bonus_text(rcid).contains("duel:removehit"):
+				var remove_btn := Button.new()
+				remove_btn.text = "Remove one hit"
+				remove_btn.pressed.connect(func() -> void:
+					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_remove_hit", "instanceId": rid}})
+				)
+				vbox.add_child(remove_btn)
+				break
+		_add_card_row(vbox, hand, my_side, func(inst: String, cid: String) -> void:
+			var bonus := _card_bonus_text(cid)
+			var printed := 0
+			if CardCatalog:
+				printed = int(CardCatalog.get_card_info(cid, "").get("destiny", 0))
+			var becomes_attack := not (pending is Dictionary) or printed == int(pending.get("destiny", -1))
+			if bonus.contains("duel:discard:draw2"):
+				for child in vbox.get_children():
+					if child != info:
+						child.queue_free()
+				var ask := Label.new()
+				ask.text = "Discard this card to draw two cards for your dueling hand, or play it."
+				vbox.add_child(ask)
+				var play_btn := Button.new()
+				play_btn.text = "Play this card"
+				play_btn.pressed.connect(func() -> void:
+					_play_duel_card(inst, cid, false)
+				)
+				var draw_btn := Button.new()
+				draw_btn.text = "Discard to draw 2"
+				draw_btn.pressed.connect(func() -> void:
+					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_discard_draw", "instanceId": inst}})
+				)
+				vbox.add_child(play_btn)
+				vbox.add_child(draw_btn)
+				return
+			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
+				for child in vbox.get_children():
+					if child != info:
+						child.queue_free()
+				var ask := Label.new()
+				ask.text = "Qui-Gon's Final Stand can be discarded so this attack does two extra hits."
+				vbox.add_child(ask)
+				var normal := Button.new()
+				normal.text = "Play normally"
+				normal.pressed.connect(func() -> void:
+					_play_duel_card(inst, cid, false)
+				)
+				var extra := Button.new()
+				extra.text = "Discard for two extra hits"
+				extra.pressed.connect(func() -> void:
+					_play_duel_card(inst, cid, true)
+				)
+				vbox.add_child(normal)
+				vbox.add_child(extra)
+				return
+			_play_duel_card(inst, cid, false)
 		)
 
 
@@ -1471,8 +1938,22 @@ func _browse_hyperspace(yours: bool) -> void:
 	_hs_browse_overlay.add_child(bg)
 	var vbox := _begin_choice_overlay("hs_browse", "Hyperspace")
 	# _begin_choice_overlay replaced _dotf_overlay; attach browse to that overlay instead
-	_add_card_row(vbox, ships, side, func(_inst: String, _cid: String) -> void:
-		pass
+	_add_card_row(vbox, ships, side, func(inst: String, cid: String) -> void:
+		if not yours:
+			return
+		var g: Dictionary = Connection.get_state().game_state
+		if g.get("phase", "") != "deploy" or g.get("turnSide", "") != my_side:
+			return
+		if not _card_bonus_text(cid).contains("discardsearcher"):
+			return
+		Connection.get_client().send_message({
+			"type": "game_action",
+			"action": { "kind": "start_in_play_deploy", "instanceId": inst }
+		})
+		_clear_dotf_overlay()
+		if _hs_browse_overlay:
+			_hs_browse_overlay.queue_free()
+			_hs_browse_overlay = null
 	)
 	var close_btn := Button.new()
 	close_btn.text = "Close"
@@ -1485,27 +1966,78 @@ func _browse_hyperspace(yours: bool) -> void:
 	vbox.add_child(close_btn)
 
 
+func _ensure_hs_empty_frame(wrapper: Control) -> Panel:
+	var frame: Panel = wrapper.get_node_or_null("EmptyFrame") as Panel
+	if frame:
+		return frame
+	frame = Panel.new()
+	frame.name = "EmptyFrame"
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.08, 0.14, 0.35)
+	style.border_color = Color(0.55, 0.72, 0.95, 0.4)
+	style.set_border_width_all(1)
+	style.corner_radius_top_left = 4
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_left = 4
+	style.corner_radius_bottom_right = 4
+	frame.add_theme_stylebox_override("panel", style)
+	wrapper.add_child(frame)
+	wrapper.move_child(frame, 0)
+	var caption := Label.new()
+	caption.text = "HS"
+	caption.set_anchors_preset(Control.PRESET_FULL_RECT)
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 11)
+	caption.add_theme_color_override("font_color", Color(0.7, 0.82, 0.95, 0.7))
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(caption)
+	return frame
+
+
+func _set_hs_pile_contents(wrapper: Control, tex: TextureRect, count_lbl: Label, ships: Array, side: String) -> void:
+	var empty_frame: Panel = _ensure_hs_empty_frame(wrapper)
+	if ships.is_empty():
+		if tex:
+			tex.visible = false
+			tex.texture = null
+		if count_lbl:
+			count_lbl.visible = false
+			count_lbl.text = ""
+		empty_frame.visible = true
+		return
+	empty_frame.visible = false
+	if tex:
+		tex.visible = true
+		tex.texture = _load_card_texture_for_id(ships[ships.size() - 1].get("cardId", ""), side)
+	if count_lbl:
+		count_lbl.text = str(ships.size())
+		count_lbl.visible = true
+
+
 func _update_hyperspace_piles(pub: Dictionary, my_side: String) -> void:
 	var use_hs: bool = _uses_hyperspace(pub)
-	if your_hs_wrapper:
-		your_hs_wrapper.visible = use_hs
-	if opp_hs_wrapper:
-		opp_hs_wrapper.visible = use_hs
-	if not use_hs:
-		return
 	var my_ships: Array = pub.get("lightHyperspace" if my_side == "light" else "darkHyperspace", [])
 	var opp_ships: Array = pub.get("darkHyperspace" if my_side == "light" else "lightHyperspace", [])
-	if your_hs_count:
-		your_hs_count.text = str(my_ships.size())
-		your_hs_count.visible = my_ships.size() > 0
-	if opp_hs_count:
-		opp_hs_count.text = str(opp_ships.size())
-		opp_hs_count.visible = opp_ships.size() > 0
-	if your_hs_tex and my_ships.size() > 0:
-		your_hs_tex.texture = _load_card_texture_for_id(my_ships[my_ships.size() - 1].get("cardId", ""), my_side)
-	if opp_hs_tex and opp_ships.size() > 0:
-		var opp_side: String = "dark" if my_side == "light" else "light"
-		opp_hs_tex.texture = _load_card_texture_for_id(opp_ships[opp_ships.size() - 1].get("cardId", ""), opp_side)
+	var opp_side: String = "dark" if my_side == "light" else "light"
+	var your_col: Control = null
+	var opp_col: Control = null
+	if your_hs_wrapper:
+		your_col = your_hs_wrapper.get_parent() as Control
+	if opp_hs_wrapper:
+		opp_col = opp_hs_wrapper.get_parent() as Control
+	if your_col:
+		your_col.visible = use_hs
+	if opp_col:
+		opp_col.visible = use_hs
+	if your_hs_wrapper:
+		your_hs_wrapper.visible = use_hs
+		_set_hs_pile_contents(your_hs_wrapper, your_hs_tex, your_hs_count, my_ships if use_hs else [], my_side)
+	if opp_hs_wrapper:
+		opp_hs_wrapper.visible = use_hs
+		_set_hs_pile_contents(opp_hs_wrapper, opp_hs_tex, opp_hs_count, opp_ships if use_hs else [], opp_side)
 
 
 const EVAC_TRANSPORT_COMPLETE_DELAY: float = 4.5
@@ -1586,6 +2118,81 @@ func _show_transport_complete_then_dismiss(result: Dictionary, my_side: String) 
 	desc.add_theme_font_size_override("font_size", 14)
 	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(desc)
+	get_tree().create_timer(EVAC_TRANSPORT_COMPLETE_DELAY).timeout.connect(func() -> void:
+		Connection.get_client().send_message({
+			"type": "game_action",
+			"action": {"kind": "dismiss_evacuation_result"}
+		})
+		if _evacuation_overlay:
+			_evacuation_overlay.queue_free()
+			_evacuation_overlay = null
+		_refresh()
+	)
+
+
+func _show_hyperspace_evac_failed(result: Dictionary, my_side: String) -> void:
+	if _evacuation_overlay:
+		_evacuation_overlay.queue_free()
+		_evacuation_overlay = null
+	_evacuation_overlay = CanvasLayer.new()
+	_evacuation_overlay.layer = 200
+	add_child(_evacuation_overlay)
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.05, 0.05, 0.15, 0.85)
+	_evacuation_overlay.add_child(bg)
+	_evacuation_panel = PanelContainer.new()
+	_evacuation_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_evacuation_panel.offset_left = -280
+	_evacuation_panel.offset_top = -180
+	_evacuation_panel.offset_right = 280
+	_evacuation_panel.offset_bottom = 180
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.18, 0.08, 0.1, 0.98)
+	style.border_width_left = 2
+	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.border_color = Color(0.85, 0.3, 0.3, 0.9)
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.content_margin_left = 20
+	style.content_margin_right = 20
+	style.content_margin_top = 20
+	style.content_margin_bottom = 20
+	_evacuation_panel.add_theme_stylebox_override("panel", style)
+	_evacuation_overlay.add_child(_evacuation_panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	_evacuation_panel.add_child(vbox)
+	var evac_side: String = result.get("evacuatingSide", "")
+	var stacked_ids: Array = result.get("stackedCardIds", [])
+	var title := Label.new()
+	title.text = "Evacuation Failed"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Color(1.0, 0.4, 0.35, 1))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+	var desc := Label.new()
+	desc.text = "No transports survived. %d card%s discarded." % [stacked_ids.size(), "s" if stacked_ids.size() != 1 else ""]
+	desc.add_theme_font_size_override("font_size", 14)
+	desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(desc)
+	if stacked_ids.size() > 0:
+		var stacked_row := HBoxContainer.new()
+		stacked_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		stacked_row.add_theme_constant_override("separation", 4)
+		vbox.add_child(stacked_row)
+		for card_id in stacked_ids:
+			var card_tex := TextureRect.new()
+			card_tex.custom_minimum_size = Vector2(50, 70)
+			card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+			card_tex.texture = _load_card_texture_for_id(str(card_id), evac_side)
+			stacked_row.add_child(card_tex)
 	get_tree().create_timer(EVAC_TRANSPORT_COMPLETE_DELAY).timeout.connect(func() -> void:
 		Connection.get_client().send_message({
 			"type": "game_action",
@@ -2031,6 +2638,8 @@ func _on_hand_card_drag_started(instance_id: String) -> void:
 	var turn_side: String = g.get("turnSide", "")
 	var my_side: String = Connection.get_state().game_side
 	var pub: Dictionary = g.get("publicState", {})
+	if pub.get("winControlPending") is Dictionary:
+		return
 	var in_bc_declare: bool = pub.get("battleCardDeclareSide", "") == my_side
 	if not _dragging_from_battle_plan and not in_bc_declare and (phase != "deploy" or turn_side != my_side):
 		return
@@ -2240,6 +2849,8 @@ func _on_game_state(_payload: Dictionary) -> void:
 				var reason: String = p.get("reason", "")
 				var reason_text: String = "Deck Victory!" if reason == "deck_empty" else ( "Planet Victory!" if reason == "planet_victory" else ( "Opponent Conceded" if reason == "concede" else "" ) )
 				_pending_game_over = { "won": won, "reason_text": reason_text }
+		var pub_now: Dictionary = Connection.get_state().game_state.get("publicState", {})
+		_update_hyperspace_piles(pub_now, Connection.get_state().game_side)
 		_start_battle_reveal_animation(seq)
 		return
 	_refresh()
@@ -2548,7 +3159,7 @@ func _refresh() -> void:
 	play_card_btn.visible = false
 	var battle_active: bool = pub.get("battlePlanPhase", false) or pub.get("battleCardDeclareSide", "") != ""
 	var evac_in_progress: bool = pub.get("evacuationState", {}).size() > 0
-	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active)) and not (pub.get("planetEffectFetch") is Dictionary) and not (pub.get("deployFromDeckPending") is Dictionary) and not (pub.get("duelState") is Dictionary)
+	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active)) and not (pub.get("planetEffectFetch") is Dictionary) and not (pub.get("deployFromDeckPending") is Dictionary) and not (pub.get("winControlPending") is Dictionary) and not (pub.get("duelState") is Dictionary) and not (pub.get("destinySwapPending") is Dictionary) and not (pub.get("effectActivationPending") is Dictionary) and not (pub.get("jediTrainingPending") is Dictionary) and not (pub.get("poundedPending") is Dictionary) and not (pub.get("deployDrawPending") is Dictionary)
 	var any_face_down: bool = false
 	for card in pub.get("lightInPlay", []):
 		if card.get("faceDown", false):
@@ -2652,7 +3263,7 @@ func _refresh() -> void:
 	elif phase == "deploy" and turn_side == my_side:
 		_ensure_effect_decline_btn()
 		var ep2: Variant = pub.get("effectActivationPending", null)
-		if ep2 is Dictionary and str(ep2.get("side", "")) == my_side:
+		if ep2 is Dictionary and str(ep2.get("side", "")) == my_side and str(ep2.get("kind", "")) != "peek_opp_deck" and str(ep2.get("kind", "")) != "bottom_hand":
 			if _effect_decline_btn:
 				_effect_decline_btn.visible = true
 			var eff_nm: String = str(ep2.get("effectCardName", "Effect"))
@@ -2726,6 +3337,8 @@ func _refresh() -> void:
 			# Skip normal _build_hand; animation will call it when done. Still build rest.
 			_build_in_play(state)
 			play_card_btn.text = "Play Card"
+			_update_hyperspace_piles(pub, my_side)
+			_update_dotf_choice_ui(state, pub, my_side)
 			return
 	if phase != "draw":
 		_initial_draw_animation_done = false
@@ -2855,7 +3468,15 @@ func _on_my_in_play_effect_clicked(instance_id: String) -> void:
 	var turn_side: String = g.get("turnSide", "")
 	var my_side: String = Connection.get_state().game_side
 	var pub: Dictionary = g.get("publicState", {})
-	if phase != "deploy" or turn_side != my_side:
+	if turn_side != my_side:
+		return
+	if phase == "even_up":
+		Connection.get_client().send_message({
+			"type": "game_action",
+			"action": { "kind": "effect_offer", "effectInstanceId": instance_id }
+		})
+		return
+	if phase != "deploy":
 		return
 	var ep: Variant = pub.get("effectActivationPending", null)
 	if ep is Dictionary and str(ep.get("side", "")) == my_side:
@@ -2872,10 +3493,25 @@ func _on_my_in_play_effect_clicked(instance_id: String) -> void:
 
 
 func _on_my_table_card_clicked(instance_id: String) -> void:
+	var my_side: String = Connection.get_state().game_side
 	if not _picking_duel:
+		var g: Dictionary = Connection.get_state().game_state
+		if g.get("phase", "") == "deploy" and g.get("turnSide", "") == my_side:
+			var pub: Dictionary = g.get("publicState", {})
+			var deploy_cards: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+			for c in deploy_cards:
+				if str(c.get("instanceId", "")) != instance_id:
+					continue
+				if bool(c.get("faceDown", false)):
+					return
+				if _card_bonus_text(str(c.get("cardId", ""))).contains("discardsearcher"):
+					Connection.get_client().send_message({
+						"type": "game_action",
+						"action": { "kind": "start_in_play_deploy", "instanceId": instance_id }
+					})
+				return
 		return
 	var pub: Dictionary = Connection.get_state().game_state.get("publicState", {})
-	var my_side: String = Connection.get_state().game_side
 	var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
 	var card_id: String = ""
 	for c in mine:
@@ -3981,6 +4617,12 @@ func _battle_step_show_result() -> void:
 				parts.append("[color=#f0d050]+%d[/color] [color=#b09030]battle[/color]" % bc_bonus)
 			if loc_bonus > 0:
 				parts.append("[color=#80c0f0]+%d[/color] [color=#5090b0]location[/color]" % loc_bonus)
+			var dest_arr: Array = step.get(str(sd["prefix"]) + "DestinyDraws", [])
+			if dest_arr.size() > 0:
+				var dest_sum: int = 0
+				for d in dest_arr:
+					dest_sum += int(d.get("destiny", 0))
+				parts.append("[color=#f0e070]+%d[/color] [color=#b0a040]destiny[/color]" % dest_sum)
 			if not gt_label.is_empty():
 				parts.append("[color=#d0a0e0]%s[/color]" % gt_label)
 			bl.text = "[center]" + " [color=#505060]|[/color] ".join(parts) + "[/center]"

@@ -37,6 +37,11 @@ func _ready() -> void:
 	pressed.connect(_on_pressed)
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
+	_hover_timer = Timer.new()
+	_hover_timer.one_shot = true
+	_hover_timer.wait_time = 0.25
+	_hover_timer.timeout.connect(_hide_hover_popup_delayed)
+	add_child(_hover_timer)
 
 
 func _apply_clear_card_chrome() -> void:
@@ -59,10 +64,8 @@ func _apply_clear_card_chrome() -> void:
 
 func _exit_tree() -> void:
 	_hide_hover_popup()
-	if _hover_timer:
+	if _hover_timer and is_instance_valid(_hover_timer):
 		_hover_timer.stop()
-		_hover_timer.queue_free()
-		_hover_timer = null
 
 
 func set_card(card_id: String, instance_id: String = "", side_hint: String = "", set_hint: String = "", face_down: bool = false, is_mine: bool = true) -> void:
@@ -167,28 +170,22 @@ func _on_pressed() -> void:
 
 
 func _on_mouse_entered() -> void:
-	if _hover_timer:
-		_hover_timer = null
+	if _hover_timer and is_instance_valid(_hover_timer):
+		_hover_timer.stop()
 	_show_hover_popup()
 
 
 func _on_mouse_exited() -> void:
-	# Delay hide so user can move mouse to the popup to read it
-	if _hover_timer:
-		_hover_timer.stop()
-		_hover_timer.queue_free()
-	_hover_timer = Timer.new()
-	_hover_timer.one_shot = true
-	_hover_timer.wait_time = 0.25
-	_hover_timer.timeout.connect(_hide_hover_popup_delayed)
-	add_child(_hover_timer)
-	_hover_timer.start()
+	if not is_inside_tree() or is_queued_for_deletion():
+		_hide_hover_popup()
+		return
+	if _hover_timer and is_instance_valid(_hover_timer) and _hover_timer.is_inside_tree():
+		_hover_timer.start()
+	else:
+		_hide_hover_popup()
 
 
 func _hide_hover_popup_delayed() -> void:
-	if _hover_timer:
-		_hover_timer.queue_free()
-		_hover_timer = null
 	_hide_hover_popup()
 
 
@@ -297,14 +294,12 @@ func _show_face_down_hover_popup() -> void:
 
 
 func _on_popup_mouse_entered() -> void:
-	if _hover_timer:
+	if _hover_timer and is_instance_valid(_hover_timer):
 		_hover_timer.stop()
-		_hover_timer.queue_free()
-		_hover_timer = null
 
 
 func _on_popup_mouse_exited() -> void:
-	_hide_hover_popup_delayed()
+	_on_mouse_exited()
 
 
 func _hide_hover_popup() -> void:
@@ -316,7 +311,5 @@ func _hide_hover_popup() -> void:
 ## Call from game scene to clear hover when e.g. Play is pressed or state refreshes.
 func hide_hover_popup() -> void:
 	_hide_hover_popup()
-	if _hover_timer:
+	if _hover_timer and is_instance_valid(_hover_timer):
 		_hover_timer.stop()
-		_hover_timer.queue_free()
-		_hover_timer = null

@@ -496,6 +496,551 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "dotf_light_jedi",
+      "name": "DotF Jedi",
+      "side": "light",
+      "cards": [
+        {
+          "id": "obiwankenobijedistudent",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "quigonjinnjedimentor",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "anakinskywalkerrookiepilot",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "captainquarshpanakasecuritycommander",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "macewindujedicouncilor",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "queenamidalayoungleader",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "yodajediphilosopher",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "r2d2repairdroid",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "ricoliestarshippilot",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "quigonjinnslightsaberwieldedbyobiwan",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "captainpanakasblaster",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "booma",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "apowerfulopponent",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "criticalconfrontation",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "quigonsfinalstand",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "twistoffate",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "youarestrongwiththeforce",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "hecanseethingsbeforetheyhappen",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "jedimeditation",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "jeditraining",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "poundeduntodeath",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "naboostarfighterduel",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "coruscantjedicouncilchamber",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "tatooinepodracearena",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "dotf_light_naboo",
+      "name": "DotF Naboo",
+      "side": "light",
+      "cards": [
+        {
+          "id": "nabooofficerbattleplanner",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "royalguardveteran",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "gunganwarriorinfantry",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "jarjarbinksgunganchubathief",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "bravopilotflyer",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "valorumleaderofthesenate",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "galacticsenatordelegate",
+          "set": "thejedicouncil",
+          "count": 3
+        },
+        {
+          "id": "flashspeeder",
+          "set": "battleofnaboo",
+          "count": 3
+        },
+        {
+          "id": "nabooblaster",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "kaadu",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "electropole",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "fambaa",
+          "set": "battleofnaboo",
+          "count": 2
+        },
+        {
+          "id": "comeonmove",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "gunganmountedtroops",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "naboofighterattack",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "runtheblockade",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "amidalasstarshiproyaltransport",
+          "set": "battleofnaboo",
+          "count": 2
+        },
+        {
+          "id": "republiccruisertransport",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "gunganenergyshield",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "royalnaboosecurityforces",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "senateguard",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "naboogunganswamp",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "coruscantgalacticsenate",
+          "set": "thejedicouncil",
+          "count": 2
+        },
+        {
+          "id": "tatooinedesertlandingsite",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "dotf_dark_sith",
+      "name": "DotF Sith",
+      "side": "dark",
+      "cards": [
+        {
+          "id": "darthmaulstudentofthedarkside",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "darthsidiousmasterofthedarkside",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "aurrasingtrophycollector",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "darthmaulssithspeeder",
+          "set": "thejedicouncil",
+          "count": 4
+        },
+        {
+          "id": "sithlightsaber",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "jedilightsaberstolenbyaurrasing",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "darthmaulslightsaber",
+          "set": "battleofnaboo",
+          "count": 3
+        },
+        {
+          "id": "mobileassassin",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "usecaution",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "darthmauldefiant",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "powerofthesith",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "tothedeath",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "changeintactics",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "dangerousencounter",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "theduelbegins",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "thejediareinvolved",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "naboobattleplains",
+          "set": "thejedicouncil",
+          "count": 1
+        },
+        {
+          "id": "coruscantjedicouncilchamber",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        },
+        {
+          "id": "tatooinemosespa",
+          "set": "thejedicouncil",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "dotf_dark_droids",
+      "name": "DotF Droids",
+      "side": "dark",
+      "cards": [
+        {
+          "id": "starfighterdroiddfs327",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "starfighterdroiddfs1104",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "starfighterdroiddfs1138",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "droidstarfighterduel",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "owo1battledroidcommandofficer",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "battledroidinfantrymttdivision",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "stap",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "battledroidblasterrifle",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "battledroidpatrol",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "p59destroyerdroidcommander",
+          "set": "battleofnaboo",
+          "count": 3
+        },
+        {
+          "id": "destroyerdroidwheeldroid",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "itsastandoff",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "multitrooptransport",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "wherearethosedroidekas",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "blockade",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "naboobattleplains",
+          "set": "thejedicouncil",
+          "count": 2
+        },
+        {
+          "id": "tatooinedesertlandingsite",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "coruscantgalacticsenate",
+          "set": "thejedicouncil",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "dotf_dark_neimoidian",
+      "name": "DotF Neimoidian",
+      "side": "dark",
+      "cards": [
+        {
+          "id": "teyhowneimoidiancommofficer",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "neimoidiantradefederationpilot",
+          "set": "menaceofdarthmaul",
+          "count": 6
+        },
+        {
+          "id": "nutegunrayneimoidianviceroy",
+          "set": "thejedicouncil",
+          "count": 3
+        },
+        {
+          "id": "runehaakoneimoidianadvisor",
+          "set": "thejedicouncil",
+          "count": 3
+        },
+        {
+          "id": "neimoidianviewscreen",
+          "set": "duelofthefates",
+          "count": 6
+        },
+        {
+          "id": "raynovacataxidriver",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "coruscanttaxi",
+          "set": "duelofthefates",
+          "count": 6
+        },
+        {
+          "id": "baskolyeesrimgransenator",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "impossible",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "starfighterscreen",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "battleshiptradefederationtransport",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "droidstarfighterduel",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "endthispointlessdebate",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "coruscantgalacticsenate",
+          "set": "thejedicouncil",
+          "count": 2
+        },
+        {
+          "id": "tatooinemosespa",
+          "set": "thejedicouncil",
+          "count": 2
+        }
+      ]
     }
   ]
 }

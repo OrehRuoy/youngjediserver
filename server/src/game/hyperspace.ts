@@ -8,11 +8,15 @@ import type { CardInstance } from "../cards/types";
 import { getCard } from "../cards/loader";
 import type { EvacuationResult, GameStateData } from "./state";
 import {
-  drawDestiny,
+  drawDestinyCards,
   getCurrentLocationCard,
   getDeckEmptyWinner,
   getEvacuatableCards,
   getLocationPlanet,
+  getOpposingStarshipDamageBonus,
+  getStarfighterSupportBonus,
+  getTransportDamageReductionFromCharacters,
+  getTransportSupportBonus,
   millFromDeck,
   shuffleDeck,
 } from "./state";
@@ -46,10 +50,16 @@ export function isStarfighter(cardId: string, set?: string): boolean {
   return starshipTrait(cardId, set) === "starfighter";
 }
 
-function starshipPower(cardId: string, set?: string): number {
+function starshipPrintedPower(cardId: string, set?: string): number | "?" {
   const def = getCard(cardId, set);
-  const p = def ? (def as { power?: number }).power : 0;
+  const p = def ? (def as { power?: number | string }).power : 0;
+  if (p === "?") return "?";
   return typeof p === "number" ? p : 0;
+}
+
+function starshipPower(cardId: string, set?: string): number {
+  const p = starshipPrintedPower(cardId, set);
+  return p === "?" ? 0 : p;
 }
 
 function starshipDamage(cardId: string, set?: string): number {
@@ -228,9 +238,40 @@ export function beginHyperspaceIntercept(state: GameStateData, interceptorSide: 
 
 interface ShipFighter {
   ship: CardInstance;
+  ship2?: CardInstance;
   battleCard?: CardInstance;
   power: number;
+  battleCardBonus?: number;
+  supportBonus?: number;
   destinyDraws?: { cardId: string; destiny: number }[];
+}
+
+function battleCardText(cardId: string, set?: string): string {
+  const def = getCard(cardId, set);
+  if (!def) return "";
+  const d = def as { gametextbonus?: string; grayboxbonus?: string };
+  return `${d.gametextbonus ?? ""};${d.grayboxbonus ?? ""}`.toLowerCase();
+}
+
+function battleCardShipPairKinds(cardId: string, set?: string): string[] {
+  const m = battleCardText(cardId, set).match(/ships:([^;]+)/);
+  if (!m) return [];
+  return m[1].split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function shipMatchesKind(ship: CardInstance, kind: string): boolean {
+  const k = kind.toLowerCase();
+  const trait = starshipTrait(ship.cardId, ship.cardSet);
+  const id = ship.cardId.toLowerCase();
+  const name = cardName(ship.cardId, ship.cardSet).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return trait === k || id.includes(k) || name.includes(k) || k === "starship";
+}
+
+function twoShipsCoverKinds(ship1: CardInstance, ship2: CardInstance, kinds: string[]): boolean {
+  if (kinds.length < 2) return false;
+  const a = kinds.map((k) => shipMatchesKind(ship1, k));
+  const b = kinds.map((k) => shipMatchesKind(ship2, k));
+  return kinds.every((_, i) => a[i] || b[i]);
 }
 
 function buildShipFighters(pile: CardInstance[]): { fighters: ShipFighter[]; unused: CardInstance[] } {
@@ -241,6 +282,28 @@ function buildShipFighters(pile: CardInstance[]): { fighters: ShipFighter[]; unu
     const c = pile[i];
     const t = cardType(c.cardId, c.cardSet);
     if (t === "battle") {
+      const kinds = battleCardShipPairKinds(c.cardId, c.cardSet);
+      if (kinds.length >= 2) {
+        const ships: { j: number; card: CardInstance }[] = [];
+        for (let j = i + 1; j < pile.length && ships.length < 2; j++) {
+          if (cardType(pile[j].cardId, pile[j].cardSet) === "starship") {
+            ships.push({ j, card: pile[j] });
+          }
+        }
+        if (ships.length >= 2 && twoShipsCoverKinds(ships[0].card, ships[1].card, kinds)) {
+          for (let k = i + 1; k < ships[1].j; k++) {
+            if (pile[k].instanceId !== ships[0].card.instanceId) unused.push(pile[k]);
+          }
+          fighters.push({
+            ship: ships[0].card,
+            ship2: ships[1].card,
+            battleCard: c,
+            power: starshipPower(ships[0].card.cardId, ships[0].card.cardSet) + starshipPower(ships[1].card.cardId, ships[1].card.cardSet),
+          });
+          i = ships[1].j + 1;
+          continue;
+        }
+      }
       let ship: CardInstance | undefined;
       let j = i + 1;
       while (j < pile.length) {
@@ -271,33 +334,98 @@ function buildShipFighters(pile: CardInstance[]): { fighters: ShipFighter[]; unu
   return { fighters, unused };
 }
 
-function battleCardPowerAdd(cardId: string, shipCardId: string, set?: string): number {
-  const def = getCard(cardId, set);
+function battleCardPowerAdd(cardId: string, ship: CardInstance, ship2?: CardInstance): number {
+  const def = getCard(cardId);
   if (!def || (def as { type?: string }).type !== "battle") return 0;
+  const add = (def as { powerAdd?: number }).powerAdd;
+  const powerAdd = typeof add === "number" ? add : 0;
+  const kinds = battleCardShipPairKinds(cardId);
+  if (kinds.length >= 2) {
+    if (!ship2 || !twoShipsCoverKinds(ship, ship2, kinds)) return 0;
+    return powerAdd;
+  }
   const canUse = ((def as { canUse?: string }).canUse ?? "").toLowerCase().trim();
-  const trait = starshipTrait(shipCardId);
-  const type = cardType(shipCardId);
+  const trait = starshipTrait(ship.cardId, ship.cardSet);
+  const type = cardType(ship.cardId, ship.cardSet);
   if (canUse && canUse !== "any") {
     const parts = canUse.split(",").map((s) => s.trim()).filter(Boolean);
-    const ok = parts.some((p) => p === "any" || p === trait || p === type || shipCardId.toLowerCase().includes(p));
+    const shipName = cardName(ship.cardId, ship.cardSet).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const ok = parts.some((p) => {
+      const token = p.replace(/^◆\s*/, "").replace(/[^a-z0-9]/g, "");
+      return p === "any" || p === trait || p === type || ship.cardId.toLowerCase().includes(p) || (token.length > 0 && shipName.includes(token));
+    });
     if (!ok) return 0;
   }
-  const add = (def as { powerAdd?: number }).powerAdd;
-  return typeof add === "number" ? add : 0;
+  return powerAdd;
 }
 
-function applyStarfighterDestiny(state: GameStateData, side: Side, fighter: ShipFighter): void {
-  if (!isStarfighter(fighter.ship.cardId, fighter.ship.cardSet)) return;
-  const extra = starshipDestinyAdd(fighter.ship.cardId, fighter.ship.cardSet);
-  const draws = 1 + extra;
-  fighter.destinyDraws = [];
-  for (let i = 0; i < draws; i++) {
-    const dest = drawDestiny(state, side);
-    const p = side === "light" ? state.light : state.dark;
-    const top = p.discard[p.discard.length - 1];
-    fighter.destinyDraws.push({ cardId: top?.cardId ?? "", destiny: dest });
-    fighter.power += dest;
+function shipPlanetPower(cardId: string, set: string | undefined, planet: string): number {
+  const def = getCard(cardId, set) as { gametextbonus?: string } | undefined;
+  const bonus = def?.gametextbonus ?? "";
+  const match = bonus.match(/(\d+)\s*,\s*power\s*,\s*on:([a-z0-9]+)/i);
+  if (!match) return 0;
+  if (planet.toLowerCase() !== match[2].toLowerCase()) return 0;
+  const n = parseInt(match[1], 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Starfighters add destiny to power (like character battles). Power "?" draws destiny for base power. */
+function applyStarshipBattleDestiny(state: GameStateData, side: Side, fighter: ShipFighter): void {
+  const ships = fighter.ship2 ? [fighter.ship, fighter.ship2] : [fighter.ship];
+  const draws: { cardId: string; destiny: number }[] = [];
+  let power = fighter.battleCardBonus ?? 0;
+  let supportTotal = 0;
+  const loc = getCurrentLocationCard(state);
+  const planet = loc ? getLocationPlanet(loc.card.cardId, loc.card.cardSet) : "";
+  for (const ship of ships) {
+    const printed = starshipPrintedPower(ship.cardId, ship.cardSet);
+    if (printed === "?") {
+      const powerDraws = drawDestinyCards(state, side, 1);
+      draws.push(...powerDraws);
+      power += powerDraws[0]?.destiny ?? 0;
+    } else {
+      power += printed;
+    }
+    power += shipPlanetPower(ship.cardId, ship.cardSet, planet);
+    if (isStarfighter(ship.cardId, ship.cardSet)) {
+      const extra = starshipDestinyAdd(ship.cardId, ship.cardSet);
+      const count = printed === "?" ? extra : Math.max(1, extra);
+      if (count > 0) {
+        const extraDraws = drawDestinyCards(state, side, count);
+        draws.push(...extraDraws);
+        for (const d of extraDraws) power += d.destiny;
+      }
+      const support = getStarfighterSupportBonus(state, side);
+      if (support > 0) {
+        power += support;
+        supportTotal += support;
+      }
+    } else if (isTransport(ship.cardId, ship.cardSet)) {
+      const support = getTransportSupportBonus(state, side);
+      if (support > 0) {
+        power += support;
+        supportTotal += support;
+      }
+    }
   }
+  fighter.power = power;
+  fighter.destinyDraws = draws;
+  if (supportTotal > 0) fighter.supportBonus = supportTotal;
+}
+
+function millDamageForStarship(state: GameStateData, side: Side, cardId: string, set?: string): number {
+  let dmg = starshipDamage(cardId, set);
+  if (isTransport(cardId, set)) {
+    dmg -= getTransportDamageReductionFromCharacters(state, side);
+  }
+  dmg += getOpposingStarshipDamageBonus(state, side);
+  return Math.max(0, dmg);
+}
+
+function shipSupportLabel(fighter: ShipFighter): string | undefined {
+  if (!fighter.supportBonus || fighter.supportBonus <= 0) return undefined;
+  if (isTransport(fighter.ship.cardId, fighter.ship.cardSet)) return "transports +" + fighter.supportBonus;
+  return "starfighters +" + fighter.supportBonus;
 }
 
 function discardCard(state: GameStateData, side: Side, card: CardInstance): void {
@@ -359,12 +487,10 @@ export function resolveStarshipBattle(state: GameStateData): void {
   const lightBuilt = buildShipFighters(lightPile);
   const darkBuilt = buildShipFighters(darkPile);
   for (const f of lightBuilt.fighters) {
-    f.power += f.battleCard ? battleCardPowerAdd(f.battleCard.cardId, f.ship.cardId, f.battleCard.cardSet) : 0;
-    applyStarfighterDestiny(state, "light", f);
+    f.battleCardBonus = f.battleCard ? battleCardPowerAdd(f.battleCard.cardId, f.ship, f.ship2) : 0;
   }
   for (const f of darkBuilt.fighters) {
-    f.power += f.battleCard ? battleCardPowerAdd(f.battleCard.cardId, f.ship.cardId, f.battleCard.cardSet) : 0;
-    applyStarfighterDestiny(state, "dark", f);
+    f.battleCardBonus = f.battleCard ? battleCardPowerAdd(f.battleCard.cardId, f.ship, f.ship2) : 0;
   }
 
   const pairs = Math.min(lightBuilt.fighters.length, darkBuilt.fighters.length);
@@ -375,6 +501,8 @@ export function resolveStarshipBattle(state: GameStateData): void {
   for (let i = 0; i < pairs; i++) {
     const lf = lightBuilt.fighters[i];
     const df = darkBuilt.fighters[i];
+    applyStarshipBattleDestiny(state, "light", lf);
+    applyStarshipBattleDestiny(state, "dark", df);
     const winner: "light" | "dark" | "tie" = lf.power > df.power ? "light" : df.power > lf.power ? "dark" : "tie";
     let lightMill = 0;
     let darkMill = 0;
@@ -382,19 +510,27 @@ export function resolveStarshipBattle(state: GameStateData): void {
     let darkMilled: string[] | undefined;
     if (winner === "light") {
       discardCard(state, "dark", df.ship);
+      if (df.ship2) discardCard(state, "dark", df.ship2);
       if (df.battleCard) discardCard(state, "dark", df.battleCard);
       lightSurvivors.push(lf.ship);
-      darkMill = starshipDamage(df.ship.cardId, df.ship.cardSet);
+      if (lf.ship2) lightSurvivors.push(lf.ship2);
+      darkMill = millDamageForStarship(state, "dark", df.ship.cardId, df.ship.cardSet);
+      if (df.ship2) darkMill += millDamageForStarship(state, "dark", df.ship2.cardId, df.ship2.cardSet);
       if (darkMill > 0) darkMilled = millFromDeck(state, "dark", darkMill);
     } else if (winner === "dark") {
       discardCard(state, "light", lf.ship);
+      if (lf.ship2) discardCard(state, "light", lf.ship2);
       if (lf.battleCard) discardCard(state, "light", lf.battleCard);
       darkSurvivors.push(df.ship);
-      lightMill = starshipDamage(lf.ship.cardId, lf.ship.cardSet);
+      if (df.ship2) darkSurvivors.push(df.ship2);
+      lightMill = millDamageForStarship(state, "light", lf.ship.cardId, lf.ship.cardSet);
+      if (lf.ship2) lightMill += millDamageForStarship(state, "light", lf.ship2.cardId, lf.ship2.cardSet);
       if (lightMill > 0) lightMilled = millFromDeck(state, "light", lightMill);
     } else {
       lightSurvivors.push(lf.ship);
+      if (lf.ship2) lightSurvivors.push(lf.ship2);
       darkSurvivors.push(df.ship);
+      if (df.ship2) darkSurvivors.push(df.ship2);
       if (lf.battleCard) discardCard(state, "light", lf.battleCard);
       if (df.battleCard) discardCard(state, "dark", df.battleCard);
     }
@@ -404,10 +540,10 @@ export function resolveStarshipBattle(state: GameStateData): void {
       darkCardId: df.ship.cardId,
       lightCardName: cardName(lf.ship.cardId, lf.ship.cardSet),
       darkCardName: cardName(df.ship.cardId, df.ship.cardSet),
-      lightBasePower: starshipPower(lf.ship.cardId, lf.ship.cardSet),
-      lightBonus: lf.power - starshipPower(lf.ship.cardId, lf.ship.cardSet),
-      darkBasePower: starshipPower(df.ship.cardId, df.ship.cardSet),
-      darkBonus: df.power - starshipPower(df.ship.cardId, df.ship.cardSet),
+      lightBasePower: starshipPrintedPower(lf.ship.cardId, lf.ship.cardSet) === "?" ? 0 : starshipPower(lf.ship.cardId, lf.ship.cardSet),
+      lightBonus: 0,
+      darkBasePower: starshipPrintedPower(df.ship.cardId, df.ship.cardSet) === "?" ? 0 : starshipPower(df.ship.cardId, df.ship.cardSet),
+      darkBonus: 0,
       lightPower: lf.power,
       darkPower: df.power,
       winner,
@@ -415,15 +551,37 @@ export function resolveStarshipBattle(state: GameStateData): void {
       darkMill: darkMill || undefined,
       lightMilledCardIds: lightMilled,
       darkMilledCardIds: darkMilled,
+      lightDestinyDraws: lf.destinyDraws && lf.destinyDraws.length > 0 ? lf.destinyDraws : undefined,
+      darkDestinyDraws: df.destinyDraws && df.destinyDraws.length > 0 ? df.destinyDraws : undefined,
+      lightBattleCardId: lf.battleCard?.cardId,
+      lightBattleCardName: lf.battleCard ? cardName(lf.battleCard.cardId, lf.battleCard.cardSet) : undefined,
+      lightBattleCardBonus: lf.battleCardBonus && lf.battleCardBonus > 0 ? lf.battleCardBonus : undefined,
+      darkBattleCardId: df.battleCard?.cardId,
+      darkBattleCardName: df.battleCard ? cardName(df.battleCard.cardId, df.battleCard.cardSet) : undefined,
+      darkBattleCardBonus: df.battleCardBonus && df.battleCardBonus > 0 ? df.battleCardBonus : undefined,
+      lightGametextBonusLabel: shipSupportLabel(lf),
+      darkGametextBonusLabel: shipSupportLabel(df),
+      lightCardId2: lf.ship2?.cardId,
+      lightCardName2: lf.ship2 ? cardName(lf.ship2.cardId, lf.ship2.cardSet) : undefined,
+      lightBasePower2: lf.ship2
+        ? (starshipPrintedPower(lf.ship2.cardId, lf.ship2.cardSet) === "?" ? 0 : starshipPower(lf.ship2.cardId, lf.ship2.cardSet))
+        : undefined,
+      darkCardId2: df.ship2?.cardId,
+      darkCardName2: df.ship2 ? cardName(df.ship2.cardId, df.ship2.cardSet) : undefined,
+      darkBasePower2: df.ship2
+        ? (starshipPrintedPower(df.ship2.cardId, df.ship2.cardSet) === "?" ? 0 : starshipPower(df.ship2.cardId, df.ship2.cardSet))
+        : undefined,
     });
   }
 
   for (let i = pairs; i < lightBuilt.fighters.length; i++) {
     lightSurvivors.push(lightBuilt.fighters[i].ship);
+    if (lightBuilt.fighters[i].ship2) lightSurvivors.push(lightBuilt.fighters[i].ship2!);
     if (lightBuilt.fighters[i].battleCard) discardCard(state, "light", lightBuilt.fighters[i].battleCard!);
   }
   for (let i = pairs; i < darkBuilt.fighters.length; i++) {
     darkSurvivors.push(darkBuilt.fighters[i].ship);
+    if (darkBuilt.fighters[i].ship2) darkSurvivors.push(darkBuilt.fighters[i].ship2!);
     if (darkBuilt.fighters[i].battleCard) discardCard(state, "dark", darkBuilt.fighters[i].battleCard!);
   }
   for (const c of lightBuilt.unused) discardCard(state, "light", c);

@@ -140,6 +140,10 @@ export interface BattleCardDefinition extends CardDefinitionBase {
   destiny?: number;
   /** Image filename (from base; battle card image) */
   image?: string;
+  /** Optional gray-box text (DotF battle cards). */
+  graybox?: string;
+  /** Parsed gray-box bonus, e.g. "duel:extrahit". */
+  grayboxbonus?: string;
 }
 
 export type CardDefinition =

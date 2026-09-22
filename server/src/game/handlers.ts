@@ -12,7 +12,11 @@ import { usesHyperspace, usesPlanetEffectFetch, usesDueling, usesDeployFromDeck 
 import * as hyperspace from "./hyperspace";
 import * as planetEffect from "./planet-effect";
 import * as deployFromDeck from "./deploy-from-deck";
+import * as deployDraw from "./deploy-draw";
 import * as duel from "./duel";
+import * as winControl from "./win-control";
+import * as jediTraining from "./jedi-training";
+import * as pounded from "./pounded";
 
 export interface GameActionResult {
   applied: boolean;
@@ -37,6 +41,7 @@ export function handleGameAction(
     if (g.phase !== "deploy") return { applied: false, error: "Can only play cards in deploy phase" };
     if (g.planetEffectFetch) return { applied: false, error: "Finish taking or skipping an Effect from deck first" };
     if (g.deployFromDeckPending?.side === side) return { applied: false, error: "Finish your deploy-from-deck search first" };
+    if (g.winControlPending?.side === side) return { applied: false, error: "Finish selecting cards for that ability first" };
     if (g.duelState) return { applied: false, error: "Finish the duel first" };
     if (g.starshipBattlePhase) return { applied: false, error: "Cannot play cards during a starship battle" };
     if (g.effectActivationPending?.side === side) {
@@ -45,6 +50,9 @@ export function handleGameAction(
         error: "Finish your effect ability first: discard a card from hand, or click Cancel effect",
       };
     }
+    if (g.jediTrainingPending?.side === side) return { applied: false, error: "Finish choosing a lightsaber first" };
+    if (g.poundedPending?.side === side) return { applied: false, error: "Finish choosing a card to discard" };
+    if (g.deployDrawPending?.side === side) return { applied: false, error: "Choose whether to draw a card" };
     const card = state.findInHand(g, side, instanceId);
     if (!card) return { applied: false, error: "Card not in hand" };
     let def = getCard(card.cardId);
@@ -93,7 +101,9 @@ export function handleGameAction(
     }
     const cost = cardType === "character"
       ? state.getDeployCostWithGametextBonus(g, side, card.cardId, card.cardSet)
-      : (Math.floor(Number((def as { cost?: number }).cost)) || 0);
+      : cardType === "weapon"
+        ? state.getWeaponDeployCost(g, side, card.cardId, card.cardSet)
+        : (Math.floor(Number((def as { cost?: number }).cost)) || 0);
     const force = Math.floor(Number(state.getForce(g, side)));
     if (force < cost) return { applied: false, error: "Not enough counters to play this card" };
     if (cardType === "effect") {
@@ -127,8 +137,13 @@ export function handleGameAction(
       return { applied: false, error: "Could not play card" };
     }
     const played = (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === instanceId);
+    let startedSearch = false;
     if (usesDeployFromDeck(g) && played && !played.faceDown) {
-      deployFromDeck.maybeBeginDeployFromDeck(g, side, instanceId, card.cardId, card.cardSet, played.faceDown);
+      startedSearch = deployFromDeck.maybeBeginDeployFromDeck(g, side, instanceId, card.cardId, card.cardSet, played.faceDown);
+    }
+    if (played && !played.faceDown && cardType === "character" && !startedSearch) {
+      const drew = deployDraw.maybeBeginDeployDraw(g, side, card.cardId, card.cardSet, played.faceDown);
+      if (!drew) jediTraining.maybeBeginJediTraining(g, side, played);
     }
     return { applied: true };
   }
@@ -137,11 +152,15 @@ export function handleGameAction(
     if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
     if (g.planetEffectFetch) return { applied: false, error: "Finish taking or skipping an Effect from deck first" };
     if (g.deployFromDeckPending?.side === side) return { applied: false, error: "Finish your deploy-from-deck search first" };
+    if (g.winControlPending?.side === side) return { applied: false, error: "Finish selecting cards for that ability first" };
     if (g.duelState) return { applied: false, error: "Finish the duel first" };
     if (g.starshipBattlePhase) return { applied: false, error: "Cannot pass during a starship battle" };
     if (g.effectActivationPending?.side === side) {
       return { applied: false, error: "Cancel the effect ability or discard a card for it before passing" };
     }
+    if (g.jediTrainingPending?.side === side) return { applied: false, error: "Finish choosing a lightsaber first" };
+    if (g.poundedPending?.side === side) return { applied: false, error: "Finish choosing a card to discard" };
+    if (g.deployDrawPending?.side === side) return { applied: false, error: "Choose whether to draw a card" };
     if (g.evacuationState) return { applied: false, error: "Cannot pass phase during an evacuation" };
     if (g.evacuationResult) g.evacuationResult = undefined;
     const advResult = engine.advancePhase(gameId, () => {});
@@ -446,14 +465,60 @@ export function handleGameAction(
   if (action.kind === "effect_offer") {
     const effectInstanceId = action.effectInstanceId as string | undefined;
     if (!effectInstanceId) return { applied: false, error: "Missing effectInstanceId" };
+    if (g.phase === "even_up") {
+      const result = pounded.beginPoundedUntoDeath(g, side, effectInstanceId);
+      return result.ok ? { applied: true } : { applied: false, error: result.error };
+    }
     const result = state.startEffectActivation(g, side, effectInstanceId);
     return result.ok ? { applied: true } : { applied: false, error: result.error };
   }
 
   if (action.kind === "effect_decline") {
     if (!g.effectActivationPending || g.effectActivationPending.side !== side) return { applied: false, error: "No effect activation to decline" };
+    if (g.effectActivationPending.kind === "peek_opp_deck") return { applied: false, error: "Choose to leave that card on top or put it under the deck" };
     state.clearEffectActivation(g);
     return { applied: true };
+  }
+
+  if (action.kind === "peek_deck_choice") {
+    const place = action.place === "bottom" ? "bottom" : action.place === "top" ? "top" : undefined;
+    if (!place) return { applied: false, error: "Choose top or bottom" };
+    const result = state.resolveOppDeckPeek(g, side, place);
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "bottom_hand_card") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const result = state.placeHandCardUnderDeck(g, side, instanceId);
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "confirm_jedi_training") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const result = jediTraining.confirmJediTraining(g, side, instanceId);
+    if (!result.ok) return { applied: false, error: result.error };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "decline_jedi_training") {
+    const ok = jediTraining.declineJediTraining(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No lightsaber choice to skip" };
+  }
+
+  if (action.kind === "confirm_pounded") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const result = pounded.confirmPoundedUntoDeath(g, side, instanceId);
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "decline_pounded") {
+    const ok = pounded.declinePoundedUntoDeath(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No card choice to cancel" };
   }
 
   if (action.kind === "effect_discard_for_ability") {
@@ -477,10 +542,32 @@ export function handleGameAction(
     return ok ? { applied: true } : { applied: false, error: "Not your turn to skip" };
   }
 
+  if (action.kind === "start_in_play_deploy") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const result = deployFromDeck.beginInPlayDeployFromDeck(g, side, instanceId);
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "confirm_deploy_draw") {
+    const result = deployDraw.confirmDeployDraw(g, side);
+    if (!result.ok) return { applied: false, error: "No draw to confirm" };
+    if (result.gameOverWinner) return { applied: true, gameOver: { winner: result.gameOverWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "decline_deploy_draw") {
+    const ok = deployDraw.declineDeployDraw(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No draw to skip" };
+  }
+
   if (action.kind === "confirm_deploy_from_deck") {
     if (!usesDeployFromDeck(g)) return { applied: false, error: "Deploy from deck is not used in this game" };
+    const searcherId = g.deployFromDeckPending?.searcherInstanceId;
     const ok = deployFromDeck.confirmDeployFromDeck(g, side);
     if (!ok) return { applied: false, error: "Could not deploy the searched card (check Force cost)" };
+    const searcher = searcherId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === searcherId) : undefined;
+    jediTraining.maybeBeginJediTraining(g, side, searcher);
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
@@ -488,8 +575,35 @@ export function handleGameAction(
 
   if (action.kind === "decline_deploy_from_deck") {
     if (!usesDeployFromDeck(g)) return { applied: false, error: "Deploy from deck is not used in this game" };
+    const searcherId = g.deployFromDeckPending?.searcherInstanceId;
     const ok = deployFromDeck.declineDeployFromDeck(g, side);
     if (!ok) return { applied: false, error: "No deploy-from-deck search to decline" };
+    const searcher = searcherId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === searcherId) : undefined;
+    jediTraining.maybeBeginJediTraining(g, side, searcher);
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "activate_win_control") {
+    const instanceId = action.instanceId as string | undefined;
+    const planetIndex = Number(action.planetIndex);
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    if (!Number.isFinite(planetIndex)) return { applied: false, error: "Missing planetIndex" };
+    const result = winControl.beginWinControl(g, side, instanceId, Math.trunc(planetIndex));
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
+  if (action.kind === "cancel_win_control") {
+    const ok = winControl.cancelWinControl(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No won-planet ability to cancel" };
+  }
+
+  if (action.kind === "confirm_win_control") {
+    const raw = action.instanceIds;
+    const instanceIds = Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : [];
+    const result = winControl.confirmWinControl(g, side, instanceIds);
+    if (!result.ok) return { applied: false, error: result.error };
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
@@ -522,8 +636,38 @@ export function handleGameAction(
   if (action.kind === "duel_play_card") {
     const instanceId = action.instanceId as string | undefined;
     if (!instanceId) return { applied: false, error: "Missing instanceId" };
-    const ok = duel.playDuelCard(g, side, instanceId);
+    const ok = duel.playDuelCard(g, side, instanceId, {
+      discardForExtraHits: action.discardForExtraHits === true,
+    });
     if (!ok) return { applied: false, error: "Cannot play that duel card" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "duel_discard_draw") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const ok = duel.discardDuelCardForDraw(g, side, instanceId);
+    if (!ok) return { applied: false, error: "Cannot discard that card to draw" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "duel_remove_hit") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const ok = duel.removeDuelHit(g, side, instanceId);
+    return ok ? { applied: true } : { applied: false, error: "Cannot remove a hit with that card" };
+  }
+
+  if (action.kind === "confirm_destiny_swap") {
+    const yourKey = action.yourKey as string | undefined;
+    const oppKey = action.oppKey as string | undefined;
+    if (!yourKey || !oppKey) return { applied: false, error: "Pick one of your destiny numbers and one of theirs" };
+    const ok = state.confirmDestinySwap(g, side, yourKey, oppKey);
+    if (!ok) return { applied: false, error: "Those destiny numbers cannot be switched" };
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };

@@ -2062,7 +2062,7 @@
       "side": "dark",
       "dotColor": "red",
       "type": "character",
-      "trait": "aqualish",
+      "trait": "aqualish,senator",
       "persona": "",
       "cost": 2,
       "power": 3,

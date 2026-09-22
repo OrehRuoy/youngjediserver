@@ -9,8 +9,11 @@ import type { GameStateData } from "./state";
 import {
   getCharactersAtLocation,
   getCurrentLocationCard,
+  getGametextBonusForCharacter,
   getLocationBonusForCharacter,
+  characterGrantsWeaponUse,
   getWeaponPowerAddForCharacter,
+  markFoughtThisTurn,
   millFromDeck,
   shuffleDeck,
 } from "./state";
@@ -36,14 +39,40 @@ export interface DuelState {
   lightPlayed: CardInstance[];
   darkPlayed: CardInstance[];
   currentAttacker: Side;
-  pendingAttack?: { instanceId: string; cardId: string; destiny: number; side: Side };
+  pendingAttack?: { instanceId: string; cardId: string; destiny: number; side: Side; cardSet?: string; bonusHits?: number; discarded?: boolean };
   anakinDestinyCardId?: string;
+  /** Duel-hand cards that already removed one hit. */
+  hitRemovalUsed?: string[];
 }
 
 function destValue(cardId: string, set?: string): number {
   const def = getCard(cardId, set);
   if (!def || typeof (def as { destiny?: number }).destiny !== "number") return 0;
   return (def as { destiny: number }).destiny;
+}
+
+function duelCardText(cardId: string, set?: string): string {
+  const def = getCard(cardId, set);
+  if (!def) return "";
+  const d = def as { gametextbonus?: string; grayboxbonus?: string };
+  return `${d.gametextbonus ?? ""};${d.grayboxbonus ?? ""}`.toLowerCase();
+}
+
+function duelHitsForAttack(cardId: string, set?: string): number {
+  return duelCardText(cardId, set).includes("duel:extrahit") ? 2 : 1;
+}
+
+function hitsForPending(pending: { cardId: string; cardSet?: string; bonusHits?: number }): number {
+  if ((pending.bonusHits ?? 0) > 0) return 1 + (pending.bonusHits ?? 0);
+  return duelHitsForAttack(pending.cardId, pending.cardSet);
+}
+
+function cardAllowsDiscardExtraHits(cardId: string, set?: string): boolean {
+  return duelCardText(cardId, set).includes("duel:discard:extrahit2");
+}
+
+function cardAllowsRemoveHit(cardId: string, set?: string): boolean {
+  return duelCardText(cardId, set).includes("duel:removehit");
 }
 
 function printedPower(cardId: string, set?: string): number | "?" {
@@ -99,7 +128,11 @@ function weaponUsableBy(weaponCardId: string, characterCardId: string, weaponSet
   if (!def || (def as { type?: string }).type !== "weapon") return false;
   const canUse = (def as { canUse?: string }).canUse;
   const canUse2 = (def as { canUse2?: string }).canUse2;
-  return characterMatchesCanUse(characterCardId, canUse) || characterMatchesCanUse(characterCardId, canUse2);
+  return (
+    characterMatchesCanUse(characterCardId, canUse) ||
+    characterMatchesCanUse(characterCardId, canUse2) ||
+    characterGrantsWeaponUse(characterCardId, weaponCardId, weaponSet)
+  );
 }
 
 export function isLightDuelist(cardId: string, set?: string): boolean {
@@ -108,6 +141,7 @@ export function isLightDuelist(cardId: string, set?: string): boolean {
   const id = cardId.toLowerCase();
   const persona = ((def as { persona?: string } | undefined)?.persona ?? "").toLowerCase();
   if (id.includes("anakinskywalker") || persona === "anakin") return false;
+  if (persona === "obiwan" || persona === "quigon") return true;
   const trait = ((def as { trait?: string } | undefined)?.trait ?? "").toLowerCase();
   return trait.split(",").map((s) => s.trim()).includes("jedi");
 }
@@ -126,12 +160,30 @@ function findAtLocation(state: GameStateData, side: Side, instanceId: string): C
   return getCharactersAtLocation(state, side, true).find((c) => c.instanceId === instanceId);
 }
 
-function duelPower(state: GameStateData, side: Side, char: CardInstance, weapon?: CardInstance, anakinPower?: number): number {
+function duelPower(
+  state: GameStateData,
+  side: Side,
+  char: CardInstance,
+  weapon?: CardInstance,
+  anakinPower?: number,
+  opponent?: CardInstance
+): number {
   const printed = printedPower(char.cardId, char.cardSet);
   let power = printed === "?" ? (anakinPower ?? 0) : printed;
   const loc = getCurrentLocationCard(state);
   if (loc) power += getLocationBonusForCharacter(char.cardId, loc.card.cardId);
-  if (weapon) power += getWeaponPowerAddForCharacter(weapon.cardId, char.cardId, weapon.cardSet);
+  if (weapon) power += getWeaponPowerAddForCharacter(weapon.cardId, char.cardId, weapon.cardSet, opponent?.cardId);
+  power += getGametextBonusForCharacter(
+    char.cardId,
+    char.cardSet,
+    weapon?.cardId,
+    opponent?.cardId,
+    weapon?.cardSet,
+    undefined,
+    undefined,
+    state,
+    true
+  ).bonus;
   return Math.max(0, power);
 }
 
@@ -152,6 +204,24 @@ function drawDuelHand(p: { deck: CardInstance[]; }, count: number): CardInstance
     hand.push(card);
   }
   return hand;
+}
+
+function duelBonusDrawsForCard(cardId: string, set?: string): number {
+  const def = getCard(cardId, set);
+  if (!def) return 0;
+  const d = def as { gametextbonus?: string; grayboxbonus?: string };
+  const text = `${d.gametextbonus ?? ""};${d.grayboxbonus ?? ""}`.toLowerCase();
+  const m = text.match(/duel:draw(\d+)/);
+  if (!m) return 0;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+
+function applyDuelHandBonusDraws(state: GameStateData, d: DuelState): void {
+  const extraLight = d.lightDuelHand.reduce((sum, c) => sum + duelBonusDrawsForCard(c.cardId, c.cardSet), 0);
+  const extraDark = d.darkDuelHand.reduce((sum, c) => sum + duelBonusDrawsForCard(c.cardId, c.cardSet), 0);
+  if (extraLight > 0) d.lightDuelHand.push(...drawDuelHand(state.light, extraLight));
+  if (extraDark > 0) d.darkDuelHand.push(...drawDuelHand(state.dark, extraDark));
 }
 
 function restoreHands(state: GameStateData): void {
@@ -193,16 +263,23 @@ function discardInPlay(state: GameStateData, side: Side, instanceId?: string): v
   p.discard.push(card);
 }
 
-function markFought(state: GameStateData, ...ids: (string | undefined)[]): void {
-  if (!state.foughtThisTurn) state.foughtThisTurn = [];
-  for (const id of ids) {
-    if (id && !state.foughtThisTurn.includes(id)) state.foughtThisTurn.push(id);
+function cardIdForInstance(state: GameStateData, instanceId?: string): string | undefined {
+  if (!instanceId) return undefined;
+  for (const p of [state.light, state.dark]) {
+    const zones = [p.inPlay, p.discard, p.hand, p.deck, p.hyperspace ?? []];
+    for (const z of zones) {
+      const c = z.find((x) => x.instanceId === instanceId);
+      if (c) return c.cardId;
+    }
   }
+  return undefined;
 }
 
 function endDuel(state: GameStateData, koSide?: Side): void {
   const d = state.duelState;
   if (!d) return;
+  const attackerCharId = cardIdForInstance(state, d.attackerCharInstanceId);
+  const defenderCharId = cardIdForInstance(state, d.defenderCharInstanceId);
   const attackerSide = d.initiator;
   const defenderSide: Side = attackerSide === "light" ? "dark" : "light";
   if (koSide) {
@@ -228,7 +305,7 @@ function endDuel(state: GameStateData, koSide?: Side): void {
     if (lightHits > darkHits) millFromDeck(state, "dark", lightHits - darkHits);
     else if (darkHits > lightHits) millFromDeck(state, "light", darkHits - lightHits);
   }
-  markFought(state, d.attackerCharInstanceId, d.attackerWeaponInstanceId, d.defenderCharInstanceId, d.defenderWeaponInstanceId);
+  markFoughtThisTurn(state, attackerCharId, defenderCharId);
   state.duelUsedThisTurn = true;
   state.duelState = undefined;
 }
@@ -304,8 +381,8 @@ function beginDuelHands(state: GameStateData, anakinPower?: number): void {
   const defWep = d.defenderWeaponInstanceId
     ? findAtLocation(state, defenderSide, d.defenderWeaponInstanceId)
     : undefined;
-  const atkPower = duelPower(state, attackerSide, atkChar, atkWep);
-  const defPower = duelPower(state, defenderSide, defChar, defWep, anakinPower);
+  const atkPower = duelPower(state, attackerSide, atkChar, atkWep, undefined, defChar);
+  const defPower = duelPower(state, defenderSide, defChar, defWep, anakinPower, atkChar);
   if (attackerSide === "light") {
     d.lightPower = atkPower;
     d.darkPower = defPower;
@@ -328,6 +405,7 @@ function beginDuelHands(state: GameStateData, anakinPower?: number): void {
   const darkDraw = attackerSide === "dark" ? atkPower : defPower;
   d.lightDuelHand = drawDuelHand(state.light, lightDraw);
   d.darkDuelHand = drawDuelHand(state.dark, darkDraw);
+  applyDuelHandBonusDraws(state, d);
   d.step = "play";
   d.currentAttacker = attackerSide;
 }
@@ -379,16 +457,14 @@ function checkKo(state: GameStateData): boolean {
   const defenderSide: Side = attackerSide === "light" ? "dark" : "light";
   const atkChar = findAtLocation(state, attackerSide, d.attackerCharInstanceId);
   const defChar = d.defenderCharInstanceId ? findAtLocation(state, defenderSide, d.defenderCharInstanceId) : undefined;
-  const atkHits = attackerSide === "light" ? d.darkHits : d.lightHits;
-  const defHits = defenderSide === "light" ? d.darkHits : d.lightHits;
-  const atkDmg = atkChar ? printedDamage(atkChar.cardId, atkChar.cardSet) : 99;
-  const defDmg = defChar ? printedDamage(defChar.cardId, defChar.cardSet) : 99;
-  if (atkHits >= atkDmg) {
-    endDuel(state, attackerSide);
+  const lightDmg = attackerSide === "light" ? (atkChar ? printedDamage(atkChar.cardId, atkChar.cardSet) : 99) : (defChar ? printedDamage(defChar.cardId, defChar.cardSet) : 99);
+  const darkDmg = attackerSide === "dark" ? (atkChar ? printedDamage(atkChar.cardId, atkChar.cardSet) : 99) : (defChar ? printedDamage(defChar.cardId, defChar.cardSet) : 99);
+  if (d.lightHits >= lightDmg) {
+    endDuel(state, "light");
     return true;
   }
-  if (defHits >= defDmg) {
-    endDuel(state, defenderSide);
+  if (d.darkHits >= darkDmg) {
+    endDuel(state, "dark");
     return true;
   }
   return false;
@@ -400,12 +476,15 @@ function maybeFinishEmpty(state: GameStateData): boolean {
   if (d.lightDuelHand.length > 0 || d.darkDuelHand.length > 0) return false;
   if (d.pendingAttack) {
     const hitSide: Side = d.pendingAttack.side === "light" ? "dark" : "light";
-    if (hitSide === "light") d.lightHits += 1;
-    else d.darkHits += 1;
+    const hits = hitsForPending(d.pendingAttack);
+    if (hitSide === "light") d.lightHits += hits;
+    else d.darkHits += hits;
     const atkP = d.pendingAttack.side === "light" ? d.lightPlayed : d.darkPlayed;
     const atkH = d.pendingAttack.side === "light" ? d.lightDuelHand : d.darkDuelHand;
-    const idx = atkH.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
-    if (idx >= 0) atkP.push(atkH.splice(idx, 1)[0]);
+    if (!d.pendingAttack.discarded) {
+      const idx = atkH.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
+      if (idx >= 0) atkP.push(atkH.splice(idx, 1)[0]);
+    }
     d.pendingAttack = undefined;
     if (checkKo(state)) return true;
   }
@@ -413,7 +492,12 @@ function maybeFinishEmpty(state: GameStateData): boolean {
   return true;
 }
 
-export function playDuelCard(state: GameStateData, side: Side, instanceId: string): boolean {
+export function playDuelCard(
+  state: GameStateData,
+  side: Side,
+  instanceId: string,
+  opts?: { discardForExtraHits?: boolean }
+): boolean {
   const d = state.duelState;
   if (!d || d.step !== "play") return false;
   const hand = side === "light" ? d.lightDuelHand : d.darkDuelHand;
@@ -425,7 +509,23 @@ export function playDuelCard(state: GameStateData, side: Side, instanceId: strin
 
   if (!d.pendingAttack) {
     if (d.currentAttacker !== side) return false;
-    d.pendingAttack = { instanceId: card.instanceId, cardId: card.cardId, destiny, side };
+    const useExtra = !!opts?.discardForExtraHits && cardAllowsDiscardExtraHits(card.cardId, card.cardSet);
+    if (useExtra) {
+      hand.splice(idx, 1);
+      const p = side === "light" ? state.light : state.dark;
+      card.zone = "discard";
+      card.faceDown = false;
+      p.discard.push(card);
+    }
+    d.pendingAttack = {
+      instanceId: card.instanceId,
+      cardId: card.cardId,
+      destiny,
+      side,
+      cardSet: card.cardSet,
+      bonusHits: useExtra ? 2 : undefined,
+      discarded: useExtra,
+    };
     const oppHand = side === "light" ? d.darkDuelHand : d.lightDuelHand;
     if (oppHand.length === 0) {
       maybeFinishEmpty(state);
@@ -440,24 +540,74 @@ export function playDuelCard(state: GameStateData, side: Side, instanceId: strin
     const atkPlayed = atkSide === "light" ? d.lightPlayed : d.darkPlayed;
     const atkIdx = atkHand.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
     if (atkIdx >= 0) atkPlayed.push(atkHand.splice(atkIdx, 1)[0]);
-    d.pendingAttack = { instanceId: card.instanceId, cardId: card.cardId, destiny, side };
+    const useExtra = !!opts?.discardForExtraHits && cardAllowsDiscardExtraHits(card.cardId, card.cardSet);
+    if (useExtra) {
+      hand.splice(idx, 1);
+      const p = side === "light" ? state.light : state.dark;
+      card.zone = "discard";
+      card.faceDown = false;
+      p.discard.push(card);
+    }
+    d.pendingAttack = {
+      instanceId: card.instanceId,
+      cardId: card.cardId,
+      destiny,
+      side,
+      cardSet: card.cardSet,
+      bonusHits: useExtra ? 2 : undefined,
+      discarded: useExtra,
+    };
     d.currentAttacker = side;
     return true;
   }
 
   const hitSide = side;
-  if (hitSide === "light") d.lightHits += 1;
-  else d.darkHits += 1;
+  const hits = hitsForPending(d.pendingAttack);
+  if (hitSide === "light") d.lightHits += hits;
+  else d.darkHits += hits;
   const atkSide = d.pendingAttack.side;
   const atkHand = atkSide === "light" ? d.lightDuelHand : d.darkDuelHand;
   const atkPlayed = atkSide === "light" ? d.lightPlayed : d.darkPlayed;
   const atkIdx = atkHand.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
-  if (atkIdx >= 0) atkPlayed.push(atkHand.splice(atkIdx, 1)[0]);
+  if (atkIdx >= 0 && !d.pendingAttack.discarded) atkPlayed.push(atkHand.splice(atkIdx, 1)[0]);
   played.push(hand.splice(idx, 1)[0]);
   d.pendingAttack = undefined;
   d.currentAttacker = side;
   if (checkKo(state)) return true;
   maybeFinishEmpty(state);
+  return true;
+}
+
+export function discardDuelCardForDraw(state: GameStateData, side: Side, instanceId: string): boolean {
+  const d = state.duelState;
+  if (!d || d.step !== "play") return false;
+  if (d.pendingAttack?.instanceId === instanceId && d.pendingAttack.side === side) return false;
+  const hand = side === "light" ? d.lightDuelHand : d.darkDuelHand;
+  const idx = hand.findIndex((c) => c.instanceId === instanceId);
+  if (idx < 0) return false;
+  const card = hand[idx];
+  if (!duelCardText(card.cardId, card.cardSet).includes("duel:discard:draw2")) return false;
+  hand.splice(idx, 1);
+  const p = side === "light" ? state.light : state.dark;
+  card.zone = "discard";
+  card.faceDown = false;
+  p.discard.push(card);
+  hand.push(...drawDuelHand(p, 2));
+  return true;
+}
+
+export function removeDuelHit(state: GameStateData, side: Side, instanceId: string): boolean {
+  const d = state.duelState;
+  if (!d || d.step !== "play") return false;
+  const hand = side === "light" ? d.lightDuelHand : d.darkDuelHand;
+  const card = hand.find((c) => c.instanceId === instanceId);
+  if (!card || !cardAllowsRemoveHit(card.cardId, card.cardSet)) return false;
+  if ((d.hitRemovalUsed ?? []).includes(instanceId)) return false;
+  const hits = side === "light" ? d.lightHits : d.darkHits;
+  if (hits <= 0) return false;
+  if (side === "light") d.lightHits -= 1;
+  else d.darkHits -= 1;
+  d.hitRemovalUsed = [...(d.hitRemovalUsed ?? []), instanceId];
   return true;
 }
 
@@ -482,6 +632,7 @@ export function snapshotDuel(state: GameStateData, forSide?: Side): Record<strin
       ? { cardId: d.pendingAttack.cardId, destiny: d.pendingAttack.destiny, side: d.pendingAttack.side }
       : undefined,
     anakinDestinyCardId: d.anakinDestinyCardId,
+    hitRemovalUsed: d.hitRemovalUsed ?? [],
   };
   if (forSide === "light") {
     view.yourDuelHand = d.lightDuelHand.map((c) => ({

@@ -81,6 +81,8 @@ function getActor(
     if (g.planetEffectFetch && g.planetEffectFetch.chooserSide !== side) return false;
     if (g.deployFromDeckPending?.side === side) return true;
     if (g.deployFromDeckPending && g.deployFromDeckPending.side !== side) return false;
+    if (g.winControlPending?.side === side) return true;
+    if (g.winControlPending && g.winControlPending.side !== side) return false;
     if (g.duelState) {
       const d = g.duelState;
       if (d.step === "choose_target" && d.initiator === side) return true;

@@ -13,6 +13,8 @@ import * as memory from "./bot-memory";
 import { usesHyperspace, usesDueling, usesPlanetEffectFetch, usesDeployFromDeck } from "./ruleset";
 import * as hyperspace from "./hyperspace";
 import * as duel from "./duel";
+import * as winControl from "./win-control";
+import * as deployFromDeck from "./deploy-from-deck";
 
 export type BotStyle = "balanced" | "aggressive" | "passive";
 
@@ -156,7 +158,11 @@ function canWeaponBeUsedBy(weaponCardId: string, characterCardId: string): boole
   const def = getCard(weaponCardId);
   if (!def || (def as { type?: string }).type !== "weapon") return false;
   const d = def as { canUse?: string; canUse2?: string };
-  return characterMatchesCanUse(characterCardId, d.canUse) || characterMatchesCanUse(characterCardId, d.canUse2);
+  return (
+    characterMatchesCanUse(characterCardId, d.canUse) ||
+    characterMatchesCanUse(characterCardId, d.canUse2) ||
+    state.characterGrantsWeaponUse(characterCardId, weaponCardId)
+  );
 }
 
 function canBattleCardBeUsedBy(battleCardId: string, characterCardId: string): boolean {
@@ -271,6 +277,16 @@ export function isBotActionRequired(g: GameStateData): boolean {
   if (g.planetEffectFetch && g.planetEffectFetch.chooserSide !== botSide) return false;
   if (g.deployFromDeckPending?.side === botSide) return true;
   if (g.deployFromDeckPending && g.deployFromDeckPending.side !== botSide) return false;
+  if (g.jediTrainingPending?.side === botSide) return true;
+  if (g.jediTrainingPending && g.jediTrainingPending.side !== botSide) return false;
+  if (g.poundedPending?.side === botSide) return true;
+  if (g.poundedPending && g.poundedPending.side !== botSide) return false;
+  if (g.deployDrawPending?.side === botSide) return true;
+  if (g.deployDrawPending && g.deployDrawPending.side !== botSide) return false;
+  if (g.effectActivationPending?.side === botSide) return true;
+  if (g.effectActivationPending && g.effectActivationPending.side !== botSide) return false;
+  if (g.winControlPending?.side === botSide) return true;
+  if (g.winControlPending && g.winControlPending.side !== botSide) return false;
   if (g.duelState) {
     const d = g.duelState;
     if (d.step === "choose_target" && d.initiator === botSide) return true;
@@ -326,6 +342,96 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     return { kind: "decline_deploy_from_deck" };
   }
 
+  if (g.effectActivationPending?.side === botSide && g.effectActivationPending.kind === "peek_opp_deck") {
+    const peeked = g.effectActivationPending.peekedCardId ?? "";
+    const bury = getDestiny(peeked) >= 3 || getCardType(peeked) === "character";
+    return { kind: "peek_deck_choice", place: bury ? "bottom" : "top" };
+  }
+
+  if (g.effectActivationPending?.side === botSide && g.effectActivationPending.kind === "bottom_hand") {
+    const ranked = [...p.hand].sort((a, b) => {
+      const aChar = getCardType(a.cardId) === "character" ? 1 : 0;
+      const bChar = getCardType(b.cardId) === "character" ? 1 : 0;
+      if (aChar !== bChar) return aChar - bChar;
+      return getDestiny(a.cardId) - getDestiny(b.cardId);
+    });
+    if (ranked.length === 0) return { kind: "effect_decline" };
+    return { kind: "bottom_hand_card", instanceId: ranked[0].instanceId };
+  }
+
+  if (g.deployDrawPending?.side === botSide) {
+    const deck = (botSide === "light" ? g.light : g.dark).deck;
+    return deck.length > 0 ? { kind: "confirm_deploy_draw" } : { kind: "decline_deploy_draw" };
+  }
+
+  if (g.jediTrainingPending?.side === botSide) {
+    const affordable = g.jediTrainingPending.choices.filter((c) => c.cost <= force);
+    if (affordable.length === 0) return { kind: "decline_jedi_training" };
+    affordable.sort((a, b) => {
+      const ap = Math.floor(Number((getCard(a.cardId, a.set) as { powerAdd?: number } | undefined)?.powerAdd)) || 0;
+      const bp = Math.floor(Number((getCard(b.cardId, b.set) as { powerAdd?: number } | undefined)?.powerAdd)) || 0;
+      return bp - ap;
+    });
+    return { kind: "confirm_jedi_training", instanceId: affordable[0].instanceId };
+  }
+
+  if (phase === "deploy" && g.turnSide === botSide && !g.effectActivationPending && !g.jediTrainingPending) {
+    const used = g.usedEffectsThisTurn ?? [];
+    const oppDeck = (botSide === "light" ? g.dark : g.light).deck;
+    const peek = p.inPlay.find((c) => {
+      if (c.faceDown || used.includes(c.instanceId)) return false;
+      const def = getCard(c.cardId, c.cardSet) as { type?: string; effects?: string } | undefined;
+      return def?.type === "effect" && (def.effects ?? "").toLowerCase().includes("peekopp:top");
+    });
+    if (peek && oppDeck.length > 0) return { kind: "effect_offer", effectInstanceId: peek.instanceId };
+    const meditation = p.inPlay.find((c) => {
+      if (c.faceDown || used.includes(c.instanceId)) return false;
+      const def = getCard(c.cardId, c.cardSet) as { type?: string; effects?: string } | undefined;
+      return def?.type === "effect" && (def.effects ?? "").toLowerCase().includes("bottomhand:");
+    });
+    if (meditation && p.hand.length > 0) return { kind: "effect_offer", effectInstanceId: meditation.instanceId };
+    const usedDeploy = g.usedEffectsThisTurn ?? [];
+    const discardCandidates = [
+      ...p.inPlay.filter((c) => !c.faceDown),
+      ...(p.hyperspace ?? []),
+    ];
+    const discardDeploy = discardCandidates.find((c) => {
+      if (usedDeploy.includes(c.instanceId)) return false;
+      const bonus = ((getCard(c.cardId, c.cardSet) as { gametextbonus?: string } | undefined)?.gametextbonus ?? "").toLowerCase();
+      return bonus.includes("discardsearcher");
+    });
+    if (discardDeploy) {
+      const clause = deployFromDeck.parseDeployFromDeck(discardDeploy.cardId, discardDeploy.cardSet);
+      const hasTarget = !!clause && p.deck.some((c) =>
+        deployFromDeck.cardMatchesDeployTarget(c.cardId, clause.targetId, c.cardSet, clause.nonUnique)
+      );
+      if (hasTarget) return { kind: "start_in_play_deploy", instanceId: discardDeploy.instanceId };
+    }
+  }
+
+  if (g.winControlPending?.side === botSide) {
+    const n = g.winControlPending.discardHand;
+    const hand = (botSide === "light" ? g.light : g.dark).hand;
+    if (hand.length < n) return { kind: "cancel_win_control" };
+    return { kind: "confirm_win_control", instanceIds: hand.slice(0, n).map((c) => c.instanceId) };
+  }
+
+  if (phase === "deploy" && g.turnSide === botSide && !g.winControlPending) {
+    const handSize = (botSide === "light" ? g.light : g.dark).hand.length;
+    for (const t of winControl.findWinControlTargets(g, botSide)) {
+      const planets = g.controlledPlanets ?? [];
+      const cp = planets[t.planetIndex];
+      const strandedKey = botSide === "light" ? "strandedLight" : "strandedDark";
+      const card = ((cp?.[strandedKey] ?? []) as { instanceId: string; cardId: string }[]).find(
+        (c) => c.instanceId === t.instanceId
+      );
+      const ability = card ? winControl.parseWinControlAbility(card.cardId) : null;
+      if (ability && handSize >= ability.discardHand) {
+        return { kind: "activate_win_control", instanceId: t.instanceId, planetIndex: t.planetIndex };
+      }
+    }
+  }
+
   if (g.duelState && usesDueling(g)) {
     const d = g.duelState;
     if (d.step === "choose_target" && d.initiator === botSide) {
@@ -340,15 +446,31 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     if (d.step === "play") {
       const hand = (botSide === "light" ? d.lightDuelHand : d.darkDuelHand) ?? [];
       if (hand.length === 0) return null;
+      const hitsOnBot = botSide === "light" ? d.lightHits : d.darkHits;
+      const used = d.hitRemovalUsed ?? [];
+      const remover = hand.find((c) => {
+        if (used.includes(c.instanceId)) return false;
+        const def = getCard(c.cardId, c.cardSet) as { grayboxbonus?: string; gametextbonus?: string } | undefined;
+        const text = `${def?.gametextbonus ?? ""};${def?.grayboxbonus ?? ""}`.toLowerCase();
+        return text.includes("duel:removehit");
+      });
+      if (hitsOnBot > 0 && remover) return { kind: "duel_remove_hit", instanceId: remover.instanceId };
+      const extraHits = (c: { cardId: string; cardSet?: string }) => {
+        const def = getCard(c.cardId, c.cardSet) as { grayboxbonus?: string; gametextbonus?: string } | undefined;
+        const text = `${def?.gametextbonus ?? ""};${def?.grayboxbonus ?? ""}`.toLowerCase();
+        return text.includes("duel:discard:extrahit2");
+      };
       if (d.pendingAttack && d.pendingAttack.side !== botSide) {
         const match = hand.find((c) => {
           const def = getCard(c.cardId, c.cardSet) as { destiny?: number } | undefined;
           return typeof def?.destiny === "number" && def.destiny === d.pendingAttack!.destiny;
         });
-        return { kind: "duel_play_card", instanceId: (match ?? hand[0]).instanceId };
+        const play = match ?? hand[0];
+        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: !!match && extraHits(play) };
       }
       if (!d.pendingAttack && d.currentAttacker === botSide) {
-        return { kind: "duel_play_card", instanceId: hand[0].instanceId };
+        const play = hand[0];
+        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: extraHits(play) };
       }
     }
     return null;
@@ -699,6 +821,27 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   }
 
   if (phase === "even_up") {
+    if (g.poundedPending?.side === botSide) {
+      const targets = g.poundedPending.targets;
+      if (targets.length === 0) return { kind: "decline_pounded" };
+      const best = [...targets].sort((a, b) => getPower(b.cardId) - getPower(a.cardId))[0];
+      return { kind: "confirm_pounded", instanceId: best.instanceId };
+    }
+    const poundedEffect = p.inPlay.find((c) => {
+      if (c.faceDown) return false;
+      const def = getCard(c.cardId, c.cardSet) as { type?: string; effects?: string } | undefined;
+      return def?.type === "effect" && (def.effects ?? "").toLowerCase().includes("discardopp:nonunique");
+    });
+    if (poundedEffect) {
+      const oppPlay = (botSide === "light" ? g.dark : g.light).inPlay;
+      const locId = g.startingLocationInstanceId;
+      const hasTarget = oppPlay.some((c) => {
+        if (c.instanceId === locId || c.faceDown) return false;
+        const def = getCard(c.cardId, c.cardSet) as { uniqueness?: boolean; unique?: boolean; type?: string } | undefined;
+        return !!def && def.type !== "location" && (def.uniqueness === false || def.unique === false);
+      });
+      if (hasTarget) return { kind: "effect_offer", effectInstanceId: poundedEffect.instanceId };
+    }
     const handSize = p.hand.length;
     const evenUpTarget = state.getEffectEvenUpTarget(g, botSide);
     const deckSize = p.deck.length;
