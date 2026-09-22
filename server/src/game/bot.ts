@@ -141,17 +141,34 @@ function isCharacter(cardId: string): boolean {
   return getCardType(cardId) === "character";
 }
 
-function characterMatchesCanUse(characterCardId: string, canUse: string | undefined): boolean {
-  if (!canUse || !canUse.trim()) return false;
-  const seg = canUse.trim().toLowerCase();
+function characterMatchesCanUseSegment(characterCardId: string, segment: string): boolean {
+  let seg = segment.trim().toLowerCase();
+  if (!seg) return false;
+  let requireNonUnique = false;
+  if (seg.startsWith("◆")) {
+    requireNonUnique = true;
+    seg = seg.slice(1);
+  }
   if (seg === "any") return true;
   const def = getCard(characterCardId);
   if (!def) return false;
+  if (requireNonUnique && (def as { uniqueness?: boolean }).uniqueness === true) return false;
   const d = def as { persona?: string; trait?: string; name?: string };
   const persona = (d.persona ?? "").toLowerCase();
-  const trait = (d.trait ?? "").toLowerCase();
+  const traits = (d.trait ?? "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
   const name = (d.name ?? "").toLowerCase();
-  return persona.includes(seg) || trait.includes(seg) || name.includes(seg);
+  const nameNoSpaces = name.replace(/\s/g, "");
+  const id = characterCardId.toLowerCase();
+  return persona === seg || traits.includes(seg) || name.includes(seg) || nameNoSpaces.includes(seg) || id.includes(seg);
+}
+
+function characterMatchesCanUse(characterCardId: string, canUse: string | undefined): boolean {
+  if (!canUse || !canUse.trim()) return false;
+  return canUse
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .some((seg) => characterMatchesCanUseSegment(characterCardId, seg));
 }
 
 function canWeaponBeUsedBy(weaponCardId: string, characterCardId: string): boolean {
@@ -198,7 +215,54 @@ function weaponMatchesAny(weaponId: string, characters: { cardId: string }[]): b
 }
 
 function battleMatchesAny(battleId: string, characters: { cardId: string }[]): boolean {
-  return characters.some((ch) => isCharacter(ch.cardId) && canBattleCardBeUsedBy(battleId, ch.cardId));
+  const chars = characters.filter((ch) => isCharacter(ch.cardId));
+  const def = getCard(battleId) as { condition?: string; canUse?: string } | undefined;
+  const condition = (def?.condition ?? "").toLowerCase();
+  if (condition.includes("fighttogether")) {
+    const segments = (def?.canUse ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (segments.length < 2) return false;
+    for (let i = 0; i < chars.length; i++) {
+      for (let j = i + 1; j < chars.length; j++) {
+        const covered = segments.every(
+          (seg) =>
+            characterMatchesCanUseSegment(chars[i].cardId, seg) ||
+            characterMatchesCanUseSegment(chars[j].cardId, seg)
+        );
+        if (covered) return true;
+      }
+    }
+    return false;
+  }
+  return chars.some((ch) => canBattleCardBeUsedBy(battleId, ch.cardId));
+}
+
+function shipMatchesBattleToken(cardId: string, cardSet: string | undefined, token: string): boolean {
+  const def = getCard(cardId, cardSet) as { trait?: string; name?: string; type?: string } | undefined;
+  const trait = (def?.trait ?? "").toLowerCase();
+  const type = (def?.type ?? "").toLowerCase();
+  const name = (def?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const id = cardId.toLowerCase();
+  const t = token.toLowerCase().replace(/^◆/, "").replace(/[^a-z0-9]/g, "");
+  if (!t) return false;
+  return trait === t || type === t || id.includes(t) || name.includes(t);
+}
+
+function battleCardMatchesShips(battleId: string, ships: { cardId: string; cardSet?: string }[]): boolean {
+  const def = getCard(battleId) as { type?: string; canUse?: string; gametextbonus?: string } | undefined;
+  if (!def || def.type !== "battle" || ships.length === 0) return false;
+  const bonus = (def.gametextbonus ?? "").toLowerCase();
+  const pair = bonus.match(/ships:([^;]+)/);
+  if (pair) {
+    const kinds = pair[1].split(",").map((s) => s.trim()).filter(Boolean);
+    return kinds.every((kind) => ships.some((s) => shipMatchesBattleToken(s.cardId, s.cardSet, kind)));
+  }
+  const canUse = (def.canUse ?? "").trim();
+  if (!canUse || canUse.toLowerCase() === "any") return false;
+  return canUse
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .some((seg) => ships.some((s) => shipMatchesBattleToken(s.cardId, s.cardSet, seg)));
 }
 
 function bestWeaponAdd(weaponId: string, weaponSet: string | undefined, characters: { cardId: string }[]): number {
@@ -469,6 +533,15 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: !!match && extraHits(play) };
       }
       if (!d.pendingAttack && d.currentAttacker === botSide) {
+        const drawers = hand.filter((c) => {
+          const def = getCard(c.cardId, c.cardSet) as { grayboxbonus?: string; gametextbonus?: string } | undefined;
+          const text = `${def?.gametextbonus ?? ""};${def?.grayboxbonus ?? ""}`.toLowerCase();
+          return text.includes("duel:discard:draw2");
+        });
+        const bestDestiny = hand.reduce((n, c) => Math.max(n, getDestiny(c.cardId)), 0);
+        const sacrifice =
+          drawers.find((c) => getDestiny(c.cardId) < bestDestiny) ?? (hand.length <= 2 ? drawers[0] : undefined);
+        if (sacrifice) return { kind: "duel_discard_draw", instanceId: sacrifice.instanceId };
         const play = hand[0];
         return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: extraHits(play) };
       }
@@ -477,7 +550,9 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   }
 
   if (g.starshipBattlePhase && g.battleCardDeclareSide === botSide) {
-    return { kind: "declare_battle_cards", battleCardInstanceIds: [] };
+    const ships = hyperspace.getHyperspace(g, botSide);
+    const usable = p.hand.filter((c) => getCardType(c.cardId) === "battle" && battleCardMatchesShips(c.cardId, ships));
+    return { kind: "declare_battle_cards", battleCardInstanceIds: usable.slice(0, 2).map((c) => c.instanceId) };
   }
   if (g.starshipBattlePhase && g.battlePlanPhase && (botSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) {
     const ships = hyperspace.getHyperspace(g, botSide);
@@ -635,7 +710,11 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
 
       if (type !== "character" && type !== "weapon" && type !== "effect") continue;
       const cost =
-        type === "character" ? state.getDeployCostWithGametextBonus(g, botSide, c.cardId, c.cardSet) : getCost(c.cardId);
+        type === "character"
+          ? state.getDeployCostWithGametextBonus(g, botSide, c.cardId, c.cardSet)
+          : type === "weapon"
+            ? state.getWeaponDeployCost(g, botSide, c.cardId, c.cardSet)
+            : getCost(c.cardId);
       if (cost > force) continue;
       const def = getCard(c.cardId) as { side?: string };
       if (def?.side && def.side !== botSide) continue;
@@ -685,6 +764,22 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         const evenBonus = state.getEffectEvenUpBonus(c.cardId, c.cardSet);
         const deployBonus = state.getEffectYourDeployCounters(c.cardId, c.cardSet);
         score += evenBonus * 1.2 + deployBonus * 0.8;
+        const eff = getCard(c.cardId, c.cardSet) as { powerAdd?: number; canUse?: string; effects?: string } | undefined;
+        const powerAdd = typeof eff?.powerAdd === "number" ? eff.powerAdd : 0;
+        if (powerAdd > 0 && charsOnly(myBoard).some((ch) => characterMatchesCanUse(ch.cardId, eff?.canUse))) {
+          score += powerAdd;
+        }
+        const free = (eff?.effects ?? "").toLowerCase().match(/deployfree:([a-z0-9]+)/);
+        if ((eff?.effects ?? "").toLowerCase().includes("discardopp:nonunique")) score += 2;
+        if (free) {
+          const token = free[1];
+          const hasWeapon = p.hand.some((w) => {
+            if (getCardType(w.cardId) !== "weapon") return false;
+            const name = ((getCard(w.cardId) as { name?: string } | undefined)?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+            return w.cardId.toLowerCase().includes(token) || name.includes(token);
+          });
+          if (hasWeapon) score += 2.5;
+        }
         if (aggressive) score -= 0.5;
         playable.push({ instanceId: c.instanceId, cardId: c.cardId, cost, type, score });
       }
