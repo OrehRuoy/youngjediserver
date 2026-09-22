@@ -51,6 +51,7 @@ export function handleGameAction(
       };
     }
     if (g.jediTrainingPending?.side === side) return { applied: false, error: "Finish choosing a lightsaber first" };
+    if (g.damageReplacePending?.side === side) return { applied: false, error: "Choose a destiny number to replace, or skip" };
     if (g.poundedPending?.side === side) return { applied: false, error: "Finish choosing a card to discard" };
     if (g.deployDrawPending?.side === side) return { applied: false, error: "Choose whether to draw a card" };
     const card = state.findInHand(g, side, instanceId);
@@ -159,6 +160,7 @@ export function handleGameAction(
       return { applied: false, error: "Cancel the effect ability or discard a card for it before passing" };
     }
     if (g.jediTrainingPending?.side === side) return { applied: false, error: "Finish choosing a lightsaber first" };
+    if (g.damageReplacePending?.side === side) return { applied: false, error: "Choose a destiny number to replace, or skip" };
     if (g.poundedPending?.side === side) return { applied: false, error: "Finish choosing a card to discard" };
     if (g.deployDrawPending?.side === side) return { applied: false, error: "Choose whether to draw a card" };
     if (g.evacuationState) return { applied: false, error: "Cannot pass phase during an evacuation" };
@@ -671,6 +673,21 @@ export function handleGameAction(
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
+  }
+
+  if (action.kind === "confirm_damage_replace") {
+    const key = action.key as string | undefined;
+    if (!key) return { applied: false, error: "Pick one of your destiny numbers" };
+    const ok = state.confirmDamageReplace(g, side, key);
+    if (!ok) return { applied: false, error: "That destiny number cannot be replaced" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "decline_damage_replace") {
+    const ok = state.declineDamageReplace(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No damage replacement to skip" };
   }
 
   return { applied: false, error: "Unknown action" };

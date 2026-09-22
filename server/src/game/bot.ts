@@ -335,6 +335,7 @@ export function isBotActionRequired(g: GameStateData): boolean {
   const botSide = getBotSide(g);
   if (!botSide) return false;
   if (g.phase === "game_over") return false;
+  if (g.damageReplacePending) return g.damageReplacePending.side === botSide;
   if (g.evacuationState?.awaitingInterception && g.evacuationState.evacuatingSide !== botSide) return true;
   if (g.evacuationResult) return true;
   if (g.planetEffectFetch?.chooserSide === botSide) return true;

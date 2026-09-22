@@ -207,6 +207,14 @@ function broadcastToGame(gameId: string, msg: object): void {
   if (dark) send(dark.ws, msg);
 }
 
+/** Each player gets the choices that belong to their side (effects, lightsabers, duel hand). */
+function broadcastGameState(g: import("./game/state").GameStateData): void {
+  const light = lobby.getPlayer(g.lightPlayerId);
+  const dark = lobby.getPlayer(g.darkPlayerId);
+  if (light) send(light.ws, { type: "game_state", gameId: g.id, state: gameState.toSnapshot(g, "light") });
+  if (dark) send(dark.ws, { type: "game_state", gameId: g.id, state: gameState.toSnapshot(g, "dark") });
+}
+
 /** Remove the game's table from lobby (Playing tables) and broadcast updated tables to all clients. */
 function removeTableAndBroadcastLobby(gameId: string): void {
   const g = gameEngine.getGame(gameId);
@@ -284,8 +292,7 @@ function runBotTurn(gameId: string): void {
     return;
   }
   updated = gameEngine.getGame(gameId)!;
-  const snap = gameState.toSnapshot(updated);
-  broadcastToGame(gameId, { type: "game_state", gameId, state: snap });
+  broadcastGameState(updated);
   if (updated.battleRevealSequence) updated.battleRevealSequence = undefined;
   const lightP = lobby.getPlayer(updated.lightPlayerId);
   const darkP = lobby.getPlayer(updated.darkPlayerId);
@@ -315,8 +322,7 @@ function createPhaseTimerCallback(_gameId: string): (game: import("./game/state"
       scheduleGameEndCleanup(game.id);
       return;
     }
-    const snap = gameState.toSnapshot(game);
-    broadcastToGame(game.id, { type: "game_state", gameId: game.id, state: snap });
+    broadcastGameState(game);
     const lp = lobby.getPlayer(game.lightPlayerId);
     const dp = lobby.getPlayer(game.darkPlayerId);
     if (lp) send(lp.ws, { type: "game_hand", hand: gameState.getHandWithInstanceIds(game, "light") });
@@ -330,8 +336,7 @@ function scheduleDestinyCompareResolve(gameId: string): void {
     const g = gameEngine.getGame(gameId);
     if (!g || g.phase !== "determine_first") return;
     const result = gameState.resolveDestinyCompare(g);
-    const snap = gameState.toSnapshot(g);
-    broadcastToGame(gameId, { type: "game_state", gameId, state: snap });
+    broadcastGameState(g);
     afterGameStateBroadcast(gameId);
     if (result.done) {
       const lightP = lobby.getPlayer(g.lightPlayerId);
@@ -569,20 +574,18 @@ wss.on("connection", (ws, req) => {
           for (let i = 0; i < n; i++) computerCardIds.push(e.id);
         }
         g.botStyle = bot.resolveBotStyle(msg.botStyle, computerCardIds);
-        const snapshot = gameState.toSnapshot(g);
         const phaseEndsAt = g.phaseStartedAt + g.phaseDurationMs;
-        const startedMsg = {
-          type: "game_started" as const,
-          tableId: table.id,
-          gameId,
-          side: undefined as Side | undefined,
-          state: { ...snapshot, phaseEndsAt },
-        };
         const humanWs = lightP?.ws ?? darkP?.ws;
         if (humanWs) {
           const tableSummary = lobby.getTableSummary(table.id);
           if (tableSummary) send(humanWs, { type: "table_update", table: tableSummary });
-          send(humanWs, { ...startedMsg, side: playerSide });
+          send(humanWs, {
+            type: "game_started" as const,
+            tableId: table.id,
+            gameId,
+            side: playerSide,
+            state: { ...gameState.toSnapshot(g, playerSide), phaseEndsAt },
+          });
           send(humanWs, { type: "game_hand", hand: gameState.getHandWithInstanceIds(g, playerSide) });
         }
         const lobbySnapshot = lobbyHandlers.buildLobbySnapshot();
@@ -595,8 +598,7 @@ wss.on("connection", (ws, req) => {
             const game = gameEngine.getGame(gameId);
             if (!game || game.phase !== "determine_first") return;
             gameState.runDestinyCompareRound(game);
-            const snap = gameState.toSnapshot(game);
-            broadcastToGame(gameId, { type: "game_state", gameId, state: snap });
+            broadcastGameState(game);
             scheduleDestinyCompareResolve(gameId);
           }, GAME_START_DELAY_MS);
         } else if (!bot.isBotGame(g)) {
@@ -631,21 +633,25 @@ wss.on("connection", (ws, req) => {
           table.darkCustomCards
         );
         const g = gameEngine.getGame(gameId)!;
-        const snapshot = gameState.toSnapshot(g);
         const phaseEndsAt = g.phaseStartedAt + g.phaseDurationMs;
-        const startedMsg = {
-          type: "game_started" as const,
-          tableId: table.id,
-          gameId,
-          side: undefined as Side | undefined,
-          state: { ...snapshot, phaseEndsAt },
-        };
         if (lightP) {
-          send(lightP.ws, { ...startedMsg, side: "light" as Side });
+          send(lightP.ws, {
+            type: "game_started" as const,
+            tableId: table.id,
+            gameId,
+            side: "light" as Side,
+            state: { ...gameState.toSnapshot(g, "light"), phaseEndsAt },
+          });
           send(lightP.ws, { type: "game_hand", hand: gameState.getHandWithInstanceIds(g, "light") });
         }
         if (darkP) {
-          send(darkP.ws, { ...startedMsg, side: "dark" as Side });
+          send(darkP.ws, {
+            type: "game_started" as const,
+            tableId: table.id,
+            gameId,
+            side: "dark" as Side,
+            state: { ...gameState.toSnapshot(g, "dark"), phaseEndsAt },
+          });
           send(darkP.ws, { type: "game_hand", hand: gameState.getHandWithInstanceIds(g, "dark") });
         }
         const lobbySnapshot = lobbyHandlers.buildLobbySnapshot();
@@ -657,8 +663,7 @@ wss.on("connection", (ws, req) => {
             const game = gameEngine.getGame(gameId);
             if (!game || game.phase !== "determine_first") return;
             gameState.runDestinyCompareRound(game);
-            const snap = gameState.toSnapshot(game);
-            broadcastToGame(gameId, { type: "game_state", gameId, state: snap });
+            broadcastGameState(game);
             scheduleDestinyCompareResolve(gameId);
           }, GAME_START_DELAY_MS);
         } else {
@@ -721,7 +726,7 @@ wss.on("connection", (ws, req) => {
         } else {
           g = gameEngine.getGame(g.id);
           if (g) {
-            broadcastToGame(g.id, { type: "game_state", gameId: g.id, state: gameState.toSnapshot(g) });
+            broadcastGameState(g);
             if (g.battleRevealSequence) {
               g.battleRevealSequence = undefined;
             }
