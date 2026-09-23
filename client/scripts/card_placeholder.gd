@@ -109,9 +109,12 @@ func set_card(card_id: String, instance_id: String = "", side_hint: String = "",
 	if face_down and img:
 		var back_path: String = "res://assets/card_back_light.png" if (side_hint == "light" or info.get("side", "") == "light") else "res://assets/card_back_dark.png"
 		var back_tex := load(back_path) as Texture2D
+		if back_tex and CardCatalog:
+			back_tex = CardCatalog.smooth_texture(back_tex)
 		if back_tex:
 			_current_texture = null
 			img.texture = back_tex
+			img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 			img.visible = true
 			if lbl:
 				lbl.visible = false
@@ -202,7 +205,6 @@ func _show_hover_popup() -> void:
 		return
 	var root: Window = get_tree().root
 	var popup: PanelContainer = PanelContainer.new()
-	popup.mouse_filter = Control.MOUSE_FILTER_STOP
 	var margin: MarginContainer = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
 	margin.add_theme_constant_override("margin_top", 12)
@@ -233,15 +235,13 @@ func _show_hover_popup() -> void:
 	if popup.position.y < 0:
 		popup.position.y = 8
 	popup.size = popup_size
+	_ignore_mouse(popup)
 	_attach_hover_popup(root, popup)
-	popup.mouse_entered.connect(_on_popup_mouse_entered)
-	popup.mouse_exited.connect(_on_popup_mouse_exited)
 
 
 func _show_face_down_hover_popup() -> void:
 	var root: Window = get_tree().root
 	var popup: PanelContainer = PanelContainer.new()
-	popup.mouse_filter = Control.MOUSE_FILTER_STOP
 	var margin: MarginContainer = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
 	margin.add_theme_constant_override("margin_top", 12)
@@ -286,9 +286,15 @@ func _show_face_down_hover_popup() -> void:
 	if popup.position.y < 0:
 		popup.position.y = 8
 	popup.size = popup_size
+	_ignore_mouse(popup)
 	_attach_hover_popup(root, popup)
-	popup.mouse_entered.connect(_on_popup_mouse_entered)
-	popup.mouse_exited.connect(_on_popup_mouse_exited)
+
+
+func _ignore_mouse(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_ignore_mouse(child)
 
 
 func _attach_hover_popup(root: Window, popup: Control) -> void:

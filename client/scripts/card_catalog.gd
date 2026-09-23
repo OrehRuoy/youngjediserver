@@ -93,6 +93,32 @@ func get_card_image_paths(card_id: String, side_hint: String = "", set_hint: Str
 	return paths
 
 
+var _smooth_cache: Dictionary = {}
+
+## Upscale a small texture in memory so it stays sharp when drawn larger. Does not rewrite the file.
+func smooth_texture(source: Texture2D) -> Texture2D:
+	if source == null:
+		return null
+	var key := source.resource_path
+	if key.is_empty():
+		key = str(source.get_instance_id())
+	if _smooth_cache.has(key):
+		return _smooth_cache[key]
+	var img := source.get_image()
+	if img == null or img.is_empty():
+		return source
+	if img.is_compressed():
+		img.decompress()
+	var w := img.get_width()
+	var h := img.get_height()
+	if w > 0 and h > 0 and w < 480:
+		img.resize(w * 3, h * 3, Image.INTERPOLATE_LANCZOS)
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	_smooth_cache[key] = tex
+	return tex
+
+
 func load_card_texture(card_id: String, side_hint: String = "", set_hint: String = "") -> Texture2D:
 	if card_id.is_empty():
 		return null

@@ -960,7 +960,7 @@ func _refresh_slot_display(color_name: String) -> void:
 		card_tex.custom_minimum_size = Vector2(42, 60)
 		card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-		card_tex.tooltip_text = card.get("name", "")
+		card_tex.tooltip_text = ""
 		card_tex.mouse_filter = Control.MOUSE_FILTER_STOP
 		card_tex.gui_input.connect(_on_deck_card_input.bind(color_name, i))
 		card_tex.mouse_entered.connect(_on_deck_card_mouse_entered.bind(card))

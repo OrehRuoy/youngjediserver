@@ -259,7 +259,11 @@ func _apply_player_cover_art(player_is_light: bool, player_decks: Array[Dictiona
 		if tex:
 			player_card_back.texture = tex
 			return
-	player_card_back.texture = load("res://assets/card_back_light.png" if player_is_light else "res://assets/card_back_dark.png") as Texture2D
+	var back_tex := load("res://assets/card_back_light.png" if player_is_light else "res://assets/card_back_dark.png") as Texture2D
+	if back_tex and CardCatalog:
+		back_tex = CardCatalog.smooth_texture(back_tex)
+	player_card_back.texture = back_tex
+	player_card_back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func _on_bot_deck_selected(_idx: int) -> void:

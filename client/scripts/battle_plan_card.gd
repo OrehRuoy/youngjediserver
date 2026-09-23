@@ -46,8 +46,11 @@ func set_face_down(face_down: bool) -> void:
 	_face_down = face_down
 	if _texture_rect and face_down:
 		var back_tex: Texture2D = load("res://assets/card_back_light.png") as Texture2D if _side == "light" else load("res://assets/card_back_dark.png") as Texture2D
+		if back_tex and CardCatalog:
+			back_tex = CardCatalog.smooth_texture(back_tex)
 		if back_tex:
 			_texture_rect.texture = back_tex
+			_texture_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func set_card(card_id: String, instance_id: String, side: String) -> void:
@@ -63,6 +66,8 @@ func set_card(card_id: String, instance_id: String, side: String) -> void:
 				break
 	if not tex:
 		tex = load("res://assets/card_back_light.png") as Texture2D if side == "light" else load("res://assets/card_back_dark.png") as Texture2D
+		if tex and CardCatalog:
+			tex = CardCatalog.smooth_texture(tex)
 	_current_texture = tex
 	if _texture_rect:
 		_texture_rect.texture = tex

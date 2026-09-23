@@ -286,7 +286,11 @@ func _apply_seat_art(tex_rect: TextureRect, side: String, cover_var: Variant) ->
 			tex_rect.texture = tex
 			return
 	var back_path := "res://assets/card_back_light.png" if side == "light" else "res://assets/card_back_dark.png"
-	tex_rect.texture = load(back_path) as Texture2D
+	var back_tex := load(back_path) as Texture2D
+	if back_tex and CardCatalog:
+		back_tex = CardCatalog.smooth_texture(back_tex)
+	tex_rect.texture = back_tex
+	tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func _game_number(table_id: String) -> String:

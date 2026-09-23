@@ -165,8 +165,9 @@ autowrap_mode = 3
 horizontal_alignment = 1
 
 [node name="DestinyCompareSection" type="VBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox" unique_id=902846042]
+visible = false
 layout_mode = 2
-size_flags_vertical = 3
+size_flags_vertical = 0
 alignment = 1
 
 [node name="DestinyCompareLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection" unique_id=655383246]
@@ -187,6 +188,7 @@ layout_mode = 2
 alignment = 1
 
 [node name="LocationChoiceSection" type="VBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox" unique_id=987469842]
+visible = false
 layout_mode = 2
 size_flags_vertical = 0
 

@@ -1469,7 +1469,12 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
       lightHandCount: d.lightDuelHand.length,
       darkHandCount: d.darkDuelHand.length,
       pendingAttack: d.pendingAttack
-        ? { cardId: d.pendingAttack.cardId, destiny: d.pendingAttack.destiny, side: d.pendingAttack.side }
+        ? {
+            cardId: d.pendingAttack.cardId,
+            destiny: d.pendingAttack.destiny,
+            side: d.pendingAttack.side,
+            ...(d.pendingAttack.cardSet ? { set: d.pendingAttack.cardSet } : {}),
+          }
         : undefined,
       yourDuelHand: (() => {
         const mine = forSide === "light" ? d.lightDuelHand : forSide === "dark" ? d.darkDuelHand : [];
@@ -2995,6 +3000,7 @@ export function resolveBattlePlan(state: GameStateData): void {
   };
   const toDiscard = (side: Side, card: CardInstance): void => {
     const p = side === "light" ? state.light : state.dark;
+    if (p.discard.some((c) => c.instanceId === card.instanceId)) return;
     card.zone = "discard";
     card.faceDown = false;
     p.discard.push(card);

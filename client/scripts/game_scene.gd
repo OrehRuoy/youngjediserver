@@ -4,8 +4,8 @@ extends Control
 
 const CardPlaceholderScene = preload("res://scenes/card_placeholder.tscn")
 const BattlePlanCardScene = preload("res://scenes/battle_plan_card.tscn")
-const CARD_BACK_LIGHT = preload("res://assets/card_back_light.png")
-const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
+var CARD_BACK_LIGHT: Texture2D = preload("res://assets/card_back_light.png")
+var CARD_BACK_DARK: Texture2D = preload("res://assets/card_back_dark.png")
 
 @onready var phase_label: Label = $HBoxContainer/Margin/GameArea/VBox/PhaseLabel
 @onready var opp_discard_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentDiscard/OppDiscardWrapper
@@ -67,6 +67,7 @@ const CARD_BACK_DARK = preload("res://assets/card_back_dark.png")
 var _selected_instance_id: String = ""
 var _discard_location_mode: bool = false
 var _destiny_animation_done: bool = false
+var _destiny_flying: bool = false
 var _previous_phase: String = ""
 var _initial_draw_animation_done: bool = false
 var _your_deck_count: int = 0
@@ -129,11 +130,25 @@ var _hs_browse_overlay: CanvasLayer = null
 var _picking_duel: bool = false
 var _duel_char_id: String = ""
 var _duel_weapon_id: String = ""
+var _duel_pending_key: String = ""
+var _duel_pending_card: String = ""
+var _duel_pending_side: String = ""
+var _duel_pending_set: String = ""
+var _duel_pending_dest: int = 0
+var _duel_clash: Dictionary = {}
+var _setup_fly_layer: CanvasLayer = null
 
 var _announced_opp_battle_cards: bool = false
 
 
 func _ready() -> void:
+	if CardCatalog:
+		CARD_BACK_LIGHT = CardCatalog.smooth_texture(CARD_BACK_LIGHT)
+		CARD_BACK_DARK = CardCatalog.smooth_texture(CARD_BACK_DARK)
+	for back_rect in [your_deck, opp_deck, your_discard, opp_discard]:
+		if back_rect:
+			back_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_lift_setup_banners()
 	var client: RefCounted = Connection.get_client()
 	var state: RefCounted = Connection.get_state()
 	client.message_received.connect(_on_message)
@@ -1869,16 +1884,194 @@ func _try_send_initiate_duel() -> void:
 	_duel_weapon_id = ""
 
 
+func _in_play_entry(pub: Dictionary, instance_id: String) -> Dictionary:
+	if instance_id.is_empty():
+		return {}
+	for key in ["lightInPlay", "darkInPlay"]:
+		for c in pub.get(key, []):
+			if str(c.get("instanceId", "")) == instance_id:
+				return c
+	return {}
+
+
+func _duel_thumb(card_id: String, side: String, set_name: String, caption: String) -> Control:
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(100, 0)
+	var tex_rect := TextureRect.new()
+	tex_rect.custom_minimum_size = Vector2(92, 128)
+	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var tex: Texture2D = null
+	if CardCatalog and not card_id.is_empty():
+		tex = CardCatalog.load_card_texture(card_id, side, set_name)
+	if tex == null:
+		tex = CARD_BACK_DARK if side == "dark" else CARD_BACK_LIGHT
+	tex_rect.texture = tex
+	box.add_child(tex_rect)
+	var cap := Label.new()
+	cap.text = caption
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cap.custom_minimum_size = Vector2(100, 32)
+	cap.add_theme_font_size_override("font_size", 13)
+	box.add_child(cap)
+	return box
+
+
+func _duel_fighter_col(pub: Dictionary, char_instance: String, weapon_instance: String, side: String, d: Dictionary) -> Control:
+	var box := VBoxContainer.new()
+	var entry := _in_play_entry(pub, char_instance)
+	var cid := str(entry.get("cardId", ""))
+	var setn := str(entry.get("set", ""))
+	var name := "Fighter"
+	if CardCatalog and not cid.is_empty():
+		name = str(CardCatalog.get_card_info(cid, "", setn).get("name", cid))
+	var faces := HBoxContainer.new()
+	faces.alignment = BoxContainer.ALIGNMENT_CENTER
+	faces.add_theme_constant_override("separation", 6)
+	faces.add_child(_duel_thumb(cid, side, setn, name))
+	if not weapon_instance.is_empty():
+		var wentry := _in_play_entry(pub, weapon_instance)
+		var wid := str(wentry.get("cardId", ""))
+		var wset := str(wentry.get("set", ""))
+		var wname := "Weapon"
+		if CardCatalog and not wid.is_empty():
+			wname = str(CardCatalog.get_card_info(wid, "", wset).get("name", "Weapon"))
+		faces.add_child(_duel_thumb(wid, side, wset, wname))
+	box.add_child(faces)
+	var hits := int(d.get("lightHits", 0)) if side == "light" else int(d.get("darkHits", 0))
+	var out_at := _printed_damage(pub, char_instance)
+	var stat := Label.new()
+	stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stat.add_theme_font_size_override("font_size", 15)
+	if out_at > 0:
+		stat.text = "%d hit%s   ·   out at %d" % [hits, "s" if hits != 1 else "", out_at]
+	else:
+		stat.text = "%d hit%s" % [hits, "s" if hits != 1 else ""]
+	box.add_child(stat)
+	return box
+
+
+func _add_duel_matchup(parent: Node, pub: Dictionary, duel: Variant) -> void:
+	var d: Dictionary = duel
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 18)
+	parent.add_child(row)
+	var atk_side: String = str(d.get("initiator", "light"))
+	var def_side: String = "dark" if atk_side == "light" else "light"
+	row.add_child(_duel_fighter_col(pub, str(d.get("attackerCharInstanceId", "")), str(d.get("attackerWeaponInstanceId", "")), atk_side, d))
+	var vs := Label.new()
+	vs.text = "VS"
+	vs.add_theme_font_size_override("font_size", 28)
+	vs.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(vs)
+	var def_id := str(d.get("defenderCharInstanceId", ""))
+	if def_id.is_empty():
+		var wait := Label.new()
+		wait.text = "Choose who\nthey fight"
+		wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		wait.add_theme_font_size_override("font_size", 16)
+		row.add_child(wait)
+	else:
+		row.add_child(_duel_fighter_col(pub, def_id, str(d.get("defenderWeaponInstanceId", "")), def_side, d))
+
+
+func _note_duel_exchange(duel: Variant) -> void:
+	var d: Dictionary = duel
+	var pending: Dictionary = {}
+	if d.get("pendingAttack") is Dictionary:
+		pending = d.get("pendingAttack")
+	var card_id := str(pending.get("cardId", ""))
+	var key := "%s|%s|%s" % [str(pending.get("side", "")), card_id, str(pending.get("destiny", ""))]
+	if not _duel_pending_key.is_empty() and key != _duel_pending_key:
+		_duel_clash = {
+			"left_id": _duel_pending_card,
+			"left_side": _duel_pending_side,
+			"left_dest": _duel_pending_dest,
+			"left_set": _duel_pending_set,
+			"right_id": card_id,
+			"right_side": str(pending.get("side", "")),
+			"right_dest": int(pending.get("destiny", 0)),
+			"right_set": str(pending.get("set", "")),
+			"blocked": not card_id.is_empty()
+		}
+	if card_id.is_empty():
+		_duel_pending_key = ""
+		_duel_pending_card = ""
+	else:
+		_duel_pending_key = key
+		_duel_pending_card = card_id
+		_duel_pending_side = str(pending.get("side", ""))
+		_duel_pending_dest = int(pending.get("destiny", 0))
+		_duel_pending_set = str(pending.get("set", ""))
+
+
+func _add_duel_clash(parent: Node) -> void:
+	if _duel_clash.is_empty():
+		return
+	var title := Label.new()
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 16)
+	if bool(_duel_clash.get("blocked", false)):
+		title.text = "Same destiny. That card is blocked, and the matching card is the new attack."
+	else:
+		title.text = "Those numbers do not match. The attack scores a hit."
+	parent.add_child(title)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	parent.add_child(row)
+	row.add_child(_duel_thumb(str(_duel_clash.get("left_id", "")), str(_duel_clash.get("left_side", "")), str(_duel_clash.get("left_set", "")), "Destiny %d" % int(_duel_clash.get("left_dest", 0))))
+	var mid := Label.new()
+	mid.text = "blocked by" if bool(_duel_clash.get("blocked", false)) else "HIT"
+	mid.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mid.add_theme_font_size_override("font_size", 16)
+	row.add_child(mid)
+	if bool(_duel_clash.get("blocked", false)):
+		row.add_child(_duel_thumb(str(_duel_clash.get("right_id", "")), str(_duel_clash.get("right_side", "")), str(_duel_clash.get("right_set", "")), "Destiny %d" % int(_duel_clash.get("right_dest", 0))))
+
+
+func _add_current_duel_attack(parent: Node, pending: Variant, my_side: String) -> void:
+	if not (pending is Dictionary):
+		return
+	var card_id := str(pending.get("cardId", ""))
+	if card_id.is_empty():
+		return
+	if bool(_duel_clash.get("blocked", false)) and str(_duel_clash.get("right_id", "")) == card_id:
+		return
+	var mine := str(pending.get("side", "")) == my_side
+	var heading := Label.new()
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 16)
+	heading.text = "Your attack is on the table." if mine else "Their attack is on the table. Match this number."
+	parent.add_child(heading)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	parent.add_child(row)
+	row.add_child(_duel_thumb(card_id, str(pending.get("side", "")), str(pending.get("set", "")), "Destiny %d" % int(pending.get("destiny", 0))))
+
+
 func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
 	var d: Variant = pub.get("duelState", null)
 	if not (d is Dictionary):
+		_duel_clash = {}
+		_duel_pending_key = ""
+		_duel_pending_card = ""
 		if _dotf_overlay_kind.begins_with("duel"):
 			_clear_dotf_overlay()
 		return
 	var step: String = str(d.get("step", ""))
 	var initiator: String = str(d.get("initiator", ""))
 	if step == "choose_target" and initiator == my_side and _dotf_overlay_kind != "duel_target":
-		var vbox := _begin_choice_overlay("duel_target", "Choose an opposing character to duel")
+		var vbox := _begin_choice_overlay("duel_target", "A duel is starting")
+		_add_duel_matchup(vbox, pub, d)
+		var hint := Label.new()
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.text = "The card on the left is your duelist. Click who they fight."
+		vbox.add_child(hint)
 		var opp_side: String = "dark" if my_side == "light" else "light"
 		var opp_play: Array = pub.get("lightInPlay" if opp_side == "light" else "darkInPlay", [])
 		var chars: Array = []
@@ -1910,9 +2103,14 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 				_dotf_overlay_kind = "duel_defend_auto"
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
 			return
-		var vbox := _begin_choice_overlay("duel_defend", "Duel — choose who fights, or accept")
+		var vbox := _begin_choice_overlay("duel_defend", "They challenged you")
+		_add_duel_matchup(vbox, pub, d)
+		var hint := Label.new()
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.text = "These two are about to duel. Keep this character, swap to another, or give them a weapon."
+		vbox.add_child(hint)
 		var accept := Button.new()
-		accept.text = "Accept with this character"
+		accept.text = "Keep this character"
 		accept.pressed.connect(func() -> void:
 			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
 			_clear_dotf_overlay()
@@ -1920,7 +2118,7 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 		vbox.add_child(accept)
 		if not duelists.is_empty():
 			var dl := Label.new()
-			dl.text = "Or swap to another duelist"
+			dl.text = "Or fight with a different character"
 			vbox.add_child(dl)
 			_add_card_row(vbox, duelists, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "swapCharInstanceId": inst}})
@@ -1928,7 +2126,7 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 			)
 		if not weapons.is_empty():
 			var wl := Label.new()
-			wl.text = "Or attach a weapon this character can use"
+			wl.text = "Or give this character a weapon"
 			vbox.add_child(wl)
 			_add_card_row(vbox, weapons, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "weaponInstanceId": inst}})
@@ -1946,58 +2144,62 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 		var existing: Node = _dotf_overlay.get_child(0) if _dotf_overlay.get_child_count() > 0 else null
 		if existing:
 			existing.queue_free()
+		_note_duel_exchange(d)
 		var panel := PanelContainer.new()
-		panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-		panel.offset_left = 40
-		panel.offset_right = -40
-		panel.offset_top = -340
-		panel.offset_bottom = -8
+		panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+		panel.offset_left = 36
+		panel.offset_top = 28
+		panel.offset_right = -36
+		panel.offset_bottom = -12
 		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.1, 0.12, 0.2, 0.96)
-		style.content_margin_left = 10
-		style.content_margin_right = 10
-		style.content_margin_top = 8
-		style.content_margin_bottom = 8
+		style.bg_color = Color(0.06, 0.08, 0.14, 0.97)
+		style.content_margin_left = 14
+		style.content_margin_right = 14
+		style.content_margin_top = 10
+		style.content_margin_bottom = 10
+		style.border_color = Color(0.75, 0.62, 0.28, 1)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(10)
 		panel.add_theme_stylebox_override("panel", style)
 		_dotf_overlay.add_child(panel)
+		var scroll := ScrollContainer.new()
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_child(scroll)
 		var vbox := VBoxContainer.new()
-		panel.add_child(vbox)
+		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.add_child(vbox)
 		var pending: Variant = d.get("pendingAttack", null)
-		var info := Label.new()
 		var lhits: int = int(d.get("lightHits", 0))
 		var dhits: int = int(d.get("darkHits", 0))
-		var my_power: int = int(d.get("lightPower", 0)) if my_side == "light" else int(d.get("darkPower", 0))
-		var opp_power: int = int(d.get("darkPower", 0)) if my_side == "light" else int(d.get("lightPower", 0))
-		var my_hit_n: int = lhits if my_side == "light" else dhits
-		var opp_hit_n: int = dhits if my_side == "light" else lhits
-		info.text = "Duel — you %d hits (drew %d)    opponent %d hits (drew %d)" % [my_hit_n, my_power, opp_hit_n, opp_power]
-		vbox.add_child(info)
+		_add_duel_matchup(vbox, pub, d)
+		_add_duel_clash(vbox)
+		_add_current_duel_attack(vbox, pending, my_side)
 		var help := Label.new()
 		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		help.add_theme_font_size_override("font_size", 14)
+		help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		help.add_theme_font_size_override("font_size", 18)
 		var attacker: String = str(d.get("currentAttacker", ""))
-		var my_char := str(d.get("attackerCharInstanceId", "")) if initiator == my_side else str(d.get("defenderCharInstanceId", ""))
-		var opp_char := str(d.get("defenderCharInstanceId", "")) if initiator == my_side else str(d.get("attackerCharInstanceId", ""))
-		var my_out := _printed_damage(pub, my_char)
-		var opp_out := _printed_damage(pub, opp_char)
-		info.text += "    You are out at %d hits. They are out at %d." % [my_out, opp_out]
 		var my_turn_to_play := false
 		var hand_preview: Array = d.get("yourDuelHand", [])
-		var rules := "Hover a card to read it. A matching destiny blocks and that card becomes your attack. Any other number takes the hit. When a dueling hand is empty, that player cannot attack or block and the other player continues. Cards go back into the decks when the duel ends. Damage is milled only then."
 		if hand_preview.is_empty():
-			help.text = "Your dueling hand is empty, so you cannot play a card. " + rules
+			help.text = "Your dueling hand is empty. You cannot play a card right now."
 		elif pending is Dictionary and str(pending.get("side", "")) != my_side:
 			my_turn_to_play = true
 			var need: int = int(pending.get("destiny", 0))
-			help.text = "They attacked with destiny %d. Click a card with destiny %d to block. " % [need, need] + rules
+			help.text = "Click a card with destiny %d to block. Any other number and you take the hit." % need
 		elif not (pending is Dictionary) and attacker == my_side:
 			my_turn_to_play = true
-			help.text = "Your attack. Click one card. Its destiny is the number they must match. " + rules
+			help.text = "Your turn. Click one card. They have to play the same destiny to block it."
 		elif pending is Dictionary:
-			help.text = "Waiting. You attacked with destiny %d. They must match it or take the hit. " % int(pending.get("destiny", 0)) + rules
+			help.text = "Waiting. They must match destiny %d, or you score a hit." % int(pending.get("destiny", 0))
 		else:
-			help.text = "Waiting for their attack. " + rules
+			help.text = "Waiting for their card."
 		vbox.add_child(help)
+		var hand_title := Label.new()
+		hand_title.text = "Your cards"
+		hand_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(hand_title)
 		var hand: Array = d.get("yourDuelHand", [])
 		var my_hits: int = lhits if my_side == "light" else dhits
 		var used: Array = d.get("hitRemovalUsed", [])
@@ -3228,8 +3430,10 @@ func _refresh() -> void:
 	var opp_back = CARD_BACK_DARK if my_side == "light" else CARD_BACK_LIGHT
 	if your_deck:
 		your_deck.texture = your_back
+		your_deck.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	if opp_deck:
 		opp_deck.texture = opp_back
+		opp_deck.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	var my_discard_count: int = (light if my_side == "light" else dark).get("discardCount", 0)
 	var opp_discard_count: int = (dark if my_side == "light" else light).get("discardCount", 0)
 	var my_top_discard_id: String = (light if my_side == "light" else dark).get("topDiscardCardId", "")
@@ -3316,16 +3520,18 @@ func _refresh() -> void:
 			opp_force_label.visible = false
 	# Opponent hand: show N card backs at top center
 	if opponent_hand_container:
-		for c in opponent_hand_container.get_children():
-			c.queue_free()
 		var opp_hand_count: int = int(dark.get("handCount", 0)) if my_side == "light" else int(light.get("handCount", 0))
-		for i in range(opp_hand_count):
-			var tr: TextureRect = TextureRect.new()
-			tr.custom_minimum_size = Vector2(44, 62)
-			tr.texture = opp_back
-			tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			opponent_hand_container.add_child(tr)
+		if opponent_hand_container.get_child_count() != opp_hand_count:
+			for c in opponent_hand_container.get_children():
+				c.queue_free()
+			for i in range(opp_hand_count):
+				var tr: TextureRect = TextureRect.new()
+				tr.custom_minimum_size = Vector2(44, 62)
+				tr.texture = opp_back
+				tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+				tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+				opponent_hand_container.add_child(tr)
 	var is_my_turn: bool = (turn_side == my_side)
 	# Only show buttons relevant to the current phase (same location; no extra buttons)
 	if phase != "even_up":
@@ -3464,10 +3670,11 @@ func _refresh() -> void:
 			var d: Dictionary = r.get("dark", {})
 			label_parts.append("Light: %d  Dark: %d" % [int(l.get("destiny", 0)), int(d.get("destiny", 0))])
 		destiny_compare_label.text = "  |  ".join(label_parts) + "  —  Higher goes first"
-		for c in opponent_destiny_slot.get_children():
-			c.queue_free()
-		for c in your_destiny_slot.get_children():
-			c.queue_free()
+		if not _destiny_flying:
+			for c in opponent_destiny_slot.get_children():
+				c.queue_free()
+			for c in your_destiny_slot.get_children():
+				c.queue_free()
 		var opp_side: String = "dark" if my_side == "light" else "light"
 		var first_opp_id: String = ""
 		var first_your_id: String = ""
@@ -3481,7 +3688,7 @@ func _refresh() -> void:
 		if do_animate:
 			_destiny_animation_done = true
 			_animate_destiny_cards_from_decks(first_opp_id, first_your_id, opp_side)
-		else:
+		elif not _destiny_flying:
 			for i in range(rounds.size()):
 				var r: Dictionary = rounds[i]
 				var l: Dictionary = r.get("light", {})
@@ -5803,28 +6010,58 @@ func _on_next_planet_chosen(instance_id: String) -> void:
 	_refresh()
 
 
+func _lift_setup_banners() -> void:
+	if destiny_compare_section == null or location_choice_section == null:
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 30
+	add_child(layer)
+	var anchor := CenterContainer.new()
+	anchor.set_anchors_preset(Control.PRESET_FULL_RECT)
+	anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(anchor)
+	var box := VBoxContainer.new()
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	anchor.add_child(box)
+	for section in [destiny_compare_section, location_choice_section]:
+		section.visible = false
+		section.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var parent := section.get_parent()
+		if parent:
+			parent.remove_child(section)
+		box.add_child(section)
+
+
+func _fly_layer() -> CanvasLayer:
+	if _setup_fly_layer == null or not is_instance_valid(_setup_fly_layer):
+		_setup_fly_layer = CanvasLayer.new()
+		_setup_fly_layer.layer = 46
+		add_child(_setup_fly_layer)
+	return _setup_fly_layer
+
+
 func _animate_destiny_cards_from_decks(opp_card_id: String, your_card_id: String, opp_side: String) -> void:
 	var my_side: String = Connection.get_state().game_side
+	_destiny_flying = true
+	await get_tree().process_frame
 	var flying_opp: Control = null
 	var flying_yours: Control = null
-	if opp_card_id:
+	var layer := _fly_layer()
+	if opp_card_id and opp_deck:
 		flying_opp = CardPlaceholderScene.instantiate()
-		add_child(flying_opp)
+		layer.add_child(flying_opp)
 		flying_opp.set_card(opp_card_id, "", opp_side)
-		flying_opp.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		flying_opp.global_position = opp_deck.get_global_rect().position + (opp_deck.get_global_rect().size - flying_opp.custom_minimum_size) / 2
-		flying_opp.z_index = 100
-	if your_card_id:
+	if your_card_id and your_deck:
 		flying_yours = CardPlaceholderScene.instantiate()
-		add_child(flying_yours)
+		layer.add_child(flying_yours)
 		flying_yours.set_card(your_card_id, "", my_side)
-		flying_yours.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		flying_yours.global_position = your_deck.get_global_rect().position + (your_deck.get_global_rect().size - flying_yours.custom_minimum_size) / 2
-		flying_yours.z_index = 100
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_trans(Tween.TRANS_CUBIC)
 	if flying_opp:
 		var slot_rect: Rect2 = opponent_destiny_slot.get_global_rect()
 		var end_pos: Vector2 = slot_rect.position + (slot_rect.size - flying_opp.custom_minimum_size) / 2
@@ -5834,6 +6071,7 @@ func _animate_destiny_cards_from_decks(opp_card_id: String, your_card_id: String
 		var end_pos: Vector2 = slot_rect.position + (slot_rect.size - flying_yours.custom_minimum_size) / 2
 		tween.tween_property(flying_yours, "global_position", end_pos, 0.5)
 	tween.tween_callback(func() -> void:
+		_destiny_flying = false
 		if flying_opp:
 			var cp: Control = CardPlaceholderScene.instantiate()
 			opponent_destiny_slot.add_child(cp)
@@ -5856,7 +6094,10 @@ func _animate_initial_draw(state: RefCounted, hand_entries: Array) -> void:
 	var my_side: String = state.game_side
 	var deck_rect: Rect2 = your_deck.get_global_rect()
 	var hand_rect: Rect2 = hand_container.get_global_rect()
+	if hand_container.get_parent():
+		hand_rect = hand_container.get_parent().get_global_rect()
 	var flying_cards: Array = []
+	var layer := _fly_layer()
 	for i in range(hand_entries.size()):
 		var entry: Dictionary = hand_entries[i]
 		var card_id: String = entry.get("cardId", "")
@@ -5864,18 +6105,15 @@ func _animate_initial_draw(state: RefCounted, hand_entries: Array) -> void:
 		if card_id.is_empty():
 			continue
 		var flying: Control = CardPlaceholderScene.instantiate()
-		add_child(flying)
+		layer.add_child(flying)
 		flying.set_card(card_id, inst_id, my_side)
-		flying.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		var card_size: Vector2 = flying.custom_minimum_size
 		flying.global_position = deck_rect.position + (deck_rect.size - card_size) / 2
-		flying.z_index = 100
 		flying_cards.append(flying)
-	# Stagger: tween each card to a target in the hand area
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
 	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_trans(Tween.TRANS_CUBIC)
 	for i in range(flying_cards.size()):
 		var flying: Control = flying_cards[i]
 		var card_size: Vector2 = flying.custom_minimum_size
@@ -5905,17 +6143,15 @@ func _animate_card_from_deck_to_slot(instance_id: String, from_deck: Control, to
 	if card_id.is_empty():
 		return
 	var flying: Control = CardPlaceholderScene.instantiate()
-	add_child(flying)
+	_fly_layer().add_child(flying)
 	flying.set_card(card_id, "", my_side)
-	flying.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	var card_size: Vector2 = flying.custom_minimum_size
 	var deck_rect: Rect2 = from_deck.get_global_rect()
 	var slot_rect: Rect2 = to_slot.get_global_rect()
 	flying.global_position = deck_rect.position + (deck_rect.size - card_size) / 2
-	flying.z_index = 100
 	var end_pos: Vector2 = slot_rect.position + (slot_rect.size - card_size) / 2
 	var tween: Tween = create_tween()
 	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.tween_property(flying, "global_position", end_pos, 0.55)
 	tween.tween_callback(flying.queue_free)
