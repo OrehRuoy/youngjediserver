@@ -480,7 +480,7 @@ func _populate_card_grid() -> void:
 		if card_id.is_empty():
 			continue
 
-		var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
+		var tex := _load_card_texture(card_id, side, str(card.get("set", "")), card)
 		if tex == null:
 			_card_grid.add_child(_create_missing_card(card))
 		else:
@@ -515,7 +515,6 @@ func _create_missing_card(card: Dictionary) -> Control:
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(label)
 	container.set_meta("card_data", card)
-	container.set_meta("card_texture", null)
 	container.gui_input.connect(_on_card_gui_input.bind(container))
 	return container
 
@@ -580,7 +579,7 @@ func _show_hover_preview_for_card(card: Dictionary) -> void:
 	_hide_hover_preview()
 	var card_id: String = card.get("id", "")
 	var side: String = card.get("side", "")
-	var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
+	var tex := _load_card_texture(card_id, side, str(card.get("set", "")), card)
 	if tex == null:
 		return
 
@@ -665,7 +664,9 @@ func _start_drag(card_panel: Control, gpos: Vector2) -> void:
 	_dragging = true
 	_drag_source = card_panel
 	var card: Dictionary = card_panel.get_meta("card_data")
-	var tex: Texture2D = card_panel.get_meta("card_texture")
+	var tex: Texture2D = card_panel.get_meta("card_texture") if card_panel.has_meta("card_texture") else null
+	if tex == null:
+		tex = _load_card_texture(str(card.get("id", "")), str(card.get("side", "")), str(card.get("set", "")), card)
 	_drag_preview_card = card
 	_hide_hover_preview()
 
@@ -824,9 +825,7 @@ func _refresh_cover_display() -> void:
 		_cover_tex.tooltip_text = "Optional cover — drag a card here for table art"
 		return
 	var side: String = str(_cover_card.get("side", ""))
-	var tex := _load_card_texture(cid, side, str(_cover_card.get("set", "")))
-	if tex == null and CardCatalog:
-		tex = CardCatalog.load_card_texture(cid, side, str(_cover_card.get("set", "")))
+	var tex := _load_card_texture(cid, side, str(_cover_card.get("set", "")), _cover_card)
 	_cover_tex.texture = tex
 	if _cover_empty_label:
 		_cover_empty_label.visible = tex == null
@@ -952,7 +951,7 @@ func _refresh_slot_display(color_name: String) -> void:
 		var card: Dictionary = cards[i]
 		var card_id: String = card.get("id", "")
 		var side: String = card.get("side", "")
-		var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
+		var tex := _load_card_texture(card_id, side, str(card.get("set", "")), card)
 		if tex == null:
 			continue
 
@@ -1311,12 +1310,27 @@ func _on_back() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
-func _load_card_texture(card_id: String, side: String, set_hint: String = "") -> Texture2D:
-	if card_id.is_empty() or not CardCatalog:
+func _load_card_texture(card_id: String, side: String, set_hint: String = "", card: Dictionary = {}) -> Texture2D:
+	var set_name := str(card.get("set", set_hint))
+	var side_name := str(card.get("side", side))
+	var image_file := str(card.get("image", ""))
+	if (set_name.is_empty() or side_name.is_empty() or image_file.is_empty()) and CardCatalog and CardCatalog.has_method("get_card_info"):
+		var info: Dictionary = CardCatalog.get_card_info(card_id, side, set_hint)
+		if set_name.is_empty():
+			set_name = str(info.get("set", ""))
+		if side_name.is_empty():
+			side_name = str(info.get("side", ""))
+		if image_file.is_empty():
+			image_file = str(info.get("image", ""))
+	if set_name.is_empty() or side_name.is_empty() or image_file.is_empty():
 		return null
-	var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side, set_hint)
-	for p in paths_to_try:
-		var tex: Texture2D = load(p) as Texture2D
+	var paths: Array[String] = ["res://assets/%s/%s/%s" % [set_name, side_name, image_file]]
+	if image_file.to_lower().ends_with(".gif"):
+		paths.append("res://assets/%s/%s/%s.png" % [set_name, side_name, image_file.get_basename()])
+	for p in paths:
+		if not ResourceLoader.exists(p):
+			continue
+		var tex: Texture2D = ResourceLoader.load(p, "", ResourceLoader.CACHE_MODE_REUSE) as Texture2D
 		if tex:
 			return tex
 	return null
