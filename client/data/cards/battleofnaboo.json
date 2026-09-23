@@ -1294,7 +1294,7 @@
       "condition": "using:quigonjinnslightsaber",
       "destiny": 5,
       "destinyAdd": 0,
-      "image": "56willoftheforce.png",
+      "image": "56thewilloftheforce.png",
       "set": "battleofnaboo",
       "gametext": "",
       "gametextbonus": ""
@@ -1328,7 +1328,7 @@
       "condition": "on:naboo",
       "destiny": 5,
       "destinyAdd": 0,
-      "image": "58occupationherehasende.png",
+      "image": "58youroccupationherehasende.png",
       "set": "battleofnaboo",
       "gametext": "",
       "gametextbonus": ""

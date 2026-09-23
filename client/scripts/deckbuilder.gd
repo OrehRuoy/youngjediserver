@@ -55,6 +55,9 @@ var _cover_empty_label: Label
 func _ready() -> void:
 	for c in COLOR_NAMES:
 		_deck_slots[c] = []
+	# The launcher loads the catalog before the game pack exists, so reload here.
+	if CardCatalog and CardCatalog.has_method("_load_index"):
+		CardCatalog._load_index()
 	_all_cards = CardCatalog.get_all_cards()
 	_all_cards.sort_custom(func(a, b): return a.get("name", "") < b.get("name", ""))
 	_filtered_cards = _all_cards.duplicate()
@@ -470,6 +473,7 @@ func _populate_card_grid() -> void:
 	for c in _card_grid.get_children():
 		c.queue_free()
 
+	var shown := 0
 	for card in _filtered_cards:
 		var card_id: String = card.get("id", "")
 		var side: String = card.get("side", "")
@@ -478,10 +482,42 @@ func _populate_card_grid() -> void:
 
 		var tex := _load_card_texture(card_id, side, str(card.get("set", "")))
 		if tex == null:
-			continue
+			_card_grid.add_child(_create_missing_card(card))
+		else:
+			_card_grid.add_child(_create_draggable_card(card, tex))
+		shown += 1
 
-		var card_btn := _create_draggable_card(card, tex)
-		_card_grid.add_child(card_btn)
+	if shown == 0:
+		var empty := Label.new()
+		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty.custom_minimum_size = Vector2(240, 60)
+		empty.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35))
+		if _all_cards.is_empty():
+			empty.text = "No cards loaded. The card list was not in the game pack."
+		else:
+			empty.text = "No cards match these filters."
+		_card_grid.add_child(empty)
+
+
+func _create_missing_card(card: Dictionary) -> Control:
+	var container := Panel.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.12, 0.16, 1)
+	style.border_color = Color(0.7, 0.55, 0.2)
+	style.border_width_bottom = 2
+	container.add_theme_stylebox_override("panel", style)
+	container.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT + 6)
+	var label := Label.new()
+	label.text = str(card.get("name", card.get("id", "Card")))
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(CARD_WIDTH - 8, CARD_HEIGHT)
+	label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	container.add_child(label)
+	container.set_meta("card_data", card)
+	container.set_meta("card_texture", null)
+	container.gui_input.connect(_on_card_gui_input.bind(container))
+	return container
 
 
 func _create_draggable_card(card: Dictionary, tex: Texture2D) -> Control:
