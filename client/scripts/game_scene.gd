@@ -124,6 +124,7 @@ var _evacuation_overlay: CanvasLayer = null
 var _evacuation_panel: PanelContainer = null
 var _dotf_overlay: CanvasLayer = null
 var _dotf_overlay_kind: String = ""
+var _damage_replace_key: String = ""
 var _hs_browse_overlay: CanvasLayer = null
 var _picking_duel: bool = false
 var _duel_char_id: String = ""
@@ -520,10 +521,11 @@ func _show_stranded_cards(planet_data: Dictionary, planet_index: int = -1) -> vo
 	var winner: String = planet_data.get("controlledBy", "")
 	var loc_card_id: String = planet_data.get("locationCardId", "")
 	var state: RefCounted = Connection.get_state()
-	var pub: Dictionary = state.game_state.get("publicState", {}) if state else {}
+	var gs: Dictionary = state.game_state if state else {}
+	var pub: Dictionary = gs.get("publicState", {}) if state else {}
 	var my_side: String = state.game_side if state else ""
-	var phase: String = str(pub.get("phase", ""))
-	var turn_side: String = str(pub.get("turnSide", ""))
+	var phase: String = str(gs.get("phase", ""))
+	var turn_side: String = str(gs.get("turnSide", ""))
 	var hand_n: int = state.hand_with_instances.size() if state else 0
 	var pending_busy: bool = pub.get("winControlPending") is Dictionary or pub.get("deployFromDeckPending") is Dictionary or pub.get("duelState") is Dictionary or pub.get("destinySwapPending") is Dictionary
 	var title := Label.new()
@@ -586,22 +588,16 @@ func _show_stranded_cards(planet_data: Dictionary, planet_index: int = -1) -> vo
 			var can_use: bool = mine_on_won and phase == "deploy" and turn_side == my_side and hand_n >= needed and not pending_busy
 			var wrap := VBoxContainer.new()
 			wrap.add_theme_constant_override("separation", 2)
-			var card_tex := TextureRect.new()
-			card_tex.custom_minimum_size = Vector2(72, 100)
-			card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			card_tex.texture = (CARD_BACK_LIGHT if side_str == "light" else CARD_BACK_DARK) if face_down else _load_card_texture_for_id(card_id, side_str)
-			wrap.add_child(card_tex)
+			var card_btn := Button.new()
+			card_btn.custom_minimum_size = Vector2(84, 120)
+			card_btn.expand_icon = true
+			card_btn.icon = (CARD_BACK_LIGHT if side_str == "light" else CARD_BACK_DARK) if face_down else _load_card_texture_for_id(card_id, side_str)
+			wrap.add_child(card_btn)
 			if can_use:
-				card_tex.mouse_filter = Control.MOUSE_FILTER_STOP
-				card_tex.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-				card_tex.tooltip_text = "Discard this character and %d cards from hand, then draw %d" % [needed, draw_n]
-				var activate_id: String = instance_id
-				var activate_idx: int = planet_index
-				card_tex.gui_input.connect(func(event: InputEvent) -> void:
-					if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-						_try_activate_win_control(activate_id, activate_idx)
-				)
+				card_btn.modulate = Color(1.2, 1.08, 0.55)
+				card_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+				card_btn.tooltip_text = "Discard this character and %d cards from hand, then draw %d" % [needed, draw_n]
+				card_btn.pressed.connect(_try_activate_win_control.bind(instance_id, planet_index))
 				var hint := Label.new()
 				hint.text = "Click to use"
 				hint.add_theme_font_size_override("font_size", 10)
@@ -1302,7 +1298,7 @@ func _begin_choice_overlay(kind: String, title_text: String) -> VBoxContainer:
 
 func _add_card_row(parent: Node, cards: Array, side: String, on_pick: Callable) -> void:
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(560, 140)
+	scroll.custom_minimum_size = Vector2(560, 156)
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	parent.add_child(scroll)
 	var row := HBoxContainer.new()
@@ -1311,12 +1307,14 @@ func _add_card_row(parent: Node, cards: Array, side: String, on_pick: Callable) 
 	for entry in cards:
 		var card_id: String = entry.get("cardId", "")
 		var inst: String = entry.get("instanceId", "")
-		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(84, 120)
-		btn.icon = _load_card_texture_for_id(card_id, side)
-		btn.expand_icon = true
-		btn.pressed.connect(on_pick.bind(inst, card_id))
-		row.add_child(btn)
+		var card_set: String = str(entry.get("set", ""))
+		var card: Control = CardPlaceholderScene.instantiate()
+		row.add_child(card)
+		card.set_card(card_id, inst, side, card_set)
+		if card.has_signal("card_selected"):
+			card.card_selected.connect(func(picked: String) -> void:
+				on_pick.call(picked, card_id)
+			)
 
 
 func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
@@ -1369,12 +1367,9 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 			vbox.add_child(note)
 			if found:
 				var cid: String = str(dfd.get("foundCardId", ""))
-				var tex := TextureRect.new()
-				tex.custom_minimum_size = Vector2(90, 130)
-				tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-				tex.texture = _load_card_texture_for_id(cid, my_side)
-				vbox.add_child(tex)
+				var preview: Control = CardPlaceholderScene.instantiate()
+				vbox.add_child(preview)
+				preview.set_card(cid, "preview", my_side, str(dfd.get("foundSet", "")))
 				var deploy_btn := Button.new()
 				deploy_btn.text = "Deploy"
 				deploy_btn.pressed.connect(func() -> void:
@@ -1480,7 +1475,10 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 		return
 	var replace_damage: Variant = pub.get("damageReplacePending", null)
 	if replace_damage is Dictionary and str(replace_damage.get("side", "")) == my_side:
-		if _dotf_overlay_kind != "damage_replace":
+		var drawn: Dictionary = replace_damage.get("draw", {})
+		var drawn_key := str(drawn.get("key", ""))
+		if _dotf_overlay_kind != "damage_replace" or _damage_replace_key != drawn_key:
+			_damage_replace_key = drawn_key
 			_show_damage_replace(replace_damage)
 		return
 	if replace_damage is Dictionary and str(replace_damage.get("side", "")) != my_side:
@@ -1543,7 +1541,7 @@ func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 	var choices: Array = pending.get("choices", [])
 	var affordable := 0
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640, 160)
+	scroll.custom_minimum_size = Vector2(640, 180)
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
 	var row := HBoxContainer.new()
@@ -1557,21 +1555,22 @@ func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 		var cost := int(entry.get("cost", 0))
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 4)
-		var btn := Button.new()
-		btn.icon = _load_card_texture_for_id(cid, my_side)
-		btn.expand_icon = false
-		btn.custom_minimum_size = Vector2(84, 120)
-		btn.disabled = cost > force
-		if cost > force:
-			btn.text = "Need %d" % cost
-			btn.tooltip_text = "This lightsaber costs %d and you have %d counters." % [cost, force]
-		else:
+		var card: Control = CardPlaceholderScene.instantiate()
+		col.add_child(card)
+		var can_pay := cost <= force
+		card.set_card(cid, inst, my_side, str(entry.get("set", "")))
+		var cost_lbl := Label.new()
+		cost_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		if can_pay:
 			affordable += 1
-			btn.text = "Deploy (%d)" % cost
-		btn.pressed.connect((func(chosen: String) -> void:
-			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_jedi_training", "instanceId": chosen}})
-		).bind(inst))
-		col.add_child(btn)
+			cost_lbl.text = "Deploy (%d)" % cost
+			if card.has_signal("card_selected"):
+				card.card_selected.connect((func(chosen: String) -> void:
+					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_jedi_training", "instanceId": chosen}})
+				))
+		else:
+			cost_lbl.text = "Need %d" % cost
+		col.add_child(cost_lbl)
 		row.add_child(col)
 	if affordable == 0 and not choices.is_empty():
 		note.text = "You have %d counters, so none of these lightsabers can be deployed. Skip for now." % force
@@ -1585,32 +1584,30 @@ func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 
 func _show_damage_replace(pending: Dictionary) -> void:
 	var damage := int(pending.get("damage", 0))
-	var vbox := _begin_choice_overlay("damage_replace", "Use damage %d instead of one destiny?" % damage)
+	var drawn: Dictionary = pending.get("draw", {})
+	var destiny := int(drawn.get("destiny", 0))
+	var vbox := _begin_choice_overlay("damage_replace", "Destiny %d drawn" % destiny)
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Pick one of your destiny numbers to replace with your character's damage (%d), or skip." % damage
+	note.text = "This destiny was just drawn. You may replace it with your character's damage (%d). If you keep it and another destiny is still coming, that one is drawn next and you can choose again. You can replace only one." % damage
 	vbox.add_child(note)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
-	vbox.add_child(row)
-	for entry in pending.get("draws", []):
-		if not (entry is Dictionary):
-			continue
-		var btn := Button.new()
-		var value := int(entry.get("destiny", 0))
-		btn.text = "Replace %d" % value
-		var key := str(entry.get("key", ""))
-		btn.pressed.connect((func(k: String) -> void:
-			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_damage_replace", "key": k}})
-		).bind(key))
-		row.add_child(btn)
-	var skip := Button.new()
-	skip.text = "Skip"
-	skip.pressed.connect(func() -> void:
+	var cid := str(drawn.get("cardId", ""))
+	if not cid.is_empty():
+		var preview: Control = CardPlaceholderScene.instantiate()
+		vbox.add_child(preview)
+		preview.set_card(cid, "destiny", "", str(drawn.get("set", "")))
+	var use_btn := Button.new()
+	use_btn.text = "Use damage %d instead" % damage
+	use_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_damage_replace", "key": str(drawn.get("key", ""))}})
+	)
+	var keep_btn := Button.new()
+	keep_btn.text = "Keep destiny %d" % destiny
+	keep_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_damage_replace"}})
 	)
-	vbox.add_child(skip)
+	vbox.add_child(use_btn)
+	vbox.add_child(keep_btn)
 
 
 func _show_bottom_hand(my_side: String) -> void:
@@ -1748,7 +1745,7 @@ func _begin_win_control_overlay(state: RefCounted, pending: Dictionary, my_side:
 	confirm.disabled = true
 	var hand: Array = state.hand_with_instances
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640, 150)
+	scroll.custom_minimum_size = Vector2(640, 168)
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
 	var row := HBoxContainer.new()
@@ -1757,14 +1754,10 @@ func _begin_win_control_overlay(state: RefCounted, pending: Dictionary, my_side:
 	for entry in hand:
 		var card_id: String = entry.get("cardId", "")
 		var inst: String = entry.get("instanceId", "")
-		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(84, 120)
-		btn.icon = _load_card_texture_for_id(card_id, my_side)
-		btn.expand_icon = true
-		btn.pressed.connect(func() -> void:
-			_toggle_win_control_card(inst, btn, confirm, count_label)
-		)
-		row.add_child(btn)
+		var card: Button = CardPlaceholderScene.instantiate()
+		row.add_child(card)
+		card.set_card(card_id, inst, my_side, str(entry.get("set", "")))
+		card.card_selected.connect(_toggle_win_control_card.bind(card, confirm, count_label))
 	confirm.pressed.connect(func() -> void:
 		if _win_control_selected.size() != _win_control_needed:
 			return
@@ -1794,6 +1787,48 @@ func _toggle_win_control_card(instance_id: String, btn: Button, confirm: Button,
 		btn.modulate = Color(1.2, 1.12, 0.55)
 	count_label.text = "Selected %d / %d" % [_win_control_selected.size(), _win_control_needed]
 	confirm.disabled = _win_control_selected.size() != _win_control_needed
+
+
+func _card_id_at(cards: Array, instance_id: String) -> String:
+	for c in cards:
+		if str(c.get("instanceId", "")) == instance_id:
+			return str(c.get("cardId", ""))
+	return ""
+
+
+func _printed_damage(pub: Dictionary, instance_id: String) -> int:
+	if instance_id.is_empty() or not CardCatalog:
+		return 0
+	for key in ["lightInPlay", "darkInPlay"]:
+		for c in pub.get(key, []):
+			if str(c.get("instanceId", "")) != instance_id:
+				continue
+			return int(CardCatalog.get_card_info(str(c.get("cardId", "")), "", str(c.get("set", ""))).get("damage", 0))
+	return 0
+
+
+func _weapon_fits_character(weapon_id: String, weapon_set: String, character_id: String) -> bool:
+	if character_id.is_empty() or not CardCatalog:
+		return false
+	var weapon: Dictionary = CardCatalog.get_card_info(weapon_id, "", weapon_set)
+	var character: Dictionary = CardCatalog.get_card_info(character_id, "")
+	var can_use := str(weapon.get("canUse", "")).to_lower()
+	var can_use2 := str(weapon.get("canUse2", "")).to_lower()
+	if can_use == "any" or can_use2 == "any":
+		return true
+	var blob := ",".join([
+		character_id.to_lower(),
+		str(character.get("name", "")).to_lower(),
+		str(character.get("persona", "")).to_lower(),
+		str(character.get("trait", "")).to_lower()
+	])
+	for raw in (can_use + "," + can_use2).split(","):
+		var part := raw.strip_edges().trim_prefix("◆")
+		if part.is_empty() or part == "any":
+			continue
+		if blob.contains(part):
+			return true
+	return false
 
 
 func _is_lightsaber_card(card_id: String) -> bool:
@@ -1857,27 +1892,35 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 		)
 		return
 	if step == "defender_respond" and initiator != my_side and _dotf_overlay_kind != "duel_defend":
-		var vbox := _begin_choice_overlay("duel_defend", "Duel — you may swap to a duelist and attach a weapon")
+		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+		var current_defender := str(d.get("defenderCharInstanceId", ""))
+		var duelists: Array = []
+		var weapons: Array = []
+		for c in mine:
+			if bool(c.get("faceDown", false)):
+				continue
+			var cid: String = c.get("cardId", "")
+			if _is_duelist_card(cid, my_side) and str(c.get("instanceId", "")) != current_defender:
+				duelists.append(c)
+			var info: Dictionary = CardCatalog.get_card_info(cid, "") if CardCatalog else {}
+			if str(info.get("type", "")).to_lower() == "weapon" and _weapon_fits_character(cid, str(info.get("set", "")), _card_id_at(mine, current_defender)):
+				weapons.append(c)
+		if duelists.is_empty() and weapons.is_empty():
+			if _dotf_overlay_kind != "duel_defend_auto":
+				_dotf_overlay_kind = "duel_defend_auto"
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
+			return
+		var vbox := _begin_choice_overlay("duel_defend", "Duel — choose who fights, or accept")
 		var accept := Button.new()
-		accept.text = "Accept duel"
+		accept.text = "Accept with this character"
 		accept.pressed.connect(func() -> void:
 			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
 			_clear_dotf_overlay()
 		)
 		vbox.add_child(accept)
-		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
-		var duelists: Array = []
-		var weapons: Array = []
-		for c in mine:
-			var cid: String = c.get("cardId", "")
-			if _is_duelist_card(cid, my_side):
-				duelists.append(c)
-			var info: Dictionary = CardCatalog.get_card_info(cid, "") if CardCatalog else {}
-			if str(info.get("type", "")).to_lower() == "weapon":
-				weapons.append(c)
 		if not duelists.is_empty():
 			var dl := Label.new()
-			dl.text = "Optional: swap defender"
+			dl.text = "Or swap to another duelist"
 			vbox.add_child(dl)
 			_add_card_row(vbox, duelists, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "swapCharInstanceId": inst}})
@@ -1885,7 +1928,7 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 			)
 		if not weapons.is_empty():
 			var wl := Label.new()
-			wl.text = "Or attach a weapon and accept"
+			wl.text = "Or attach a weapon this character can use"
 			vbox.add_child(wl)
 			_add_card_row(vbox, weapons, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "weaponInstanceId": inst}})
@@ -1905,9 +1948,9 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 			existing.queue_free()
 		var panel := PanelContainer.new()
 		panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-		panel.offset_left = 60
-		panel.offset_right = -60
-		panel.offset_top = -210
+		panel.offset_left = 40
+		panel.offset_right = -40
+		panel.offset_top = -340
 		panel.offset_bottom = -8
 		var style := StyleBoxFlat.new()
 		style.bg_color = Color(0.1, 0.12, 0.2, 0.96)
@@ -1923,12 +1966,38 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 		var info := Label.new()
 		var lhits: int = int(d.get("lightHits", 0))
 		var dhits: int = int(d.get("darkHits", 0))
-		info.text = "Duel  Light hits %d (power %d)  Dark hits %d (power %d)" % [lhits, int(d.get("lightPower", 0)), dhits, int(d.get("darkPower", 0))]
+		var my_power: int = int(d.get("lightPower", 0)) if my_side == "light" else int(d.get("darkPower", 0))
+		var opp_power: int = int(d.get("darkPower", 0)) if my_side == "light" else int(d.get("lightPower", 0))
+		var my_hit_n: int = lhits if my_side == "light" else dhits
+		var opp_hit_n: int = dhits if my_side == "light" else lhits
+		info.text = "Duel — you %d hits (drew %d)    opponent %d hits (drew %d)" % [my_hit_n, my_power, opp_hit_n, opp_power]
 		vbox.add_child(info)
-		if pending is Dictionary:
-			var plbl := Label.new()
-			plbl.text = "Attack destiny %d — play a matching destiny to block (that card becomes your attack)." % int(pending.get("destiny", 0))
-			vbox.add_child(plbl)
+		var help := Label.new()
+		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		help.add_theme_font_size_override("font_size", 14)
+		var attacker: String = str(d.get("currentAttacker", ""))
+		var my_char := str(d.get("attackerCharInstanceId", "")) if initiator == my_side else str(d.get("defenderCharInstanceId", ""))
+		var opp_char := str(d.get("defenderCharInstanceId", "")) if initiator == my_side else str(d.get("attackerCharInstanceId", ""))
+		var my_out := _printed_damage(pub, my_char)
+		var opp_out := _printed_damage(pub, opp_char)
+		info.text += "    You are out at %d hits. They are out at %d." % [my_out, opp_out]
+		var my_turn_to_play := false
+		var hand_preview: Array = d.get("yourDuelHand", [])
+		var rules := "Hover a card to read it. A matching destiny blocks and that card becomes your attack. Any other number takes the hit. When a dueling hand is empty, that player cannot attack or block and the other player continues. Cards go back into the decks when the duel ends. Damage is milled only then."
+		if hand_preview.is_empty():
+			help.text = "Your dueling hand is empty, so you cannot play a card. " + rules
+		elif pending is Dictionary and str(pending.get("side", "")) != my_side:
+			my_turn_to_play = true
+			var need: int = int(pending.get("destiny", 0))
+			help.text = "They attacked with destiny %d. Click a card with destiny %d to block. " % [need, need] + rules
+		elif not (pending is Dictionary) and attacker == my_side:
+			my_turn_to_play = true
+			help.text = "Your attack. Click one card. Its destiny is the number they must match. " + rules
+		elif pending is Dictionary:
+			help.text = "Waiting. You attacked with destiny %d. They must match it or take the hit. " % int(pending.get("destiny", 0)) + rules
+		else:
+			help.text = "Waiting for their attack. " + rules
+		vbox.add_child(help)
 		var hand: Array = d.get("yourDuelHand", [])
 		var my_hits: int = lhits if my_side == "light" else dhits
 		var used: Array = d.get("hitRemovalUsed", [])
@@ -1946,6 +2015,9 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 				vbox.add_child(remove_btn)
 				break
 		_add_card_row(vbox, hand, my_side, func(inst: String, cid: String) -> void:
+			if not my_turn_to_play:
+				status_label.text = "Wait for the other player to play a card."
+				return
 			var bonus := _card_bonus_text(cid)
 			var printed := 0
 			if CardCatalog:
@@ -2126,6 +2198,18 @@ func _update_hyperspace_piles(pub: Dictionary, my_side: String) -> void:
 	if your_hs_wrapper:
 		your_hs_wrapper.visible = use_hs
 		_set_hs_pile_contents(your_hs_wrapper, your_hs_tex, your_hs_count, my_ships if use_hs else [], my_side)
+		var hs_ready := false
+		if use_hs:
+			var hs_state: Dictionary = Connection.get_state().game_state if Connection.get_state() else {}
+			var hs_phase := str(hs_state.get("phase", ""))
+			var hs_turn := str(hs_state.get("turnSide", ""))
+			for ship in my_ships:
+				if _table_ability_glow(ship, pub, my_side, hs_phase, hs_turn) == "ability":
+					hs_ready = true
+					break
+		if your_hs_tex:
+			your_hs_tex.modulate = Color(1.15, 1.05, 0.55) if hs_ready else Color.WHITE
+		your_hs_wrapper.tooltip_text = "A ship here can deploy a card from your deck." if hs_ready else ""
 	if opp_hs_wrapper:
 		opp_hs_wrapper.visible = use_hs
 		_set_hs_pile_contents(opp_hs_wrapper, opp_hs_tex, opp_hs_count, opp_ships if use_hs else [], opp_side)
@@ -3476,6 +3560,157 @@ func _refresh() -> void:
 	_previous_phase = phase
 
 
+func _play_blocked(pub: Dictionary) -> bool:
+	if pub.get("planetEffectFetch") is Dictionary:
+		return true
+	if pub.get("deployFromDeckPending") is Dictionary:
+		return true
+	if pub.get("winControlPending") is Dictionary:
+		return true
+	if pub.get("duelState") is Dictionary:
+		return true
+	if pub.get("effectActivationPending") is Dictionary:
+		return true
+	if pub.get("jediTrainingPending") is Dictionary:
+		return true
+	if pub.get("damageReplacePending") is Dictionary:
+		return true
+	if pub.get("poundedPending") is Dictionary:
+		return true
+	if pub.get("deployDrawPending") is Dictionary:
+		return true
+	if pub.get("destinySwapPending") is Dictionary:
+		return true
+	if bool(pub.get("starshipBattlePhase", false)):
+		return true
+	if pub.get("evacuationState") is Dictionary:
+		return true
+	return false
+
+
+func _printed_deploy_cost(info: Dictionary, card_id: String, pub: Dictionary, my_side: String) -> int:
+	var card_type := str(info.get("type", "")).to_lower()
+	if card_type == "starship":
+		return 0
+	var base := int(info.get("cost", 0))
+	if card_type == "character":
+		var bonus := str(info.get("gametextbonus", ""))
+		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+		var theirs: Array = pub.get("darkInPlay" if my_side == "light" else "lightInPlay", [])
+		for clause in bonus.split(";"):
+			var parts: PackedStringArray = clause.split(",")
+			if parts.size() < 3:
+				continue
+			if parts[1].strip_edges().to_lower() != "cost":
+				continue
+			var cond := parts[2].strip_edges().to_lower()
+			if cond.is_empty():
+				continue
+			for c in mine + theirs:
+				if str(c.get("cardId", "")).to_lower().contains(cond):
+					return int(parts[0].strip_edges())
+		return base
+	if card_type == "weapon" and base > 0 and CardCatalog:
+		var id := card_id.to_lower()
+		var name := str(info.get("name", "")).to_lower().replace(" ", "")
+		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+		for c in mine:
+			if bool(c.get("faceDown", false)):
+				continue
+			var einfo: Dictionary = CardCatalog.get_card_info(str(c.get("cardId", "")), my_side, str(c.get("set", "")))
+			var effects := str(einfo.get("effects", "")).to_lower()
+			var marker := "deployfree:"
+			var at := effects.find(marker)
+			if at < 0:
+				continue
+			var token := effects.substr(at + marker.length())
+			var cut := token.find(",")
+			if cut >= 0:
+				token = token.substr(0, cut)
+			token = token.strip_edges()
+			if not token.is_empty() and (id.contains(token) or name.contains(token)):
+				return 0
+	return base
+
+
+func _have_effect_at_location(pub: Dictionary, my_side: String) -> bool:
+	if not CardCatalog:
+		return false
+	var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+	var loc_id := str(pub.get("startingLocationInstanceId", ""))
+	for c in mine:
+		if str(c.get("instanceId", "")) == loc_id:
+			continue
+		var info: Dictionary = CardCatalog.get_card_info(str(c.get("cardId", "")), my_side, str(c.get("set", "")))
+		if str(info.get("type", "")).to_lower() == "effect":
+			return true
+	return false
+
+
+func _hand_card_can_deploy(card_id: String, card_set: String, my_side: String, pub: Dictionary, phase: String, turn_side: String) -> bool:
+	if phase != "deploy" or turn_side != my_side or _play_blocked(pub):
+		return false
+	if not CardCatalog or card_id.is_empty():
+		return false
+	var info: Dictionary = CardCatalog.get_card_info(card_id, my_side, card_set)
+	var card_type := str(info.get("type", "")).to_lower()
+	if card_type == "location":
+		return _can_replace_location_with(card_id)
+	if card_type != "character" and card_type != "weapon" and card_type != "effect" and card_type != "starship":
+		return false
+	var side_name := str(info.get("side", ""))
+	if side_name != "" and side_name != my_side:
+		return false
+	if card_type == "effect" and _have_effect_at_location(pub, my_side):
+		return false
+	return _side_force(my_side) >= _printed_deploy_cost(info, card_id, pub, my_side)
+
+
+func _table_ability_glow(card: Dictionary, pub: Dictionary, my_side: String, phase: String, turn_side: String) -> String:
+	if turn_side != my_side or _play_blocked(pub) or bool(card.get("faceDown", false)) or not CardCatalog:
+		return ""
+	var card_id := str(card.get("cardId", ""))
+	var info: Dictionary = CardCatalog.get_card_info(card_id, my_side, str(card.get("set", "")))
+	var card_type := str(info.get("type", "")).to_lower()
+	var used: Array = pub.get("usedEffectsThisTurn", [])
+	if used.has(str(card.get("instanceId", ""))):
+		return ""
+	var effects := str(info.get("effects", "")).to_lower()
+	var bonus := _card_bonus_text(card_id)
+	if phase == "deploy":
+		if card_type == "effect":
+			if effects.contains("bottomhand:"):
+				var hand_n := 0
+				if Connection.get_state():
+					hand_n = Connection.get_state().hand_with_instances.size()
+				if hand_n > 0:
+					return "ability"
+			elif effects.contains("peekopp:top"):
+				var opp_key := "dark" if my_side == "light" else "light"
+				var opp_view: Dictionary = {}
+				if Connection.get_state():
+					opp_view = Connection.get_state().game_state.get(opp_key, {})
+				if int(opp_view.get("deckCount", 0)) > 0:
+					return "ability"
+			elif effects.contains("yourdeploydiscard:counters+"):
+				return "ability"
+		if bonus.contains("discardsearcher"):
+			return "ability"
+	if phase == "even_up" and card_type == "effect" and effects.contains("discardopp:nonunique"):
+		var opp_play: Array = pub.get("darkInPlay" if my_side == "light" else "lightInPlay", [])
+		var loc_id := str(pub.get("startingLocationInstanceId", ""))
+		var opp_side := "dark" if my_side == "light" else "light"
+		for c in opp_play:
+			if str(c.get("instanceId", "")) == loc_id or bool(c.get("faceDown", false)):
+				continue
+			var oinfo: Dictionary = CardCatalog.get_card_info(str(c.get("cardId", "")), opp_side, str(c.get("set", "")))
+			if str(oinfo.get("type", "")).to_lower() == "location":
+				continue
+			if oinfo.get("uniqueness", true) == false or oinfo.get("unique", true) == false:
+				return "ability"
+	return ""
+
+
 func _build_hand(state: RefCounted) -> void:
 	if not hand_container:
 		return
@@ -3520,6 +3755,8 @@ func _build_hand(state: RefCounted) -> void:
 		var card: Control = CardPlaceholderScene.instantiate()
 		hand_container.add_child(card)
 		card.set_card(card_id, inst_id, my_side, entry.get("set", ""))
+		if card.has_method("set_action_glow") and _hand_card_can_deploy(card_id, str(entry.get("set", "")), my_side, pub, phase, turn_side):
+			card.set_action_glow("play")
 		card.button_pressed = (inst_id == _selected_instance_id)
 		card.card_selected.connect(_on_card_selected)
 		if card.has_signal("drag_started"):
@@ -3594,6 +3831,12 @@ func _on_my_table_card_clicked(instance_id: String) -> void:
 				if str(c.get("instanceId", "")) != instance_id:
 					continue
 				if bool(c.get("faceDown", false)):
+					var back_info: Dictionary = CardCatalog.get_card_info(str(c.get("cardId", "")), my_side, str(c.get("set", ""))) if CardCatalog else {}
+					if str(back_info.get("type", "")).to_lower() == "character":
+						Connection.get_client().send_message({
+							"type": "game_action",
+							"action": { "kind": "return_facedown_deploy", "instanceId": instance_id }
+						})
 					return
 				if _card_bonus_text(str(c.get("cardId", ""))).contains("discardsearcher"):
 					Connection.get_client().send_message({
@@ -5002,6 +5245,8 @@ func _build_in_play(state: RefCounted) -> void:
 	var opp_side: String = "dark" if my_side == "light" else "light"
 	var my_turn_count: int = int(pub.get("lightTurnCount" if my_side == "light" else "darkTurnCount", 0))
 	var opp_turn_count: int = int(pub.get("darkTurnCount" if my_side == "light" else "lightTurnCount", 0))
+	var phase: String = str(state.game_state.get("phase", ""))
+	var turn_side: String = str(state.game_state.get("turnSide", ""))
 	var in_declare_or_plan: bool = pub.get("battleCardDeclareSide", "") != "" or pub.get("battlePlanPhase", false)
 	var in_battle_plan: bool = pub.get("battlePlanPhase", false)
 	var in_battle_card_declare: bool = (pub.get("battleCardDeclareSide", "") != "") and not in_battle_plan
@@ -5029,8 +5274,16 @@ func _build_in_play(state: RefCounted) -> void:
 				your_play_container.add_child(cp)
 				var face_down: bool = card.get("faceDown", false)
 				cp.set_card(card.get("cardId", "?"), card.get("instanceId", ""), my_side, card.get("set", ""), face_down, true)
+				if cp.has_method("set_action_glow"):
+					cp.set_action_glow(_table_ability_glow(card, pub, my_side, phase, turn_side))
 				_animate_in_play_card(cp, my_turn_count, face_down)
-				if not face_down and CardCatalog and not in_battle_card_declare:
+				var played_type := ""
+				if CardCatalog:
+					played_type = str(CardCatalog.get_card_info(card.get("cardId", ""), my_side, card.get("set", "")).get("type", "")).to_lower()
+				if face_down and phase == "deploy" and turn_side == my_side and played_type == "character" and cp.has_signal("card_selected"):
+					cp.tooltip_text = "Click to return this face-down character to your hand and refund its deploy cost."
+					cp.card_selected.connect(_on_my_table_card_clicked)
+				elif not face_down and CardCatalog and not in_battle_card_declare:
 					var ct: String = str(CardCatalog.get_card_info(card.get("cardId", ""), my_side, card.get("set", "")).get("type", "")).to_lower()
 					if ct == "effect" and cp.has_signal("card_selected"):
 						cp.card_selected.connect(_on_my_in_play_effect_clicked)

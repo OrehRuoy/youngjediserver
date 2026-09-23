@@ -367,7 +367,28 @@ export function chooseDuelTarget(state: GameStateData, side: Side, defenderCharI
   if (!char || !isCharacter(char.cardId, char.cardSet)) return false;
   d.defenderCharInstanceId = defenderCharInstanceId;
   d.step = "defender_respond";
+  const defenderSide: Side = side === "light" ? "dark" : "light";
+  if (!defenderHasDuelChoice(state)) {
+    defenderReadyDuel(state, defenderSide, {});
+  }
   return true;
+}
+
+/** A swap to another duelist, or a weapon that character can use. Otherwise the duel just starts. */
+function defenderHasDuelChoice(state: GameStateData): boolean {
+  const d = state.duelState;
+  if (!d?.defenderCharInstanceId) return false;
+  const defenderSide: Side = d.initiator === "light" ? "dark" : "light";
+  const others = getCharactersAtLocation(state, defenderSide, true).filter(
+    (c) => c.instanceId !== d.defenderCharInstanceId && isDuelist(c.cardId, defenderSide, c.cardSet)
+  );
+  if (others.length > 0) return true;
+  const defChar = findAtLocation(state, defenderSide, d.defenderCharInstanceId);
+  if (!defChar) return false;
+  const pile = defenderSide === "light" ? state.light.inPlay : state.dark.inPlay;
+  return pile.some(
+    (c) => !c.faceDown && isWeapon(c.cardId, c.cardSet) && weaponUsableBy(c.cardId, defChar.cardId, c.cardSet)
+  );
 }
 
 function beginDuelHands(state: GameStateData, anakinPower?: number): void {
@@ -408,6 +429,7 @@ function beginDuelHands(state: GameStateData, anakinPower?: number): void {
   applyDuelHandBonusDraws(state, d);
   d.step = "play";
   d.currentAttacker = attackerSide;
+  resolveEmptyHands(state);
 }
 
 export function defenderReadyDuel(
@@ -470,26 +492,46 @@ function checkKo(state: GameStateData): boolean {
   return false;
 }
 
-function maybeFinishEmpty(state: GameStateData): boolean {
-  const d = state.duelState;
-  if (!d || d.step !== "play") return false;
-  if (d.lightDuelHand.length > 0 || d.darkDuelHand.length > 0) return false;
-  if (d.pendingAttack) {
-    const hitSide: Side = d.pendingAttack.side === "light" ? "dark" : "light";
-    const hits = hitsForPending(d.pendingAttack);
-    if (hitSide === "light") d.lightHits += hits;
-    else d.darkHits += hits;
-    const atkP = d.pendingAttack.side === "light" ? d.lightPlayed : d.darkPlayed;
-    const atkH = d.pendingAttack.side === "light" ? d.lightDuelHand : d.darkDuelHand;
-    if (!d.pendingAttack.discarded) {
-      const idx = atkH.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
-      if (idx >= 0) atkP.push(atkH.splice(idx, 1)[0]);
+function handOf(d: NonNullable<GameStateData["duelState"]>, side: Side): CardInstance[] {
+  return side === "light" ? d.lightDuelHand : d.darkDuelHand;
+}
+
+function playedOf(d: NonNullable<GameStateData["duelState"]>, side: Side): CardInstance[] {
+  return side === "light" ? d.lightPlayed : d.darkPlayed;
+}
+
+/** A player with no dueling cards cannot attack or block. Score an unanswered hit, pass the attack, or end the duel. */
+function resolveEmptyHands(state: GameStateData): void {
+  for (let n = 0; n < 12; n++) {
+    const d = state.duelState;
+    if (!d || d.step !== "play") return;
+    if (d.pendingAttack) {
+      const defender: Side = d.pendingAttack.side === "light" ? "dark" : "light";
+      if (handOf(d, defender).length > 0) return;
+      const hitSide = defender;
+      const hits = hitsForPending(d.pendingAttack);
+      if (hitSide === "light") d.lightHits += hits;
+      else d.darkHits += hits;
+      const atkSide = d.pendingAttack.side;
+      if (!d.pendingAttack.discarded) {
+        const atkHand = handOf(d, atkSide);
+        const idx = atkHand.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
+        if (idx >= 0) playedOf(d, atkSide).push(atkHand.splice(idx, 1)[0]);
+      }
+      d.pendingAttack = undefined;
+      d.currentAttacker = atkSide;
+      if (checkKo(state)) return;
+      continue;
     }
-    d.pendingAttack = undefined;
-    if (checkKo(state)) return true;
+    const attacker = d.currentAttacker;
+    if (handOf(d, attacker).length > 0) return;
+    const other: Side = attacker === "light" ? "dark" : "light";
+    if (handOf(d, other).length === 0) {
+      endDuel(state);
+      return;
+    }
+    d.currentAttacker = other;
   }
-  endDuel(state);
-  return true;
 }
 
 export function playDuelCard(
@@ -526,10 +568,7 @@ export function playDuelCard(
       bonusHits: useExtra ? 2 : undefined,
       discarded: useExtra,
     };
-    const oppHand = side === "light" ? d.darkDuelHand : d.lightDuelHand;
-    if (oppHand.length === 0) {
-      maybeFinishEmpty(state);
-    }
+    resolveEmptyHands(state);
     return true;
   }
 
@@ -558,6 +597,7 @@ export function playDuelCard(
       discarded: useExtra,
     };
     d.currentAttacker = side;
+    resolveEmptyHands(state);
     return true;
   }
 
@@ -574,7 +614,7 @@ export function playDuelCard(
   d.pendingAttack = undefined;
   d.currentAttacker = side;
   if (checkKo(state)) return true;
-  maybeFinishEmpty(state);
+  resolveEmptyHands(state);
   return true;
 }
 
@@ -593,6 +633,7 @@ export function discardDuelCardForDraw(state: GameStateData, side: Side, instanc
   card.faceDown = false;
   p.discard.push(card);
   hand.push(...drawDuelHand(p, 2));
+  resolveEmptyHands(state);
   return true;
 }
 

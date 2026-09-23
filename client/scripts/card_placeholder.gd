@@ -233,8 +233,7 @@ func _show_hover_popup() -> void:
 	if popup.position.y < 0:
 		popup.position.y = 8
 	popup.size = popup_size
-	root.add_child(popup)
-	_hover_popup = popup
+	_attach_hover_popup(root, popup)
 	popup.mouse_entered.connect(_on_popup_mouse_entered)
 	popup.mouse_exited.connect(_on_popup_mouse_exited)
 
@@ -287,10 +286,18 @@ func _show_face_down_hover_popup() -> void:
 	if popup.position.y < 0:
 		popup.position.y = 8
 	popup.size = popup_size
-	root.add_child(popup)
-	_hover_popup = popup
+	_attach_hover_popup(root, popup)
 	popup.mouse_entered.connect(_on_popup_mouse_entered)
 	popup.mouse_exited.connect(_on_popup_mouse_exited)
+
+
+func _attach_hover_popup(root: Window, popup: Control) -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "CardHoverLayer"
+	layer.layer = 220
+	root.add_child(layer)
+	layer.add_child(popup)
+	_hover_popup = popup
 
 
 func _on_popup_mouse_entered() -> void:
@@ -302,10 +309,32 @@ func _on_popup_mouse_exited() -> void:
 	_on_mouse_exited()
 
 
+## Gold border: this card can be deployed now. Blue border: an ability on it can be used now.
+func set_action_glow(mode: String) -> void:
+	var panel: PanelContainer = get_node_or_null("Panel") as PanelContainer
+	if panel == null:
+		return
+	if mode.is_empty():
+		panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		return
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0)
+	style.set_border_width_all(3)
+	style.set_corner_radius_all(4)
+	if mode == "ability":
+		style.border_color = Color(0.35, 0.9, 1.0, 1)
+	else:
+		style.border_color = Color(1.0, 0.82, 0.28, 1)
+	panel.add_theme_stylebox_override("panel", style)
+
+
 func _hide_hover_popup() -> void:
 	if _hover_popup and is_instance_valid(_hover_popup):
+		var parent := _hover_popup.get_parent()
 		_hover_popup.queue_free()
 		_hover_popup = null
+		if parent is CanvasLayer and str(parent.name) == "CardHoverLayer":
+			parent.queue_free()
 
 
 ## Call from game scene to clear hover when e.g. Play is pressed or state refreshes.

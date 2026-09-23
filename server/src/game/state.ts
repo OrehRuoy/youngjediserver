@@ -839,11 +839,11 @@ export interface GameStateData {
     yours: { key: string; cardId: string; destiny: number }[];
     opps: { key: string; cardId: string; destiny: number }[];
   };
-  /** A Powerful Opponent: optionally replace one of your destiny draws with your character's damage. */
+  /** A Powerful Opponent: one drawn destiny at a time, then the player may replace it with damage. */
   damageReplacePending?: {
     side: Side;
     damage: number;
-    draws: { key: string; cardId: string; destiny: number }[];
+    draw: { key: string; cardId: string; destiny: number };
   };
   /** Lightsaber duel in progress. */
   duelState?: import("./duel").DuelState;
@@ -1471,20 +1471,20 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
       pendingAttack: d.pendingAttack
         ? { cardId: d.pendingAttack.cardId, destiny: d.pendingAttack.destiny, side: d.pendingAttack.side }
         : undefined,
-      yourDuelHand:
-        forSide === "light"
-          ? d.lightDuelHand.map((c) => ({
-              instanceId: c.instanceId,
-              cardId: c.cardId,
-              ...(c.cardSet ? { set: c.cardSet } : {}),
-            }))
-          : forSide === "dark"
-            ? d.darkDuelHand.map((c) => ({
-                instanceId: c.instanceId,
-                cardId: c.cardId,
-                ...(c.cardSet ? { set: c.cardSet } : {}),
-              }))
-            : [],
+      yourDuelHand: (() => {
+        const mine = forSide === "light" ? d.lightDuelHand : forSide === "dark" ? d.darkDuelHand : [];
+        const hide =
+          d.pendingAttack && d.pendingAttack.side === forSide && !d.pendingAttack.discarded
+            ? d.pendingAttack.instanceId
+            : "";
+        return mine
+          .filter((c) => c.instanceId !== hide)
+          .map((c) => ({
+            instanceId: c.instanceId,
+            cardId: c.cardId,
+            ...(c.cardSet ? { set: c.cardSet } : {}),
+          }));
+      })(),
     };
   }
   publicState.duelUsedThisTurn = state.duelUsedThisTurn === true;
@@ -1655,6 +1655,44 @@ export function playCardToTable(state: GameStateData, side: Side, instanceId: st
   if (turnCount === 1) card.faceDown = true;
   p.inPlay.push(card);
   return true;
+}
+
+/** Take a face-down character deployed this turn back to hand and refund what it cost. */
+export function returnFaceDownCharacter(
+  state: GameStateData,
+  side: Side,
+  instanceId: string
+): { ok: boolean; error?: string } {
+  if (state.phase !== "deploy") return { ok: false, error: "Can only take a card back during deploy" };
+  if (state.turnSide !== side) return { ok: false, error: "Not your turn" };
+  if (
+    state.planetEffectFetch ||
+    state.deployFromDeckPending ||
+    state.effectActivationPending ||
+    state.jediTrainingPending ||
+    state.deployDrawPending ||
+    state.winControlPending ||
+    state.duelState ||
+    state.poundedPending
+  ) {
+    return { ok: false, error: "Finish the current choice before taking a card back" };
+  }
+  const p = side === "light" ? state.light : state.dark;
+  const idx = p.inPlay.findIndex((c) => c.instanceId === instanceId);
+  if (idx < 0) return { ok: false, error: "That card is not in play" };
+  const card = p.inPlay[idx];
+  if (!card.faceDown) return { ok: false, error: "Only a face-down character can be taken back" };
+  const def = getCard(card.cardId, card.cardSet);
+  if (!def || (def as { type?: string }).type !== "character") {
+    return { ok: false, error: "Only a character can be taken back" };
+  }
+  const cost = getDeployCostWithGametextBonus(state, side, card.cardId, card.cardSet);
+  p.inPlay.splice(idx, 1);
+  card.zone = "hand";
+  card.faceDown = false;
+  p.hand.push(card);
+  addForce(state, side, cost);
+  return { ok: true };
 }
 
 /** Draw top card of deck for destiny; return destiny number (0 if no card or no destiny). Card goes to discard face up. */
@@ -2391,13 +2429,13 @@ export function confirmDestinySwap(state: GameStateData, side: Side, yourKey: st
   return true;
 }
 
-export function confirmDamageReplace(state: GameStateData, side: Side, key: string): boolean {
+export function confirmDamageReplace(state: GameStateData, side: Side, key?: string): boolean {
   const pending = state.damageReplacePending;
-  if (!pending || pending.side !== side) return false;
-  if (!pending.draws.some((d) => d.key === key)) return false;
+  if (!pending || pending.side !== side || !pending.draw) return false;
+  if (key && key !== pending.draw.key) return false;
   const resume = damageReplaceResume.get(state.id);
   if (!resume) return false;
-  resume(key);
+  resume(pending.draw.key);
   return true;
 }
 
@@ -2451,10 +2489,19 @@ function millDamageForFighter(
   );
 }
 
-/** If either deck is empty, that side loses; return the winning side. */
+/** Cards drawn for a duel are set aside and shuffled back when the duel ends. */
+function duelCardsReturningToDeck(state: GameStateData, side: Side): number {
+  const d = state.duelState;
+  if (!d) return 0;
+  if (side === "light") return d.lightDuelHand.length + d.lightPlayed.length;
+  return d.darkDuelHand.length + d.darkPlayed.length;
+}
+
+/** If either deck is empty, that side loses; return the winning side.
+ * Cards sitting in a dueling hand still belong to the deck, so they do not count as a loss. */
 export function getDeckEmptyWinner(state: GameStateData): Side | undefined {
-  if (state.light.deck.length === 0) return "dark";
-  if (state.dark.deck.length === 0) return "light";
+  if (state.light.deck.length + duelCardsReturningToDeck(state, "light") === 0) return "dark";
+  if (state.dark.deck.length + duelCardsReturningToDeck(state, "dark") === 0) return "light";
   return undefined;
 }
 
@@ -3643,6 +3690,8 @@ export function resolveBattlePlan(state: GameStateData): void {
       darkPower = sumDark();
     };
     const replacedDamage = new Set<Side>();
+    let lightReplaceAt = 0;
+    let darkReplaceAt = 0;
     const considerDamageReplace = (): boolean => {
       for (const replaceSide of ["light", "dark"] as Side[]) {
         if (replacedDamage.has(replaceSide)) continue;
@@ -3661,17 +3710,29 @@ export function resolveBattlePlan(state: GameStateData): void {
           replacedDamage.add(replaceSide);
           continue;
         }
+        const at = replaceSide === "light" ? lightReplaceAt : darkReplaceAt;
+        if (at >= refs.length) {
+          replacedDamage.add(replaceSide);
+          continue;
+        }
+        const shown = refs[at];
         state.damageReplacePending = {
           side: replaceSide,
           damage,
-          draws: refs.map((d) => ({ key: d.key, cardId: d.cardId, destiny: d.draw.destiny })),
+          draw: { key: shown.key, cardId: shown.cardId, destiny: shown.draw.destiny },
         };
         damageReplaceResume.set(state.id, (key) => {
           if (key) {
             const ref = refs.find((d) => d.key === key);
             if (ref) applyDamageToDraw(ref, damage);
+            replacedDamage.add(replaceSide);
+          } else if (replaceSide === "light") {
+            lightReplaceAt += 1;
+            if (lightReplaceAt >= refs.length) replacedDamage.add(replaceSide);
+          } else {
+            darkReplaceAt += 1;
+            if (darkReplaceAt >= refs.length) replacedDamage.add(replaceSide);
           }
-          replacedDamage.add(replaceSide);
           state.damageReplacePending = undefined;
           damageReplaceResume.delete(state.id);
           if (considerDamageReplace()) return;

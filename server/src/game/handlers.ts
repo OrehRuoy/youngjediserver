@@ -149,6 +149,13 @@ export function handleGameAction(
     return { applied: true };
   }
 
+  if (action.kind === "return_facedown_deploy") {
+    const instanceId = action.instanceId as string | undefined;
+    if (!instanceId) return { applied: false, error: "Missing instanceId" };
+    const result = state.returnFaceDownCharacter(g, side, instanceId);
+    return result.ok ? { applied: true } : { applied: false, error: result.error };
+  }
+
   if (action.kind === "pass_phase") {
     if (g.turnSide !== side) return { applied: false, error: "Not your turn" };
     if (g.planetEffectFetch) return { applied: false, error: "Finish taking or skipping an Effect from deck first" };
@@ -677,7 +684,6 @@ export function handleGameAction(
 
   if (action.kind === "confirm_damage_replace") {
     const key = action.key as string | undefined;
-    if (!key) return { applied: false, error: "Pick one of your destiny numbers" };
     const ok = state.confirmDamageReplace(g, side, key);
     if (!ok) return { applied: false, error: "That destiny number cannot be replaced" };
     const deckWinner = state.getDeckEmptyWinner(g);
