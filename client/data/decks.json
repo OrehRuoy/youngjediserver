@@ -1041,6 +1041,424 @@
           "count": 2
         }
       ]
+    },
+    {
+      "id": "test_1_jedi_duel",
+      "name": "1 Jedi Duel",
+      "side": "light",
+      "cards": [
+        {
+          "id": "quigonjinnjedimentor",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "obiwankenobijedistudent",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "macewindujedicouncilor",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "quigonjinnslightsaberwieldedbyobiwan",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "obiwankenobislightsaber",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "yodajediphilosopher",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "royalguardleader",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "jeditraining",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "apowerfulopponent",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "criticalconfrontation",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "quigonsfinalstand",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "twistoffate",
+          "set": "duelofthefates",
+          "count": 1
+        },
+        {
+          "id": "youarestrongwiththeforce",
+          "set": "duelofthefates",
+          "count": 1
+        },
+        {
+          "id": "c3poanakinscreation",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "r2d2astromechdroid",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "tatooinepodracearena",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "tatooinemosespa",
+          "set": "thejedicouncil",
+          "count": 2
+        },
+        {
+          "id": "coruscantcapitalcity",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "coruscantgalacticsenate",
+          "set": "battleofnaboo",
+          "count": 1
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "naboogunganswamp",
+          "set": "thejedicouncil",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "test_2_ships",
+      "name": "2 Ships",
+      "side": "light",
+      "cards": [
+        {
+          "id": "bravopilotflyer",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "ishitibwarrior",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "blaster_light",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "blasterrifle_light",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "anakinskywalkerrookiepilot",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "ricoliestarshippilot",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "naboofighterattack",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "runtheblockade",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "r2d2repairdroid",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "queenamidalayoungleader",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "c3poanakinscreation",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "naboostarfighterduel",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "amidalasstarshiproyaltransport",
+          "set": "battleofnaboo",
+          "count": 2
+        },
+        {
+          "id": "republiccruisertransport",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        },
+        {
+          "id": "tatooinepodracearena",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        },
+        {
+          "id": "coruscantcapitalcity",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "test_3_naboo_gungans",
+      "name": "3 Naboo and Gungans",
+      "side": "light",
+      "cards": [
+        {
+          "id": "nabooofficercommander",
+          "set": "battleofnaboo",
+          "count": 5
+        },
+        {
+          "id": "naboobureaucratofficial",
+          "set": "battleofnaboo",
+          "count": 5
+        },
+        {
+          "id": "jarjarbinksgunganchubathief",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "captainquarshpanakasecuritycommander",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "nabooofficerbattleplanner",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "royalguardleader",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "royalguardveteran",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "naboosecuritytrooper",
+          "set": "battleofnaboo",
+          "count": 3
+        },
+        {
+          "id": "gunganwarriorinfantry",
+          "set": "menaceofdarthmaul",
+          "count": 4
+        },
+        {
+          "id": "booma",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "flashspeeder",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "nabooblaster",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "kaadu",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "electropole",
+          "set": "menaceofdarthmaul",
+          "count": 1
+        },
+        {
+          "id": "fambaa",
+          "set": "battleofnaboo",
+          "count": 1
+        },
+        {
+          "id": "comeonmove",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "gunganmountedtroops",
+          "set": "duelofthefates",
+          "count": 3
+        },
+        {
+          "id": "gunganenergyshield",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "royalnaboosecurityforces",
+          "set": "duelofthefates",
+          "count": 2
+        },
+        {
+          "id": "tatooinepodracearena",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "tatooinemosespa",
+          "set": "thejedicouncil",
+          "count": 2
+        },
+        {
+          "id": "coruscantcapitalcity",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "naboogunganswamp",
+          "set": "thejedicouncil",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "test_4_senate",
+      "name": "4 Senate",
+      "side": "light",
+      "cards": [
+        {
+          "id": "galacticsenatordelegate",
+          "set": "thejedicouncil",
+          "count": 5
+        },
+        {
+          "id": "coruscantguardofficer",
+          "set": "thejedicouncil",
+          "count": 5
+        },
+        {
+          "id": "bravopilotveteranflyer",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "royalguardleader",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "valorumleaderofthesenate",
+          "set": "duelofthefates",
+          "count": 4
+        },
+        {
+          "id": "masameddavicechancellor",
+          "set": "menaceofdarthmaul",
+          "count": 3
+        },
+        {
+          "id": "scitariachancellorsaide",
+          "set": "thejedicouncil",
+          "count": 3
+        },
+        {
+          "id": "blaster_light",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "blasterrifle_light",
+          "set": "menaceofdarthmaul",
+          "count": 5
+        },
+        {
+          "id": "senateguard",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "poundeduntodeath",
+          "set": "duelofthefates",
+          "count": 5
+        },
+        {
+          "id": "coruscantgalacticsenate",
+          "set": "battleofnaboo",
+          "count": 3
+        },
+        {
+          "id": "coruscantcapitalcity",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "nabootheedpalace",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "tatooinepodracearena",
+          "set": "menaceofdarthmaul",
+          "count": 2
+        },
+        {
+          "id": "naboogunganswamp",
+          "set": "thejedicouncil",
+          "count": 1
+        }
+      ]
     }
   ]
 }

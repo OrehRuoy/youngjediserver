@@ -2227,7 +2227,7 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 			var becomes_attack := not (pending is Dictionary) or printed == int(pending.get("destiny", -1))
 			if bonus.contains("duel:discard:draw2"):
 				for child in vbox.get_children():
-					if child != info:
+					if child != help:
 						child.queue_free()
 				var ask := Label.new()
 				ask.text = "Discard this card to draw two cards for your dueling hand, or play it."
@@ -2247,7 +2247,7 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 				return
 			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
 				for child in vbox.get_children():
-					if child != info:
+					if child != help:
 						child.queue_free()
 				var ask := Label.new()
 				ask.text = "Qui-Gon's Final Stand can be discarded so this attack does two extra hits."
@@ -6025,12 +6025,13 @@ func _lift_setup_banners() -> void:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	anchor.add_child(box)
 	for section in [destiny_compare_section, location_choice_section]:
-		section.visible = false
-		section.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var parent := section.get_parent()
+		var section_node := section as Control
+		section_node.visible = false
+		section_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var parent := section_node.get_parent()
 		if parent:
-			parent.remove_child(section)
-		box.add_child(section)
+			parent.remove_child(section_node)
+		box.add_child(section_node)
 
 
 func _fly_layer() -> CanvasLayer:

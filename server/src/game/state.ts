@@ -2109,11 +2109,19 @@ export function getGametextBonusForCharacter(
       label = "controlled " + planet + " +" + clause.num;
       continue;
     }
-    if (opponentMatchesGametextCondition(opponentCharacterCardId, clause.condition)) {
-      bonus += clause.num;
-      if (clause.condition === "tank") label = "vs Tank +" + clause.num;
-      else if (clause.condition === "amidala") label = "vs Amidala +" + clause.num;
-      else if (clause.condition === "handmaiden") label = "vs Handmaiden +" + clause.num;
+    if (
+      clause.condition === "jedi" ||
+      clause.condition === "tank" ||
+      clause.condition === "amidala" ||
+      clause.condition === "handmaiden"
+    ) {
+      if (opponentMatchesGametextCondition(opponentCharacterCardId, clause.condition)) {
+        bonus += clause.num;
+        if (clause.condition === "tank") label = "vs Tank +" + clause.num;
+        else if (clause.condition === "amidala") label = "vs Amidala +" + clause.num;
+        else if (clause.condition === "handmaiden") label = "vs Handmaiden +" + clause.num;
+        else label = "vs Jedi +" + clause.num;
+      }
       continue;
     }
     const usingWeapon = weaponMatchesGametextCondition(weaponCardId, clause.condition, weaponSet);
