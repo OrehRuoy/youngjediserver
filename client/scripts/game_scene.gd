@@ -143,9 +143,13 @@ var _announced_opp_battle_cards: bool = false
 
 
 func _ready() -> void:
-	if CardCatalog:
-		CARD_BACK_LIGHT = CardCatalog.smooth_texture(CARD_BACK_LIGHT)
-		CARD_BACK_DARK = CardCatalog.smooth_texture(CARD_BACK_DARK)
+	if CardCatalog and CardCatalog.has_method("smooth_texture"):
+		var sharp_light: Texture2D = CardCatalog.smooth_texture(CARD_BACK_LIGHT)
+		var sharp_dark: Texture2D = CardCatalog.smooth_texture(CARD_BACK_DARK)
+		if sharp_light != null:
+			CARD_BACK_LIGHT = sharp_light
+		if sharp_dark != null:
+			CARD_BACK_DARK = sharp_dark
 	for back_rect in [your_deck, opp_deck, your_discard, opp_discard]:
 		if back_rect:
 			back_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
