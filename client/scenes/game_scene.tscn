@@ -49,21 +49,11 @@ shadow_color = Color(0, 0, 0, 0.55)
 shadow_size = 18
 shadow_offset = Vector2(0, 4)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_actions"]
-bg_color = Color(0.03, 0.04, 0.1, 0.82)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.18, 0.38, 0.65, 0.7)
-corner_radius_top_left = 10
-corner_radius_top_right = 10
-corner_radius_bottom_right = 10
-corner_radius_bottom_left = 10
-content_margin_left = 10.0
-content_margin_top = 10.0
-content_margin_right = 10.0
-content_margin_bottom = 10.0
+[sub_resource type="StyleBoxEmpty" id="StyleBoxFlat_actions"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
 
 [node name="GameScene" type="Control" unique_id=552357869]
 layout_mode = 3
@@ -332,12 +322,19 @@ theme_override_font_sizes/font_size = 16
 text = "WHO GOES FIRST?"
 horizontal_alignment = 1
 
-[node name="DestinyCompareLabel" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyVBox" unique_id=655383246]
+[node name="DestinyCompareLabel" type="RichTextLabel" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyVBox" unique_id=655383246]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(440, 0)
 layout_mode = 2
-theme_override_colors/font_color = Color(0.88, 0.9, 0.98, 1)
-theme_override_font_sizes/font_size = 15
+mouse_filter = 2
+theme_override_colors/default_color = Color(0.88, 0.9, 0.98, 1)
+theme_override_font_sizes/normal_font_size = 15
+theme_override_font_sizes/bold_font_size = 15
+bbcode_enabled = true
 text = "Drawing destiny..."
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
 horizontal_alignment = 1
 
 [node name="DestinyCards" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyVBox"]
@@ -350,6 +347,7 @@ layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="YourDestinyCaption" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyVBox/DestinyCards/YourDestinyCol"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.76, 0.9, 1)
 theme_override_font_sizes/font_size = 12
@@ -367,6 +365,7 @@ layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="OppDestinyCaption" type="Label" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyVBox/DestinyCards/OppDestinyCol"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.76, 0.9, 1)
 theme_override_font_sizes/font_size = 12
@@ -407,9 +406,16 @@ theme_override_font_sizes/font_size = 13
 text = "Click a location to play it."
 horizontal_alignment = 1
 
-[node name="LocationChoiceCards" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection/LocationChoiceVBox" unique_id=1399433757]
+[node name="LocationChoiceScroll" type="ScrollContainer" parent="HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection/LocationChoiceVBox"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_horizontal = 4
+vertical_scroll_mode = 0
+
+[node name="LocationChoiceCards" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection/LocationChoiceVBox/LocationChoiceScroll" unique_id=1399433757]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 6
 theme_override_constants/separation = 14
 alignment = 1
 
@@ -705,7 +711,16 @@ custom_minimum_size = Vector2(220, 144)
 layout_mode = 2
 vertical_scroll_mode = 0
 
-[node name="HandList" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll" unique_id=1907888277]
+[node name="HandPad" type="MarginContainer" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 6
+size_flags_vertical = 4
+theme_override_constants/margin_left = 5
+theme_override_constants/margin_top = 5
+theme_override_constants/margin_right = 5
+theme_override_constants/margin_bottom = 5
+
+[node name="HandList" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll/HandPad" unique_id=1907888277]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 6

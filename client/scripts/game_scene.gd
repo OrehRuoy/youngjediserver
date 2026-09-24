@@ -45,7 +45,9 @@ var CARD_BACK_DARK: Texture2D = preload("res://assets/card_back_dark.png")
 @onready var return_to_lobby_btn: Button = %ReturnToLobbyBtn
 @onready var status_label: Label = %StatusLabel
 @onready var destiny_compare_section: Control = %DestinyCompareSection
-@onready var destiny_compare_label: Label = %DestinyCompareLabel
+@onready var destiny_compare_label: RichTextLabel = %DestinyCompareLabel
+@onready var your_destiny_caption: Label = %YourDestinyCaption
+@onready var opp_destiny_caption: Label = %OppDestinyCaption
 @onready var opponent_destiny_slot: HBoxContainer = %OpponentDestinySlot
 @onready var your_destiny_slot: HBoxContainer = %YourDestinySlot
 @onready var location_row: Control = %LocationRow
@@ -55,6 +57,7 @@ var CARD_BACK_DARK: Texture2D = preload("res://assets/card_back_dark.png")
 @onready var location_choice_label: Label = %LocationChoiceLabel
 @onready var location_choice_hint: Label = %LocationChoiceHint
 @onready var location_choice_cards: HBoxContainer = %LocationChoiceCards
+@onready var location_choice_scroll: ScrollContainer = %LocationChoiceScroll
 @onready var battle_plan_section: VBoxContainer = %BattlePlanSection
 @onready var battle_plan_label: Label = %BattlePlanLabel
 @onready var battle_plan_row: HBoxContainer = %BattlePlanRow
@@ -137,13 +140,14 @@ var _hs_browse_overlay: CanvasLayer = null
 var _picking_duel: bool = false
 var _duel_char_id: String = ""
 var _duel_weapon_id: String = ""
-var _duel_pending_key: String = ""
-var _duel_pending_card: String = ""
-var _duel_pending_side: String = ""
-var _duel_pending_set: String = ""
 var _seen_duel_result: String = ""
-var _duel_pending_dest: int = 0
-var _duel_clash: Dictionary = {}
+var _duel_prev: Dictionary = {}
+var _duel_flash: Dictionary = {}
+var _duel_flash_serial: int = 0
+const DUEL_FLASH_SECS := 2.6
+const DUEL_HIT_COLOR := Color(1.0, 0.38, 0.32)
+const DUEL_GOLD := Color(1.0, 0.84, 0.36)
+const DUEL_MUTED := Color(0.62, 0.68, 0.82)
 var _setup_fly_layer: CanvasLayer = null
 
 var _announced_opp_battle_cards: bool = false
@@ -163,6 +167,8 @@ func _ready() -> void:
 	_lift_setup_banners()
 	_build_info_plates()
 	_build_pile_frames()
+	_style_action_buttons()
+	_setup_chat_toggle()
 	_fit_board_to_window()
 	var board_box: Control = get_node_or_null("HBoxContainer/Margin/GameArea/VBox") as Control
 	if board_box and not board_box.resized.is_connected(_fit_board_to_window):
@@ -1332,6 +1338,8 @@ func _add_card_row(parent: Node, cards: Array, side: String, on_pick: Callable) 
 	parent.add_child(scroll)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(row)
 	for entry in cards:
 		var card_id: String = entry.get("cardId", "")
@@ -1893,202 +1901,371 @@ func _in_play_entry(pub: Dictionary, instance_id: String) -> Dictionary:
 	return {}
 
 
-func _duel_thumb(card_id: String, side: String, set_name: String, caption: String) -> Control:
-	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(104, 180)
+func _duel_side_color(side: String) -> Color:
+	return SIDE_COLOR_LIGHT if side == "light" else SIDE_COLOR_DARK
+
+
+func _duel_label(text: String, font_size: int, color: Color, heading: bool = false) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if heading:
+		l.theme_type_variation = &"HeaderLabel"
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", color)
+	return l
+
+
+func _duel_card(parent: Node, card_id: String, side: String, set_name: String, card_size: Vector2) -> Control:
 	var card: Control = CardPlaceholderScene.instantiate()
-	box.add_child(card)
+	parent.add_child(card)
 	if card.has_method("set_card"):
 		card.set_card(card_id, "duel-view", side, set_name)
-	card.custom_minimum_size = Vector2(96, 136)
+	if card.has_method("set_board_size"):
+		card.set_board_size(card_size)
+	else:
+		card.custom_minimum_size = card_size
+	card.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if card is BaseButton:
-		(card as BaseButton).disabled = false
 		(card as BaseButton).toggle_mode = false
-	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var cap := Label.new()
-	cap.text = caption
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	cap.custom_minimum_size = Vector2(104, 36)
-	cap.add_theme_font_size_override("font_size", 13)
-	box.add_child(cap)
-	return box
+		(card as BaseButton).focus_mode = Control.FOCUS_NONE
+	return card
 
 
-func _duel_fighter_col(pub: Dictionary, char_instance: String, weapon_instance: String, side: String, d: Dictionary, mine: bool) -> Control:
-	var box := VBoxContainer.new()
-	var who := Label.new()
-	who.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	who.add_theme_font_size_override("font_size", 16)
-	who.text = "You" if mine else "Opponent"
-	box.add_child(who)
+func _duel_empty_slot(parent: Node, slot_size: Vector2, text: String) -> void:
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = slot_size
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.08, 0.15, 0.6)
+	sb.border_color = Color(0.4, 0.46, 0.62, 0.45)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	slot.add_theme_stylebox_override("panel", sb)
+	var l := _duel_label(text, 12, DUEL_MUTED)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	slot.add_child(l)
+	parent.add_child(slot)
+
+
+func _duel_hit_pips(hits: int, out_at: int, fresh_hits: int, align_left: bool = false) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN if align_left else BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 5)
+	row.add_child(_duel_label("HITS", 11, DUEL_MUTED, true))
+	if out_at <= 0 or out_at > 12:
+		row.add_child(_duel_label(str(hits) if out_at <= 0 else "%d / %d" % [hits, out_at], 14, Color(0.93, 0.95, 1.0)))
+		return row
+	for i in range(out_at):
+		var pip := Panel.new()
+		pip.custom_minimum_size = Vector2(15, 15)
+		pip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(8)
+		sb.set_border_width_all(2)
+		if i < hits:
+			sb.bg_color = DUEL_HIT_COLOR
+			sb.border_color = Color(1.0, 0.74, 0.68)
+			sb.shadow_color = Color(DUEL_HIT_COLOR.r, DUEL_HIT_COLOR.g, DUEL_HIT_COLOR.b, 0.55)
+			sb.shadow_size = 4
+		else:
+			sb.bg_color = Color(0.07, 0.09, 0.17)
+			sb.border_color = Color(0.36, 0.42, 0.58)
+		pip.add_theme_stylebox_override("panel", sb)
+		row.add_child(pip)
+		if i < hits and i >= hits - fresh_hits:
+			pip.pivot_offset = Vector2(7.5, 7.5)
+			pip.scale = Vector2(2.0, 2.0)
+			var tw := pip.create_tween()
+			tw.set_trans(Tween.TRANS_BACK)
+			tw.set_ease(Tween.EASE_OUT)
+			tw.tween_property(pip, "scale", Vector2.ONE, 0.45)
+	row.add_child(_duel_label("%d / %d" % [hits, out_at], 13, Color(0.93, 0.95, 1.0)))
+	return row
+
+
+func _duel_panel_style(accent: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.035 + accent.r * 0.05, 0.05 + accent.g * 0.05, 0.12 + accent.b * 0.05, 0.97)
+	sb.border_color = Color(accent.r, accent.g, accent.b, 0.75)
+	sb.set_border_width_all(1)
+	sb.border_width_top = 3
+	sb.set_corner_radius_all(10)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 10
+	return sb
+
+
+func _duel_fighter_panel(pub: Dictionary, char_instance: String, weapon_instance: String, side: String, d: Dictionary, mine: bool, compact: bool, fresh_hits: int = 0) -> Control:
+	var col := _duel_side_color(side)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _duel_panel_style(col))
+	panel.custom_minimum_size = Vector2(290 if compact else 250, 0)
 	var entry := _in_play_entry(pub, char_instance)
 	var cid := str(entry.get("cardId", ""))
 	var setn := str(entry.get("set", ""))
-	var name := "Fighter"
+	var fighter_name := "Fighter"
 	if CardCatalog and not cid.is_empty():
-		name = str(CardCatalog.get_card_info(cid, "", setn).get("name", cid))
-	var faces := HBoxContainer.new()
-	faces.alignment = BoxContainer.ALIGNMENT_CENTER
-	faces.add_theme_constant_override("separation", 6)
-	faces.add_child(_duel_thumb(cid, side, setn, name))
+		fighter_name = str(CardCatalog.get_card_info(cid, "", setn).get("name", cid))
+	var hits := int(d.get("lightHits", 0)) if side == "light" else int(d.get("darkHits", 0))
+	var out_at := _printed_damage(pub, char_instance)
+	var who := _duel_label("YOU" if mine else "OPPONENT", 13, col.lightened(0.3), true)
+	var name_l := _duel_label(fighter_name, 14, Color(0.93, 0.95, 1.0))
+	name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_l.clip_text = true
+	var cards := HBoxContainer.new()
+	cards.alignment = BoxContainer.ALIGNMENT_CENTER
+	cards.add_theme_constant_override("separation", 8)
+	var info := VBoxContainer.new()
+	info.add_theme_constant_override("separation", 6)
+	if compact:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		panel.add_child(h)
+		h.add_child(cards)
+		info.alignment = BoxContainer.ALIGNMENT_CENTER
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(info)
+		who.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_l.custom_minimum_size = Vector2(140, 0)
+		info.add_child(who)
+		info.add_child(name_l)
+		info.add_child(_duel_hit_pips(hits, out_at, fresh_hits, true))
+	else:
+		panel.add_child(info)
+		name_l.custom_minimum_size = Vector2(226, 0)
+		info.add_child(who)
+		info.add_child(cards)
+		info.add_child(name_l)
+		info.add_child(_duel_hit_pips(hits, out_at, fresh_hits))
+	var char_size := Vector2(64, 90) if compact else Vector2(96, 136)
+	var weapon_size := Vector2(46, 64) if compact else Vector2(66, 93)
+	if cid.is_empty():
+		_duel_empty_slot(cards, char_size, "?")
+	else:
+		_duel_card(cards, cid, side, setn, char_size)
 	if not weapon_instance.is_empty():
 		var wentry := _in_play_entry(pub, weapon_instance)
 		var wid := str(wentry.get("cardId", ""))
-		var wset := str(wentry.get("set", ""))
-		var wname := "Weapon"
-		if CardCatalog and not wid.is_empty():
-			wname = str(CardCatalog.get_card_info(wid, "", wset).get("name", "Weapon"))
-		faces.add_child(_duel_thumb(wid, side, wset, wname))
-	box.add_child(faces)
-	var hits := int(d.get("lightHits", 0)) if side == "light" else int(d.get("darkHits", 0))
-	var out_at := _printed_damage(pub, char_instance)
-	var stat := Label.new()
-	stat.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stat.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	stat.custom_minimum_size = Vector2(180, 36)
-	stat.add_theme_font_size_override("font_size", 15)
-	if out_at > 0:
-		stat.text = "Hits taken: %d of %d\nDefeated at %d" % [hits, out_at, out_at]
-	else:
-		stat.text = "Hits taken: %d" % hits
-	box.add_child(stat)
-	return box
+		if not wid.is_empty():
+			var w := _duel_card(cards, wid, side, str(wentry.get("set", "")), weapon_size)
+			w.size_flags_vertical = Control.SIZE_SHRINK_END
+	if out_at > 0 and hits >= out_at:
+		var ko := _duel_label("DEFEATED", 13, DUEL_HIT_COLOR, true)
+		if compact:
+			ko.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		info.add_child(ko)
+	return panel
+
+
+func _duel_placeholder_panel(side: String, text: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _duel_panel_style(_duel_side_color(side)))
+	panel.custom_minimum_size = Vector2(290, 0)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 12)
+	panel.add_child(h)
+	_duel_empty_slot(h, Vector2(64, 90), "?")
+	var info := VBoxContainer.new()
+	info.alignment = BoxContainer.ALIGNMENT_CENTER
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(info)
+	var who := _duel_label("OPPONENT", 13, _duel_side_color(side).lightened(0.3), true)
+	who.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	info.add_child(who)
+	var l := _duel_label(text, 14, DUEL_MUTED)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	info.add_child(l)
+	return panel
+
+
+func _duel_my_fighter(d: Dictionary, my_side: String) -> Array:
+	if str(d.get("initiator", "")) == my_side:
+		return [str(d.get("attackerCharInstanceId", "")), str(d.get("attackerWeaponInstanceId", ""))]
+	return [str(d.get("defenderCharInstanceId", "")), str(d.get("defenderWeaponInstanceId", ""))]
+
+
+func _duel_opp_fighter(d: Dictionary, my_side: String) -> Array:
+	if str(d.get("initiator", "")) == my_side:
+		return [str(d.get("defenderCharInstanceId", "")), str(d.get("defenderWeaponInstanceId", ""))]
+	return [str(d.get("attackerCharInstanceId", "")), str(d.get("attackerWeaponInstanceId", ""))]
 
 
 func _add_duel_matchup(parent: Node, pub: Dictionary, duel: Variant, my_side: String) -> void:
 	var d: Dictionary = duel
+	var opp_side: String = "dark" if my_side == "light" else "light"
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 18)
+	row.add_theme_constant_override("separation", 14)
 	parent.add_child(row)
-	var atk_side: String = str(d.get("initiator", "light"))
-	var def_side: String = "dark" if atk_side == "light" else "light"
-	row.add_child(_duel_fighter_col(pub, str(d.get("attackerCharInstanceId", "")), str(d.get("attackerWeaponInstanceId", "")), atk_side, d, atk_side == my_side))
+	var mine := _duel_my_fighter(d, my_side)
+	var theirs := _duel_opp_fighter(d, my_side)
+	row.add_child(_duel_fighter_panel(pub, str(mine[0]), str(mine[1]), my_side, d, true, true))
 	var vs := Label.new()
 	vs.text = "VS"
-	vs.add_theme_font_size_override("font_size", 28)
-	vs.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	vs.theme_type_variation = &"TitleLabel"
+	vs.add_theme_font_size_override("font_size", 22)
+	vs.add_theme_color_override("font_color", DUEL_GOLD)
 	vs.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(vs)
-	var def_id := str(d.get("defenderCharInstanceId", ""))
-	if def_id.is_empty():
-		var wait := Label.new()
-		wait.text = "Choose who\nthey fight"
-		wait.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		wait.add_theme_font_size_override("font_size", 16)
-		row.add_child(wait)
+	if str(theirs[0]).is_empty():
+		row.add_child(_duel_placeholder_panel(opp_side, "Pick below"))
 	else:
-		row.add_child(_duel_fighter_col(pub, def_id, str(d.get("defenderWeaponInstanceId", "")), def_side, d, def_side == my_side))
+		row.add_child(_duel_fighter_panel(pub, str(theirs[0]), str(theirs[1]), opp_side, d, false, true))
 
 
-func _note_duel_exchange(duel: Variant) -> void:
-	var d: Dictionary = duel
+## Works out what just happened between two duel updates (a block or a hit) so it can be shown briefly.
+func _note_duel_exchange(d: Dictionary) -> void:
 	var pending: Dictionary = {}
 	if d.get("pendingAttack") is Dictionary:
 		pending = d.get("pendingAttack")
-	var card_id := str(pending.get("cardId", ""))
-	var key := "%s|%s|%s" % [str(pending.get("side", "")), card_id, str(pending.get("destiny", ""))]
-	if not _duel_pending_key.is_empty() and key != _duel_pending_key:
-		_duel_clash = {
-			"left_id": _duel_pending_card,
-			"left_side": _duel_pending_side,
-			"left_dest": _duel_pending_dest,
-			"left_set": _duel_pending_set,
-			"right_id": card_id,
-			"right_side": str(pending.get("side", "")),
-			"right_dest": int(pending.get("destiny", 0)),
-			"right_set": str(pending.get("set", "")),
-			"blocked": not card_id.is_empty()
-		}
-	if card_id.is_empty():
-		_duel_pending_key = ""
-		_duel_pending_card = ""
-	else:
-		_duel_pending_key = key
-		_duel_pending_card = card_id
-		_duel_pending_side = str(pending.get("side", ""))
-		_duel_pending_dest = int(pending.get("destiny", 0))
-		_duel_pending_set = str(pending.get("set", ""))
-
-
-func _add_duel_clash(parent: Node) -> void:
-	if _duel_clash.is_empty():
+	var cur := {
+		"key": "%s|%s|%s" % [str(pending.get("side", "")), str(pending.get("cardId", "")), str(pending.get("destiny", ""))],
+		"card": str(pending.get("cardId", "")),
+		"side": str(pending.get("side", "")),
+		"dest": int(pending.get("destiny", 0)),
+		"set": str(pending.get("set", "")),
+		"lh": int(d.get("lightHits", 0)),
+		"dh": int(d.get("darkHits", 0)),
+	}
+	var flash: Dictionary = {}
+	if not _duel_prev.is_empty():
+		var lh_gain: int = int(cur["lh"]) - int(_duel_prev["lh"])
+		var dh_gain: int = int(cur["dh"]) - int(_duel_prev["dh"])
+		if lh_gain > 0 or dh_gain > 0:
+			var hit_side: String = "light" if lh_gain >= dh_gain else "dark"
+			var scored: bool = not str(_duel_prev["card"]).is_empty() and str(_duel_prev["side"]) != hit_side
+			flash = {
+				"kind": "hit",
+				"hit_side": hit_side,
+				"hits": maxi(lh_gain, dh_gain),
+				"card": str(_duel_prev["card"]) if scored else "",
+				"side": str(_duel_prev["side"]),
+				"set": str(_duel_prev["set"]),
+			}
+		elif not str(_duel_prev["card"]).is_empty() and not str(cur["card"]).is_empty() and str(cur["side"]) != str(_duel_prev["side"]):
+			flash = {
+				"kind": "block",
+				"blocker": str(cur["side"]),
+				"dest": int(cur["dest"]),
+				"card": str(_duel_prev["card"]),
+				"side": str(_duel_prev["side"]),
+				"set": str(_duel_prev["set"]),
+				"block_card": str(cur["card"]),
+				"block_set": str(cur["set"]),
+			}
+	_duel_prev = cur
+	if flash.is_empty():
 		return
-	var title := Label.new()
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 16)
-	if bool(_duel_clash.get("blocked", false)):
-		title.text = "Same destiny, so that attack is blocked. The card that blocked is now the attack."
-	else:
-		title.text = "Those numbers do not match. The attack scores a hit."
-	parent.add_child(title)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 16)
-	parent.add_child(row)
-	row.add_child(_duel_thumb(str(_duel_clash.get("left_id", "")), str(_duel_clash.get("left_side", "")), str(_duel_clash.get("left_set", "")), "Destiny %d" % int(_duel_clash.get("left_dest", 0))))
-	var mid := Label.new()
-	mid.text = "blocked by" if bool(_duel_clash.get("blocked", false)) else "HIT"
-	mid.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mid.add_theme_font_size_override("font_size", 16)
-	row.add_child(mid)
-	if bool(_duel_clash.get("blocked", false)):
-		row.add_child(_duel_thumb(str(_duel_clash.get("right_id", "")), str(_duel_clash.get("right_side", "")), str(_duel_clash.get("right_set", "")), "Destiny %d" % int(_duel_clash.get("right_dest", 0))))
+	flash["until"] = Time.get_ticks_msec() + int(DUEL_FLASH_SECS * 1000.0)
+	flash["fresh"] = true
+	_duel_flash = flash
+	_duel_flash_serial += 1
+	var serial := _duel_flash_serial
+	get_tree().create_timer(DUEL_FLASH_SECS).timeout.connect(func() -> void:
+		if serial != _duel_flash_serial:
+			return
+		_duel_flash = {}
+		if _dotf_overlay_kind == "duel_play":
+			_refresh()
+	)
 
 
-func _add_current_duel_attack(parent: Node, pending: Variant, my_side: String) -> void:
-	if not (pending is Dictionary):
-		return
-	var card_id := str(pending.get("cardId", ""))
-	if card_id.is_empty():
-		return
-	var mine := str(pending.get("side", "")) == my_side
-	var just_blocked := bool(_duel_clash.get("blocked", false)) and str(_duel_clash.get("right_id", "")) == card_id
-	var heading := Label.new()
-	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	heading.add_theme_font_size_override("font_size", 16)
-	if just_blocked and mine:
-		heading.text = "You blocked. This card is your attack now."
-	elif just_blocked:
-		heading.text = "They blocked. This card is their attack now."
-	elif mine:
-		heading.text = "Your attack is on the table."
-	else:
-		heading.text = "Their attack is on the table."
-	parent.add_child(heading)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	parent.add_child(row)
-	row.add_child(_duel_thumb(card_id, str(pending.get("side", "")), str(pending.get("set", "")), "Destiny %d" % int(pending.get("destiny", 0))))
+func _duel_flash_active() -> bool:
+	return not _duel_flash.is_empty() and Time.get_ticks_msec() < int(_duel_flash.get("until", 0))
 
 
-func _duel_result_text(result: Dictionary, my_side: String) -> String:
+func _duel_pop_in(node: Control) -> void:
+	node.modulate = Color(2.2, 2.2, 2.2, 0.0)
+	var tw := node.create_tween()
+	tw.set_ease(Tween.EASE_OUT)
+	tw.tween_property(node, "modulate", Color.WHITE, 0.3)
+
+
+func _duel_center_stage(d: Dictionary, pending: Dictionary, my_side: String) -> Control:
+	var panel := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.015, 0.02, 0.06, 0.85)
+	sb.border_color = Color(0.86, 0.72, 0.32, 0.35)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(10)
+	sb.set_content_margin_all(10)
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.custom_minimum_size = Vector2(280, 0)
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+	if _duel_flash_active():
+		var fresh := bool(_duel_flash.get("fresh", false))
+		var title: Label
+		if str(_duel_flash.get("kind", "")) == "hit":
+			var hit_side := str(_duel_flash.get("hit_side", ""))
+			var n := int(_duel_flash.get("hits", 1))
+			sb.border_color = Color(DUEL_HIT_COLOR.r, DUEL_HIT_COLOR.g, DUEL_HIT_COLOR.b, 0.8)
+			title = _duel_label("HIT!", 34, DUEL_HIT_COLOR, true)
+			v.add_child(title)
+			var who := "You take" if hit_side == my_side else "Opponent takes"
+			v.add_child(_duel_label("%s %d hit%s" % [who, n, "" if n == 1 else "s"], 15, Color(0.93, 0.95, 1.0)))
+			var cid := str(_duel_flash.get("card", ""))
+			if not cid.is_empty():
+				_duel_card(v, cid, str(_duel_flash.get("side", "")), str(_duel_flash.get("set", "")), Vector2(70, 99))
+		else:
+			var blocker := str(_duel_flash.get("blocker", ""))
+			sb.border_color = Color(DUEL_GOLD.r, DUEL_GOLD.g, DUEL_GOLD.b, 0.8)
+			title = _duel_label("BLOCKED!", 30, DUEL_GOLD, true)
+			v.add_child(title)
+			var dest := int(_duel_flash.get("dest", 0))
+			v.add_child(_duel_label(("You matched their %d" if blocker == my_side else "They matched your %d") % dest, 15, Color(0.93, 0.95, 1.0)))
+			var pair := HBoxContainer.new()
+			pair.alignment = BoxContainer.ALIGNMENT_CENTER
+			pair.add_theme_constant_override("separation", 8)
+			v.add_child(pair)
+			_duel_card(pair, str(_duel_flash.get("card", "")), str(_duel_flash.get("side", "")), str(_duel_flash.get("set", "")), Vector2(64, 90))
+			pair.add_child(_duel_label("=", 22, DUEL_GOLD, true))
+			_duel_card(pair, str(_duel_flash.get("block_card", "")), blocker, str(_duel_flash.get("block_set", "")), Vector2(64, 90))
+		if fresh:
+			_duel_pop_in(title)
+		return panel
+	if not pending.is_empty() and not str(pending.get("cardId", "")).is_empty():
+		var pside := str(pending.get("side", ""))
+		v.add_child(_duel_label("YOUR ATTACK" if pside == my_side else "THEIR ATTACK", 13, _duel_side_color(pside).lightened(0.3), true))
+		_duel_card(v, str(pending.get("cardId", "")), pside, str(pending.get("set", "")), Vector2(96, 136))
+		v.add_child(_duel_label("Destiny %d" % int(pending.get("destiny", 0)), 16, DUEL_GOLD, true))
+		return panel
+	var attacker := str(d.get("currentAttacker", ""))
+	v.add_child(_duel_label("YOUR ATTACK" if attacker == my_side else "THEIR ATTACK", 13, _duel_side_color(attacker).lightened(0.3), true))
+	_duel_empty_slot(v, Vector2(96, 136), "No card yet")
+	return panel
+
+
+func _duel_result_lines(result: Dictionary, my_side: String) -> Dictionary:
 	var mine_name: String = str(result.get("lightName", "You")) if my_side == "light" else str(result.get("darkName", "You"))
 	var opp_name: String = str(result.get("darkName", "Opponent")) if my_side == "light" else str(result.get("lightName", "Opponent"))
-	var my_hits: int = int(result.get("lightHits", 0)) if my_side == "light" else int(result.get("darkHits", 0))
-	var opp_hits: int = int(result.get("darkHits", 0)) if my_side == "light" else int(result.get("lightHits", 0))
-	var my_damage: int = int(result.get("lightDamage", 0)) if my_side == "light" else int(result.get("darkDamage", 0))
-	var opp_damage: int = int(result.get("darkDamage", 0)) if my_side == "light" else int(result.get("lightDamage", 0))
 	var ko: String = str(result.get("koSide", ""))
 	var milled_side: String = str(result.get("milledSide", ""))
 	var milled: int = int(result.get("milled", 0))
-	var lines: PackedStringArray = []
-	lines.append("Hits taken: %s %d of %d, %s %d of %d." % [mine_name, my_hits, my_damage, opp_name, opp_hits, opp_damage])
-	lines.append("A character is defeated only when the hits on them reach their damage.")
 	if ko == my_side:
-		lines.append("%s is defeated. That character and their weapon are discarded, and %d cards are lost from your deck." % [mine_name, milled])
-	elif not ko.is_empty():
-		lines.append("%s is defeated. That character and their weapon are discarded, and %d cards are lost from their deck." % [opp_name, milled])
-	elif milled > 0 and milled_side == my_side:
-		lines.append("Neither character was defeated. You took more hits, so you lose %d cards. Both characters stay." % milled)
-	elif milled > 0:
-		lines.append("Neither character was defeated. They took more hits, so they lose %d cards. Both characters stay." % milled)
-	else:
-		lines.append("Neither character was defeated, and the hits were tied. Nobody loses extra cards. Both characters stay.")
-	return "\n".join(lines)
+		return {"title": "DEFEATED", "color": DUEL_HIT_COLOR, "sub": "%s is defeated" % mine_name,
+			"note": "Your fighter and weapon are discarded. You lose %d cards from your deck." % milled}
+	if not ko.is_empty():
+		return {"title": "VICTORY", "color": DUEL_GOLD, "sub": "%s is defeated" % opp_name,
+			"note": "Their fighter and weapon are discarded. They lose %d cards from their deck." % milled}
+	if milled > 0 and milled_side == my_side:
+		return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
+			"note": "You took more hits, so you lose %d cards from your deck." % milled}
+	if milled > 0:
+		return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
+			"note": "They took more hits, so they lose %d cards from their deck." % milled}
+	return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
+		"note": "Hits were tied. Nobody loses cards."}
 
 
 func _maybe_show_duel_result(pub: Dictionary, my_side: String) -> void:
@@ -2101,24 +2278,266 @@ func _maybe_show_duel_result(pub: Dictionary, my_side: String) -> void:
 	if _dotf_overlay_kind == "duel_result":
 		return
 	_seen_duel_result = id
+	var r: Dictionary = result
+	var lines := _duel_result_lines(r, my_side)
 	var vbox := _begin_choice_overlay("duel_result", "Duel over")
-	var body := Label.new()
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	body.custom_minimum_size = Vector2(520, 0)
-	body.text = _duel_result_text(result, my_side)
-	vbox.add_child(body)
+	var title := _duel_label(str(lines["title"]), 34, lines["color"], true)
+	title.theme_type_variation = &"TitleLabel"
+	vbox.add_child(title)
+	_duel_pop_in(title)
+	vbox.add_child(_duel_label(str(lines["sub"]), 16, Color(0.93, 0.95, 1.0)))
+	var opp_side: String = "dark" if my_side == "light" else "light"
+	var scores := HBoxContainer.new()
+	scores.alignment = BoxContainer.ALIGNMENT_CENTER
+	scores.add_theme_constant_override("separation", 16)
+	vbox.add_child(scores)
+	for side in [my_side, opp_side]:
+		var box := PanelContainer.new()
+		box.add_theme_stylebox_override("panel", _duel_panel_style(_duel_side_color(side)))
+		box.custom_minimum_size = Vector2(240, 0)
+		scores.add_child(box)
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 6)
+		box.add_child(col)
+		col.add_child(_duel_label("YOU" if side == my_side else "OPPONENT", 13, _duel_side_color(side).lightened(0.3), true))
+		var fighter := _duel_label(str(r.get(side + "Name", "")), 14, Color(0.93, 0.95, 1.0))
+		fighter.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		fighter.clip_text = true
+		fighter.custom_minimum_size = Vector2(216, 0)
+		col.add_child(fighter)
+		col.add_child(_duel_hit_pips(int(r.get(side + "Hits", 0)), int(r.get(side + "Damage", 0)), 0))
+	var note := _duel_label(str(lines["note"]), 14, DUEL_MUTED)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.custom_minimum_size = Vector2(500, 0)
+	vbox.add_child(note)
 	var ok := Button.new()
-	ok.text = "OK"
+	ok.text = "Continue"
+	_style_action_button(ok, "primary")
+	ok.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	ok.pressed.connect(_clear_dotf_overlay)
 	vbox.add_child(ok)
+
+
+func _duel_hand_choice(hand_area: VBoxContainer, ask: String, options: Array) -> void:
+	for child in hand_area.get_children():
+		hand_area.remove_child(child)
+		child.queue_free()
+	var l := _duel_label(ask, 16, DUEL_GOLD)
+	hand_area.add_child(l)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	hand_area.add_child(row)
+	for opt in options:
+		var b := Button.new()
+		b.text = str(opt["text"])
+		_style_action_button(b, str(opt["kind"]))
+		b.pressed.connect(opt["cb"])
+		row.add_child(b)
+	var back := Button.new()
+	back.text = "Back"
+	_style_action_button(back, "secondary")
+	back.custom_minimum_size = Vector2(110, 44)
+	back.pressed.connect(func() -> void: _refresh())
+	row.add_child(back)
+
+
+func _build_duel_play_screen(pub: Dictionary, d: Dictionary, my_side: String) -> void:
+	for child in _dotf_overlay.get_children():
+		_dotf_overlay.remove_child(child)
+		child.queue_free()
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.01, 0.02, 0.06, 0.82)
+	_dotf_overlay.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dotf_overlay.add_child(center)
+	var panel := PanelContainer.new()
+	var panel_w: float = minf(vp.x - 48.0, 1040.0)
+	panel.custom_minimum_size = Vector2(panel_w, 0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.98)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.7)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 20
+	style.content_margin_right = 20
+	style.content_margin_top = 12
+	style.content_margin_bottom = 14
+	style.shadow_color = Color(0, 0, 0, 0.6)
+	style.shadow_size = 20
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+
+	var header := HBoxContainer.new()
+	header.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_theme_constant_override("separation", 16)
+	vbox.add_child(header)
+	for i in range(3):
+		if i == 1:
+			var t := Label.new()
+			t.text = "DUEL"
+			t.theme_type_variation = &"TitleLabel"
+			t.add_theme_font_size_override("font_size", 30)
+			t.add_theme_color_override("font_color", DUEL_GOLD)
+			header.add_child(t)
+			continue
+		var line := ColorRect.new()
+		line.custom_minimum_size = Vector2(110, 2)
+		line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.color = Color(0.86, 0.72, 0.32, 0.5)
+		header.add_child(line)
+	vbox.add_child(_duel_label("Match their destiny to block. Miss and you take a hit.", 13, DUEL_MUTED))
+
+	var pending: Dictionary = {}
+	if d.get("pendingAttack") is Dictionary:
+		pending = d.get("pendingAttack")
+	var opp_side: String = "dark" if my_side == "light" else "light"
+	var fresh_hit_side := ""
+	var fresh_hits := 0
+	if _duel_flash_active() and bool(_duel_flash.get("fresh", false)) and str(_duel_flash.get("kind", "")) == "hit":
+		fresh_hit_side = str(_duel_flash.get("hit_side", ""))
+		fresh_hits = int(_duel_flash.get("hits", 0))
+	var arena := HBoxContainer.new()
+	arena.alignment = BoxContainer.ALIGNMENT_CENTER
+	arena.add_theme_constant_override("separation", 16)
+	vbox.add_child(arena)
+	var mine := _duel_my_fighter(d, my_side)
+	var theirs := _duel_opp_fighter(d, my_side)
+	arena.add_child(_duel_fighter_panel(pub, str(mine[0]), str(mine[1]), my_side, d, true, false, fresh_hits if fresh_hit_side == my_side else 0))
+	arena.add_child(_duel_center_stage(d, pending, my_side))
+	arena.add_child(_duel_fighter_panel(pub, str(theirs[0]), str(theirs[1]), opp_side, d, false, false, fresh_hits if fresh_hit_side == opp_side else 0))
+	_duel_flash["fresh"] = false
+
+	var hand: Array = d.get("yourDuelHand", [])
+	var attacker: String = str(d.get("currentAttacker", ""))
+	var my_turn_to_play := false
+	var need := -1
+	var prompt_text := ""
+	if hand.is_empty():
+		prompt_text = "You have no duel cards left"
+	elif not pending.is_empty() and str(pending.get("side", "")) != my_side:
+		my_turn_to_play = true
+		need = int(pending.get("destiny", 0))
+		prompt_text = "Block with a %d, or any other card takes the hit" % need
+	elif pending.is_empty() and attacker == my_side:
+		my_turn_to_play = true
+		prompt_text = "Your attack: play any card"
+	elif not pending.is_empty():
+		prompt_text = "Waiting: they need a %d to block" % int(pending.get("destiny", 0))
+	else:
+		prompt_text = "Waiting for their attack"
+	var prompt := PanelContainer.new()
+	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var psb := StyleBoxFlat.new()
+	psb.set_corner_radius_all(18)
+	psb.set_border_width_all(1)
+	psb.content_margin_left = 22
+	psb.content_margin_right = 22
+	psb.content_margin_top = 6
+	psb.content_margin_bottom = 6
+	if my_turn_to_play:
+		psb.bg_color = Color(0.3, 0.24, 0.08, 0.55)
+		psb.border_color = Color(DUEL_GOLD.r, DUEL_GOLD.g, DUEL_GOLD.b, 0.8)
+	else:
+		psb.bg_color = Color(0.06, 0.08, 0.15, 0.8)
+		psb.border_color = Color(0.4, 0.46, 0.62, 0.4)
+	prompt.add_theme_stylebox_override("panel", psb)
+	prompt.add_child(_duel_label(prompt_text, 16, DUEL_GOLD if my_turn_to_play else DUEL_MUTED))
+	vbox.add_child(prompt)
+
+	var hand_area := VBoxContainer.new()
+	hand_area.add_theme_constant_override("separation", 6)
+	vbox.add_child(hand_area)
+	var caption_row := HBoxContainer.new()
+	caption_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	caption_row.add_theme_constant_override("separation", 18)
+	hand_area.add_child(caption_row)
+	caption_row.add_child(_duel_label("YOUR DUEL CARDS  %d" % hand.size(), 12, DUEL_MUTED, true))
+	var opp_count: int = int(d.get("darkHandCount" if my_side == "light" else "lightHandCount", 0))
+	caption_row.add_child(_duel_label("OPPONENT HOLDS  %d" % opp_count, 12, DUEL_MUTED, true))
+	var my_hits: int = int(d.get("lightHits", 0)) if my_side == "light" else int(d.get("darkHits", 0))
+	var used: Array = d.get("hitRemovalUsed", [])
+	for c in hand:
+		if not (c is Dictionary):
+			continue
+		var rid: String = str(c.get("instanceId", ""))
+		var rcid: String = str(c.get("cardId", ""))
+		if my_hits > 0 and not used.has(rid) and _card_bonus_text(rcid).contains("duel:removehit"):
+			var remove_btn := Button.new()
+			remove_btn.text = "Remove 1 hit"
+			_style_action_button(remove_btn, "secondary")
+			remove_btn.custom_minimum_size = Vector2(140, 34)
+			remove_btn.pressed.connect(func() -> void:
+				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_remove_hit", "instanceId": rid}})
+			)
+			caption_row.add_child(remove_btn)
+			break
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_top", 4)
+	pad.add_theme_constant_override("margin_bottom", 4)
+	hand_area.add_child(pad)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	pad.add_child(row)
+	var n: int = maxi(hand.size(), 1)
+	var card_w: float = clampf((panel_w - 60.0 - 8.0 * (n - 1)) / n, 60.0, 96.0)
+	var card_size := Vector2(card_w, roundf(card_w * 136.0 / 96.0))
+	for entry in hand:
+		if not (entry is Dictionary):
+			continue
+		var inst: String = str(entry.get("instanceId", ""))
+		var cid: String = str(entry.get("cardId", ""))
+		var card: Control = CardPlaceholderScene.instantiate()
+		row.add_child(card)
+		card.set_card(cid, inst, my_side, str(entry.get("set", "")))
+		if card.has_method("set_board_size"):
+			card.set_board_size(card_size)
+		if card is BaseButton:
+			(card as BaseButton).toggle_mode = false
+		var printed := 0
+		if CardCatalog:
+			printed = int(CardCatalog.get_card_info(cid, "").get("destiny", 0))
+		if not my_turn_to_play:
+			card.modulate = Color(1, 1, 1, 0.55)
+		elif card.has_method("set_action_glow") and (need < 0 or printed == need):
+			card.set_action_glow("play")
+		card.card_selected.connect(func(_picked: String) -> void:
+			if not my_turn_to_play:
+				status_label.text = "Wait for the other player to play a card."
+				return
+			var bonus := _card_bonus_text(cid)
+			var becomes_attack := pending.is_empty() or printed == int(pending.get("destiny", -1))
+			var play_normal := func() -> void: _play_duel_card(inst, cid, false)
+			if bonus.contains("duel:discard:draw2"):
+				var draw_two := func() -> void: Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_discard_draw", "instanceId": inst}})
+				_duel_hand_choice(hand_area, "Play this card, or discard it to draw 2?", [
+					{"text": "Play card", "kind": "primary", "cb": play_normal},
+					{"text": "Discard, draw 2", "kind": "secondary", "cb": draw_two},
+				])
+				return
+			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
+				var extra_hits := func() -> void: _play_duel_card(inst, cid, true)
+				_duel_hand_choice(hand_area, "Discard Qui-Gon's Final Stand for +2 hits?", [
+					{"text": "Play normally", "kind": "secondary", "cb": play_normal},
+					{"text": "+2 hits", "kind": "primary", "cb": extra_hits},
+				])
+				return
+			_play_duel_card(inst, cid, false)
+		)
 
 
 func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
 	var d: Variant = pub.get("duelState", null)
 	if not (d is Dictionary):
-		_duel_clash = {}
-		_duel_pending_key = ""
-		_duel_pending_card = ""
+		_duel_prev = {}
+		_duel_flash = {}
 		if _dotf_overlay_kind.begins_with("duel") and _dotf_overlay_kind != "duel_result":
 			_clear_dotf_overlay()
 		_maybe_show_duel_result(pub, my_side)
@@ -2126,12 +2545,9 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 	var step: String = str(d.get("step", ""))
 	var initiator: String = str(d.get("initiator", ""))
 	if step == "choose_target" and initiator == my_side and _dotf_overlay_kind != "duel_target":
-		var vbox := _begin_choice_overlay("duel_target", "A duel is starting")
+		var vbox := _begin_choice_overlay("duel_target", "Duel · pick their fighter")
 		_add_duel_matchup(vbox, pub, d, my_side)
-		var hint := Label.new()
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.text = "Your character and lightsaber are shown above. Click the opponent character they fight."
-		vbox.add_child(hint)
+		vbox.add_child(_duel_label("Click the character you want to duel.", 14, DUEL_MUTED))
 		var opp_side: String = "dark" if my_side == "light" else "light"
 		var opp_play: Array = pub.get("lightInPlay" if opp_side == "light" else "darkInPlay", [])
 		var chars: Array = []
@@ -2163,172 +2579,41 @@ func _update_duel_ui(state: RefCounted, pub: Dictionary, my_side: String) -> voi
 				_dotf_overlay_kind = "duel_defend_auto"
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
 			return
-		var vbox := _begin_choice_overlay("duel_defend", "They challenged you")
+		var vbox := _begin_choice_overlay("duel_defend", "Duel · you've been challenged")
 		_add_duel_matchup(vbox, pub, d, my_side)
-		var hint := Label.new()
-		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		hint.text = "These two are about to duel. Keep this character, swap to another, or give them a weapon."
-		vbox.add_child(hint)
+		vbox.add_child(_duel_label("Keep your fighter, swap to another, or add a weapon.", 14, DUEL_MUTED))
 		var accept := Button.new()
-		accept.text = "Keep this character"
+		accept.text = "Keep this fighter"
+		_style_action_button(accept, "primary")
+		accept.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		accept.pressed.connect(func() -> void:
 			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready"}})
 			_clear_dotf_overlay()
 		)
 		vbox.add_child(accept)
 		if not duelists.is_empty():
-			var dl := Label.new()
-			dl.text = "Or fight with a different character"
-			vbox.add_child(dl)
+			vbox.add_child(_duel_label("SWAP FIGHTER", 12, DUEL_MUTED, true))
 			_add_card_row(vbox, duelists, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "swapCharInstanceId": inst}})
 				_clear_dotf_overlay()
 			)
 		if not weapons.is_empty():
-			var wl := Label.new()
-			wl.text = "Or give this character a weapon"
-			vbox.add_child(wl)
+			vbox.add_child(_duel_label("ADD A WEAPON", 12, DUEL_MUTED, true))
 			_add_card_row(vbox, weapons, my_side, func(inst: String, _cid: String) -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_defender_ready", "weaponInstanceId": inst}})
 				_clear_dotf_overlay()
 			)
 		return
 	if step == "play":
-		var kind: String = "duel_play"
-		if _dotf_overlay_kind != kind:
+		if _dotf_overlay_kind != "duel_play":
 			_clear_dotf_overlay()
-			_dotf_overlay_kind = kind
+			_dotf_overlay_kind = "duel_play"
 			_dotf_overlay = CanvasLayer.new()
 			_dotf_overlay.layer = 185
 			add_child(_dotf_overlay)
-		var existing: Node = _dotf_overlay.get_child(0) if _dotf_overlay.get_child_count() > 0 else null
-		if existing:
-			existing.queue_free()
-		_note_duel_exchange(d)
-		var panel := PanelContainer.new()
-		panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-		panel.offset_left = 36
-		panel.offset_top = 28
-		panel.offset_right = -36
-		panel.offset_bottom = -12
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.06, 0.08, 0.14, 0.97)
-		style.content_margin_left = 14
-		style.content_margin_right = 14
-		style.content_margin_top = 10
-		style.content_margin_bottom = 10
-		style.border_color = Color(0.75, 0.62, 0.28, 1)
-		style.set_border_width_all(2)
-		style.set_corner_radius_all(10)
-		panel.add_theme_stylebox_override("panel", style)
-		_dotf_overlay.add_child(panel)
-		var scroll := ScrollContainer.new()
-		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_child(scroll)
-		var vbox := VBoxContainer.new()
-		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		scroll.add_child(vbox)
-		var pending: Variant = d.get("pendingAttack", null)
-		var lhits: int = int(d.get("lightHits", 0))
-		var dhits: int = int(d.get("darkHits", 0))
-		_add_duel_matchup(vbox, pub, d, my_side)
-		_add_duel_clash(vbox)
-		_add_current_duel_attack(vbox, pending, my_side)
-		var help := Label.new()
-		help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		help.add_theme_font_size_override("font_size", 18)
-		var attacker: String = str(d.get("currentAttacker", ""))
-		var my_turn_to_play := false
-		var hand_preview: Array = d.get("yourDuelHand", [])
-		if hand_preview.is_empty():
-			help.text = "Your dueling hand is empty. You cannot play a card right now."
-		elif pending is Dictionary and str(pending.get("side", "")) != my_side:
-			my_turn_to_play = true
-			var need: int = int(pending.get("destiny", 0))
-			help.text = "Their attack is destiny %d. Play a %d to block it. The card you play then becomes your attack, and they have to match it. Any other number and you take the hit." % [need, need]
-		elif not (pending is Dictionary) and attacker == my_side:
-			my_turn_to_play = true
-			help.text = "Your turn to attack. Play one card. If they play the same destiny, they block it and that card becomes their attack."
-		elif pending is Dictionary and str(pending.get("side", "")) == my_side and bool(_duel_clash.get("blocked", false)):
-			help.text = "You blocked. Your card is the attack now. They must play destiny %d, or you score a hit." % int(pending.get("destiny", 0))
-		elif pending is Dictionary:
-			help.text = "Waiting. They must play destiny %d to block. If they do, their card becomes the attack. If they do not, you score a hit." % int(pending.get("destiny", 0))
-		else:
-			help.text = "Waiting for their card."
-		vbox.add_child(help)
-		var hand_title := Label.new()
-		hand_title.text = "Your cards"
-		hand_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		vbox.add_child(hand_title)
-		var hand: Array = d.get("yourDuelHand", [])
-		var my_hits: int = lhits if my_side == "light" else dhits
-		var used: Array = d.get("hitRemovalUsed", [])
-		for c in hand:
-			if not (c is Dictionary):
-				continue
-			var rid: String = str(c.get("instanceId", ""))
-			var rcid: String = str(c.get("cardId", ""))
-			if my_hits > 0 and not used.has(rid) and _card_bonus_text(rcid).contains("duel:removehit"):
-				var remove_btn := Button.new()
-				remove_btn.text = "Remove one hit"
-				remove_btn.pressed.connect(func() -> void:
-					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_remove_hit", "instanceId": rid}})
-				)
-				vbox.add_child(remove_btn)
-				break
-		_add_card_row(vbox, hand, my_side, func(inst: String, cid: String) -> void:
-			if not my_turn_to_play:
-				status_label.text = "Wait for the other player to play a card."
-				return
-			var bonus := _card_bonus_text(cid)
-			var printed := 0
-			if CardCatalog:
-				printed = int(CardCatalog.get_card_info(cid, "").get("destiny", 0))
-			var becomes_attack := not (pending is Dictionary) or printed == int(pending.get("destiny", -1))
-			if bonus.contains("duel:discard:draw2"):
-				for child in vbox.get_children():
-					if child != help:
-						child.queue_free()
-				var ask := Label.new()
-				ask.text = "Discard this card to draw two cards for your dueling hand, or play it."
-				vbox.add_child(ask)
-				var play_btn := Button.new()
-				play_btn.text = "Play this card"
-				play_btn.pressed.connect(func() -> void:
-					_play_duel_card(inst, cid, false)
-				)
-				var draw_btn := Button.new()
-				draw_btn.text = "Discard to draw 2"
-				draw_btn.pressed.connect(func() -> void:
-					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_discard_draw", "instanceId": inst}})
-				)
-				vbox.add_child(play_btn)
-				vbox.add_child(draw_btn)
-				return
-			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
-				for child in vbox.get_children():
-					if child != help:
-						child.queue_free()
-				var ask := Label.new()
-				ask.text = "Qui-Gon's Final Stand can be discarded so this attack does two extra hits."
-				vbox.add_child(ask)
-				var normal := Button.new()
-				normal.text = "Play normally"
-				normal.pressed.connect(func() -> void:
-					_play_duel_card(inst, cid, false)
-				)
-				var extra := Button.new()
-				extra.text = "Discard for two extra hits"
-				extra.pressed.connect(func() -> void:
-					_play_duel_card(inst, cid, true)
-				)
-				vbox.add_child(normal)
-				vbox.add_child(extra)
-				return
-			_play_duel_card(inst, cid, false)
-		)
+		var dd: Dictionary = d
+		_note_duel_exchange(dd)
+		_build_duel_play_screen(pub, dd, my_side)
 
 
 func _on_your_hs_gui_input(event: InputEvent) -> void:
@@ -3084,9 +3369,20 @@ func _sync_actions_panel() -> void:
 	if _actions_idle_label == null:
 		_actions_idle_label = Label.new()
 		_actions_idle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_actions_idle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_actions_idle_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		_actions_idle_label.custom_minimum_size = ACTION_BTN_SIZE
 		_actions_idle_label.add_theme_font_size_override("font_size", 12)
 		_actions_idle_label.add_theme_color_override("font_color", Color(0.62, 0.68, 0.82))
+		var idle_style := StyleBoxFlat.new()
+		idle_style.bg_color = Color(0.03, 0.05, 0.12, 0.55)
+		idle_style.border_color = Color(0.3, 0.42, 0.62, 0.45)
+		idle_style.set_border_width_all(1)
+		idle_style.set_corner_radius_all(9)
+		_actions_idle_label.add_theme_stylebox_override("normal", idle_style)
+		if _heading_font == null:
+			_heading_font = load("res://fonts/Orbitron.ttf") as Font
+		if _heading_font:
+			_actions_idle_label.add_theme_font_override("font", _heading_font)
 		actions_right.add_child(_actions_idle_label)
 		actions_right.move_child(_actions_idle_label, 0)
 	var any_button := false
@@ -3104,9 +3400,7 @@ func _sync_actions_panel() -> void:
 			idle_text = "Opponent's turn"
 		if _actions_idle_label.text != idle_text:
 			_actions_idle_label.text = idle_text
-	var pass_variation: StringName = &"" if battle_btn.visible else &"PrimaryButton"
-	if pass_phase_btn.theme_type_variation != pass_variation:
-		pass_phase_btn.theme_type_variation = pass_variation
+	_style_action_button(pass_phase_btn, "secondary" if battle_btn.visible else "primary")
 
 
 func _on_hand_card_drag_started(instance_id: String) -> void:
@@ -3352,8 +3646,7 @@ func _on_game_ended(payload: Dictionary) -> void:
 	if reason == "concede":
 		reason_text = "Opponent Conceded" if won else "You Conceded"
 	_game_over_received = true
-	if _concede_dialog and _concede_dialog.visible:
-		_concede_dialog.hide()
+	_close_concede_modal()
 	if location_choice_section:
 		location_choice_section.visible = false
 	if destiny_compare_section:
@@ -3374,56 +3667,96 @@ func _on_game_ended(payload: Dictionary) -> void:
 func _show_game_over_overlay(won: bool, reason_text: String) -> void:
 	if _game_over_layer and is_instance_valid(_game_over_layer):
 		_game_over_layer.queue_free()
-	_game_over_layer = CanvasLayer.new()
-	_game_over_layer.layer = 250
-	add_child(_game_over_layer)
-	var bg := ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.0, 0.0, 0.05, 0.75)
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_game_over_layer.add_child(bg)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_game_over_layer.add_child(center)
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(460, 0)
+	_clear_dotf_overlay()
+	status_label.text = ""
+	if return_to_lobby_btn:
+		return_to_lobby_btn.visible = false
 	var accent: Color = Color(0.86, 0.72, 0.32) if won else Color(0.85, 0.3, 0.28)
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.03, 0.05, 0.12, 0.96)
-	style.set_border_width_all(2)
-	style.border_color = Color(accent.r, accent.g, accent.b, 0.8)
-	style.set_corner_radius_all(14)
-	style.content_margin_left = 36
-	style.content_margin_right = 36
-	style.content_margin_top = 28
-	style.content_margin_bottom = 30
-	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.22)
-	style.shadow_size = 24
-	panel.add_theme_stylebox_override("panel", style)
-	center.add_child(panel)
-	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 14)
-	panel.add_child(vbox)
+	var m := _make_modal(250, accent, 480)
+	_game_over_layer = m["layer"]
+	var bg: ColorRect = m["bg"]
+	bg.color = Color(0.0, 0.01, 0.04, 0.86)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var panel: PanelContainer = m["panel"]
+	var vbox: VBoxContainer = m["vbox"]
+	var caption := Label.new()
+	caption.text = "GAME OVER"
+	caption.theme_type_variation = &"HeaderLabel"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", 13)
+	caption.add_theme_color_override("font_color", Color(0.62, 0.68, 0.82))
+	vbox.add_child(caption)
 	var main_label := Label.new()
 	main_label.text = "VICTORY" if won else "DEFEAT"
 	main_label.theme_type_variation = &"TitleLabel"
 	main_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	main_label.add_theme_font_size_override("font_size", 48)
-	if won:
-		main_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1))
-	else:
-		main_label.add_theme_color_override("font_color", Color(0.92, 0.32, 0.28, 1))
+	main_label.add_theme_font_size_override("font_size", 52)
+	main_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3) if won else Color(0.95, 0.34, 0.3))
 	main_label.modulate = Color(1, 1, 1, 0)
 	vbox.add_child(main_label)
-	var sub_label := Label.new()
-	sub_label.text = "You won the game" if won else "You lost the game"
-	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub_label.add_theme_font_size_override("font_size", 15)
-	sub_label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.88, 1))
-	vbox.add_child(sub_label)
-	panel.pivot_offset = Vector2(230, 110)
+	var divider := ColorRect.new()
+	divider.custom_minimum_size = Vector2(220, 2)
+	divider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	divider.color = Color(accent.r, accent.g, accent.b, 0.6)
+	vbox.add_child(divider)
+	var reason_label := Label.new()
+	reason_label.text = reason_text.trim_suffix("!") if reason_text else ("You won the game" if won else "You lost the game")
+	reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reason_label.add_theme_font_size_override("font_size", 18)
+	reason_label.add_theme_color_override("font_color", Color(0.9, 0.92, 1.0))
+	vbox.add_child(reason_label)
+	var state: RefCounted = Connection.get_state()
+	var my_side: String = state.game_side
+	var pub: Dictionary = state.game_state.get("publicState", {}) if state.game_state is Dictionary else {}
+	var light_won: int = int(pub.get("lightPlanetsWon", 0))
+	var dark_won: int = int(pub.get("darkPlanetsWon", 0))
+	var my_planets: int = light_won if my_side == "light" else dark_won
+	var opp_planets: int = dark_won if my_side == "light" else light_won
+	var opp_side: String = "dark" if my_side == "light" else "light"
+	var score := HBoxContainer.new()
+	score.alignment = BoxContainer.ALIGNMENT_CENTER
+	score.add_theme_constant_override("separation", 12)
+	vbox.add_child(score)
+	for entry in [["YOU", my_side, my_planets], ["OPPONENT", opp_side, opp_planets]]:
+		var chip := PanelContainer.new()
+		var col: Color = SIDE_COLOR_LIGHT if str(entry[1]) == "light" else SIDE_COLOR_DARK
+		var cs := StyleBoxFlat.new()
+		cs.bg_color = Color(col.r * 0.12, col.g * 0.12, col.b * 0.12 + 0.06, 0.9)
+		cs.border_color = Color(col.r, col.g, col.b, 0.6)
+		cs.set_border_width_all(1)
+		cs.set_corner_radius_all(8)
+		cs.content_margin_left = 16
+		cs.content_margin_right = 16
+		cs.content_margin_top = 6
+		cs.content_margin_bottom = 6
+		chip.add_theme_stylebox_override("panel", cs)
+		var chip_row := HBoxContainer.new()
+		chip_row.add_theme_constant_override("separation", 10)
+		chip.add_child(chip_row)
+		var who := Label.new()
+		who.text = str(entry[0])
+		who.theme_type_variation = &"HeaderLabel"
+		who.add_theme_font_size_override("font_size", 12)
+		who.add_theme_color_override("font_color", col.lightened(0.3))
+		chip_row.add_child(who)
+		var n := Label.new()
+		n.text = "%d planet%s" % [int(entry[2]), "" if int(entry[2]) == 1 else "s"]
+		n.add_theme_font_size_override("font_size", 15)
+		n.add_theme_color_override("font_color", Color(0.93, 0.95, 1.0))
+		chip_row.add_child(n)
+		score.add_child(chip)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	vbox.add_child(spacer)
+	var lobby_btn := Button.new()
+	lobby_btn.text = "Return to Lobby"
+	_style_action_button(lobby_btn, "primary")
+	lobby_btn.custom_minimum_size = Vector2(230, 46)
+	lobby_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	lobby_btn.pressed.connect(_on_return_to_lobby_pressed)
+	vbox.add_child(lobby_btn)
+	panel.pivot_offset = Vector2(240, 150)
 	panel.scale = Vector2(0.85, 0.85)
 	var pop := create_tween()
 	pop.set_ease(Tween.EASE_OUT)
@@ -3431,26 +3764,7 @@ func _show_game_over_overlay(won: bool, reason_text: String) -> void:
 	pop.tween_property(panel, "scale", Vector2.ONE, 0.45)
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
 	tween.tween_property(main_label, "modulate:a", 1.0, 0.5)
-	if reason_text:
-		var reason_label := Label.new()
-		reason_label.text = reason_text
-		reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		reason_label.add_theme_font_size_override("font_size", 20)
-		reason_label.add_theme_color_override("font_color", Color(0.9, 0.92, 1.0, 1))
-		vbox.add_child(reason_label)
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 6)
-	vbox.add_child(spacer)
-	var lobby_btn := Button.new()
-	lobby_btn.text = "Return to Lobby"
-	lobby_btn.theme_type_variation = &"PrimaryButton"
-	lobby_btn.custom_minimum_size = Vector2(220, 42)
-	lobby_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	lobby_btn.pressed.connect(_on_return_to_lobby_pressed)
-	vbox.add_child(lobby_btn)
 
 
 func _phase_display_name(phase: String) -> String:
@@ -3501,12 +3815,15 @@ func _on_chat_toggled(open: bool) -> void:
 func _update_chat_toggle_text() -> void:
 	if chat_toggle_btn == null:
 		return
-	if _chat_unread > 0 and not chat_toggle_btn.button_pressed:
-		chat_toggle_btn.text = "Chat  (%d)" % _chat_unread
+	var show_badge: bool = _chat_unread > 0 and not chat_toggle_btn.button_pressed
+	chat_toggle_btn.text = "Hide Chat" if chat_toggle_btn.button_pressed else "Chat"
+	if _chat_badge:
+		_chat_badge.visible = show_badge
+		_chat_badge_label.text = "9+" if _chat_unread > 9 else str(_chat_unread)
+	if show_badge:
 		chat_toggle_btn.add_theme_color_override("font_color", Color(1.0, 0.86, 0.42))
 		chat_toggle_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.9, 0.55))
 	else:
-		chat_toggle_btn.text = "Hide Chat" if chat_toggle_btn.button_pressed else "Chat"
 		chat_toggle_btn.remove_theme_color_override("font_color")
 		chat_toggle_btn.remove_theme_color_override("font_hover_color")
 
@@ -3711,6 +4028,8 @@ func _refresh() -> void:
 		phase_label.text = "PLANET WON   ·   Choose the next planet"
 	else:
 		var display_phase: String = _phase_display_name(phase).to_upper()
+		if pub.get("duelState") is Dictionary:
+			display_phase = "DUEL"
 		phase_label.text = "%s   ·   %s" % [display_phase, whose_turn]
 	# Deck counts for hover display (deck count text at top removed)
 	_your_deck_count = int((light if my_side == "light" else dark).get("deckCount", 0))
@@ -3727,6 +4046,7 @@ func _refresh() -> void:
 	var opp_planets: int = dark_planets_won if my_side == "light" else light_planets_won
 	_update_info_plate("you", str(my_info.get("name", "You")), my_side, my_info, my_planets, in_play_phase and turn_side == my_side, phase == "deploy")
 	_update_info_plate("opp", str(opp_info.get("name", "Opponent")), opp_side_key, opp_info, opp_planets, in_play_phase and turn_side == opp_side_key, phase == "deploy")
+	_maybe_announce_turn(phase, turn_side, my_side, in_play_phase)
 	# Opponent hand: show N card backs at top center
 	if opponent_hand_container:
 		var opp_hand_count: int = int(dark.get("handCount", 0)) if my_side == "light" else int(light.get("handCount", 0))
@@ -3878,8 +4198,9 @@ func _refresh() -> void:
 			var r: Dictionary = rounds[i]
 			var l: Dictionary = r.get("light", {})
 			var d: Dictionary = r.get("dark", {})
-			label_parts.append("Light: %d  Dark: %d" % [int(l.get("destiny", 0)), int(d.get("destiny", 0))])
-		destiny_compare_label.text = "  |  ".join(label_parts) + "  —  Higher goes first"
+			label_parts.append("[color=#%s][b]Light %d[/b][/color]   vs   [color=#%s][b]Dark %d[/b][/color]" % [SIDE_COLOR_LIGHT.to_html(false), int(l.get("destiny", 0)), SIDE_COLOR_DARK.to_html(false), int(d.get("destiny", 0))])
+		destiny_compare_label.text = "     |     ".join(label_parts) + "   —   Higher goes first"
+		_color_destiny_captions(my_side)
 		if not _destiny_flying:
 			for c in opponent_destiny_slot.get_children():
 				c.queue_free()
@@ -4140,7 +4461,9 @@ func _build_hand(state: RefCounted) -> void:
 	var pub: Dictionary = g.get("publicState", {})
 	if location_choice_cards:
 		for c in location_choice_cards.get_children():
+			location_choice_cards.remove_child(c)
 			c.queue_free()
+		_fit_location_choices()
 	if phase == "choose_starting_location" or phase == "choose_next_planet":
 		if turn_side == my_side and location_choice_cards:
 			var starting: bool = phase == "choose_starting_location"
@@ -4156,6 +4479,7 @@ func _build_hand(state: RefCounted) -> void:
 				if card.has_method("set_board_size"):
 					card.set_board_size(CHOICE_LOCATION_SIZE)
 				card.card_selected.connect(_on_starting_location_chosen if starting else _on_next_planet_chosen)
+			_fit_location_choices()
 		return
 	for entry in state.hand_with_instances:
 		var inst_id: String = entry.get("instanceId", "")
@@ -4165,7 +4489,13 @@ func _build_hand(state: RefCounted) -> void:
 		var card: Control = CardPlaceholderScene.instantiate()
 		hand_container.add_child(card)
 		card.set_card(card_id, inst_id, my_side, entry.get("set", ""))
-		if card.has_method("set_action_glow") and _hand_card_can_deploy(card_id, str(entry.get("set", "")), my_side, pub, phase, turn_side):
+		if _discard_location_mode:
+			if _is_location_card(card_id, my_side, str(entry.get("set", ""))):
+				if card.has_method("set_action_glow"):
+					card.set_action_glow("play")
+			else:
+				card.modulate = Color(1, 1, 1, 0.4)
+		elif card.has_method("set_action_glow") and _hand_card_can_deploy(card_id, str(entry.get("set", "")), my_side, pub, phase, turn_side):
 			card.set_action_glow("play")
 		card.button_pressed = (inst_id == _selected_instance_id)
 		card.card_selected.connect(_on_card_selected)
@@ -4188,6 +4518,7 @@ func _ensure_effect_decline_btn() -> void:
 	_effect_decline_btn.visible = false
 	_effect_decline_btn.pressed.connect(_on_effect_decline_pressed)
 	p.add_child(_effect_decline_btn)
+	_style_action_button(_effect_decline_btn, "secondary")
 
 
 func _on_effect_decline_pressed() -> void:
@@ -6127,6 +6458,10 @@ func _show_surrender_confirm(planet_name: String) -> void:
 	btn_row.add_child(no_btn)
 
 
+func _is_location_card(card_id: String, side: String, card_set: String) -> bool:
+	return CardCatalog != null and str(CardCatalog.get_card_info(card_id, side, card_set).get("type", "")).to_lower() == "location"
+
+
 func _on_discard_location_pressed() -> void:
 	if _discard_location_mode:
 		_discard_location_mode = false
@@ -6139,13 +6474,12 @@ func _on_discard_location_pressed() -> void:
 			status_label.text = "Surrendering planet after Even Up."
 		else:
 			status_label.text = ""
+		_build_hand(Connection.get_state())
 		return
 	var state: RefCounted = Connection.get_state()
 	var has_location_in_hand: bool = false
 	for entry in state.hand_with_instances:
-		var card_id: String = entry.get("cardId", "")
-		var card_set: String = entry.get("set", "")
-		if CardCatalog and str(CardCatalog.get_card_info(card_id, state.game_side, card_set).get("type", "")).to_lower() == "location":
+		if _is_location_card(str(entry.get("cardId", "")), state.game_side, str(entry.get("set", ""))):
 			has_location_in_hand = true
 			break
 	if not has_location_in_hand:
@@ -6154,23 +6488,171 @@ func _on_discard_location_pressed() -> void:
 	_discard_location_mode = true
 	if discard_location_btn:
 		discard_location_btn.text = "Cancel Discard"
-	status_label.text = "Click a location card in your hand to discard it."
+	status_label.text = "Click a highlighted location in your hand to discard it."
+	_build_hand(state)
 
 
-var _concede_dialog: ConfirmationDialog = null
+var _concede_layer: CanvasLayer = null
+var _turn_banner_side: String = ""
+var _turn_banner_layer: CanvasLayer = null
+
+
+func _maybe_announce_turn(phase: String, turn_side: String, my_side: String, in_play_phase: bool) -> void:
+	if not in_play_phase or phase == "choose_next_planet" or _game_over_received:
+		return
+	if turn_side == _turn_banner_side:
+		return
+	_turn_banner_side = turn_side
+	if turn_side != my_side:
+		return
+	_show_turn_banner("%s phase" % _phase_display_name(phase))
+	if not DisplayServer.window_is_focused():
+		DisplayServer.window_request_attention()
+
+
+func _show_turn_banner(subtitle: String) -> void:
+	if _turn_banner_layer and is_instance_valid(_turn_banner_layer):
+		_turn_banner_layer.queue_free()
+	_turn_banner_layer = CanvasLayer.new()
+	_turn_banner_layer.layer = 175
+	add_child(_turn_banner_layer)
+	var strip := PanelContainer.new()
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.anchor_left = 0.0
+	strip.anchor_right = 1.0
+	strip.anchor_top = 0.38
+	strip.anchor_bottom = 0.38
+	strip.offset_top = -52
+	strip.offset_bottom = 52
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.9)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.85)
+	style.border_width_top = 2
+	style.border_width_bottom = 2
+	style.shadow_color = Color(0.86, 0.72, 0.32, 0.18)
+	style.shadow_size = 22
+	strip.add_theme_stylebox_override("panel", style)
+	_turn_banner_layer.add_child(strip)
+	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 2)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip.add_child(v)
+	var title := Label.new()
+	title.text = "YOUR TURN"
+	title.theme_type_variation = &"TitleLabel"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 40)
+	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	v.add_child(title)
+	var sub := Label.new()
+	sub.text = subtitle.to_upper()
+	sub.theme_type_variation = &"HeaderLabel"
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.add_theme_font_size_override("font_size", 13)
+	sub.add_theme_color_override("font_color", Color(0.72, 0.76, 0.88))
+	v.add_child(sub)
+	strip.modulate = Color(1, 1, 1, 0)
+	var layer := _turn_banner_layer
+	var tw := strip.create_tween()
+	tw.tween_property(strip, "modulate:a", 1.0, 0.2)
+	tw.tween_interval(1.4)
+	tw.tween_property(strip, "modulate:a", 0.0, 0.45)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(layer):
+			layer.queue_free()
+	)
+
+
+## Dimmed full-screen backdrop with a centered navy card; the accent colors the top strip and glow.
+func _make_modal(layer_index: int, accent: Color, min_width: float) -> Dictionary:
+	var layer := CanvasLayer.new()
+	layer.layer = layer_index
+	add_child(layer)
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.01, 0.02, 0.06, 0.8)
+	layer.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(center)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(min_width, 0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.98)
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.85)
+	style.set_border_width_all(1)
+	style.border_width_top = 4
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 34
+	style.content_margin_right = 34
+	style.content_margin_top = 26
+	style.content_margin_bottom = 28
+	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.25)
+	style.shadow_size = 28
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 12)
+	panel.add_child(vbox)
+	return {"layer": layer, "bg": bg, "panel": panel, "vbox": vbox}
+
+
+func _close_concede_modal() -> void:
+	if _concede_layer and is_instance_valid(_concede_layer):
+		_concede_layer.queue_free()
+	_concede_layer = null
 
 
 func _on_concede_pressed() -> void:
-	if _concede_dialog == null:
-		_concede_dialog = ConfirmationDialog.new()
-		_concede_dialog.title = "Concede"
-		_concede_dialog.dialog_text = "Concede this game? Your opponent will be given the win."
-		_concede_dialog.ok_button_text = "Concede"
-		_concede_dialog.cancel_button_text = "Keep playing"
-		_concede_dialog.get_ok_button().theme_type_variation = &"DangerButton"
-		_concede_dialog.confirmed.connect(func() -> void: Connection.get_client().game_concede())
-		add_child(_concede_dialog)
-	_concede_dialog.popup_centered(Vector2i(380, 0))
+	if _concede_layer and is_instance_valid(_concede_layer):
+		return
+	var m := _make_modal(240, SIDE_COLOR_DARK, 420)
+	_concede_layer = m["layer"]
+	var bg: ColorRect = m["bg"]
+	bg.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_close_concede_modal()
+	)
+	var vbox: VBoxContainer = m["vbox"]
+	var title := Label.new()
+	title.text = "CONCEDE GAME?"
+	title.theme_type_variation = &"TitleLabel"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.5, 0.46))
+	vbox.add_child(title)
+	var body := Label.new()
+	body.text = "Your opponent will be awarded the win.\nThis can't be undone."
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("font_size", 15)
+	body.add_theme_color_override("font_color", Color(0.72, 0.76, 0.88))
+	vbox.add_child(body)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 4)
+	vbox.add_child(spacer)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	vbox.add_child(row)
+	var keep := Button.new()
+	keep.text = "Keep Playing"
+	_style_action_button(keep, "primary")
+	keep.custom_minimum_size = Vector2(170, 44)
+	keep.pressed.connect(_close_concede_modal)
+	row.add_child(keep)
+	var confirm := Button.new()
+	confirm.text = "Concede"
+	_style_action_button(confirm, "danger")
+	confirm.custom_minimum_size = Vector2(170, 44)
+	confirm.pressed.connect(func() -> void:
+		_close_concede_modal()
+		Connection.get_client().game_concede()
+	)
+	row.add_child(confirm)
+	keep.grab_focus.call_deferred()
 
 
 func _on_return_to_lobby_pressed() -> void:
@@ -6263,9 +6745,185 @@ func _on_next_planet_chosen(instance_id: String) -> void:
 
 
 const CHOICE_LOCATION_SIZE := Vector2(196, 138)
+const CHOICE_LOCATION_MIN_W := 150.0
+const CHOICE_LOCATION_SEP := 14.0
 const SIDE_COLOR_LIGHT := Color(0.35, 0.62, 1.0)
 const SIDE_COLOR_DARK := Color(0.95, 0.32, 0.3)
 const MAX_FORCE_PIPS := 10
+
+
+## Location choices shrink to fit the window; if there are still too many,
+## the row scrolls sideways (drag the bar or use the mouse wheel).
+func _fit_location_choices() -> void:
+	if location_choice_cards == null or location_choice_scroll == null:
+		return
+	var n: int = location_choice_cards.get_child_count()
+	if n == 0:
+		location_choice_scroll.custom_minimum_size = Vector2.ZERO
+		return
+	var avail: float = get_viewport_rect().size.x - 140.0
+	var fit_w: float = (avail - CHOICE_LOCATION_SEP * (n - 1)) / n
+	var w: float = clampf(fit_w, CHOICE_LOCATION_MIN_W, CHOICE_LOCATION_SIZE.x)
+	var card_size := Vector2(roundf(w), roundf(w * CHOICE_LOCATION_SIZE.y / CHOICE_LOCATION_SIZE.x))
+	for card in location_choice_cards.get_children():
+		if card.has_method("set_board_size"):
+			card.set_board_size(card_size)
+	var content_w: float = card_size.x * n + CHOICE_LOCATION_SEP * (n - 1)
+	var overflow: bool = content_w > avail
+	location_choice_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_ALWAYS if overflow else ScrollContainer.SCROLL_MODE_DISABLED
+	location_choice_scroll.custom_minimum_size = Vector2(minf(content_w, avail), card_size.y + (16.0 if overflow else 0.0))
+
+
+func _color_destiny_captions(my_side: String) -> void:
+	var opp_side: String = "dark" if my_side == "light" else "light"
+	for pair in [[your_destiny_caption, "You", my_side], [opp_destiny_caption, "Opponent", opp_side]]:
+		var cap: Label = pair[0]
+		if cap == null:
+			continue
+		var side: String = pair[2]
+		cap.text = "%s · %s" % [pair[1], "Light" if side == "light" else "Dark"]
+		cap.add_theme_color_override("font_color", SIDE_COLOR_LIGHT if side == "light" else SIDE_COLOR_DARK)
+
+
+# --- Action bar buttons ---
+
+const ACTION_BTN_SIZE := Vector2(200, 44)
+const ACTION_KINDS := {
+	"primary": {"bg": Color(0.12, 0.17, 0.38), "edge": Color(0.95, 0.78, 0.32), "font": Color(1.0, 0.95, 0.78)},
+	"secondary": {"bg": Color(0.06, 0.1, 0.22), "edge": Color(0.32, 0.55, 0.9), "font": Color(0.88, 0.93, 1.0)},
+	"danger": {"bg": Color(0.2, 0.05, 0.07), "edge": Color(0.92, 0.32, 0.3), "font": Color(1.0, 0.84, 0.82)},
+}
+var _heading_font: Font = null
+
+
+func _action_box(bg: Color, edge: Color, state: String) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.set_corner_radius_all(9)
+	s.set_border_width_all(1)
+	s.content_margin_left = 16
+	s.content_margin_right = 16
+	s.content_margin_top = 10
+	s.content_margin_bottom = 10
+	match state:
+		"hover":
+			s.bg_color = bg.lightened(0.12)
+			s.border_color = edge.lightened(0.15)
+			s.border_width_bottom = 4
+			s.shadow_color = Color(edge.r, edge.g, edge.b, 0.35)
+			s.shadow_size = 10
+		"pressed":
+			s.bg_color = bg.darkened(0.2)
+			s.border_color = edge.darkened(0.1)
+			s.border_width_top = 2
+			s.content_margin_top = 12
+			s.content_margin_bottom = 8
+		"disabled":
+			s.bg_color = Color(bg.r, bg.g, bg.b, 0.45)
+			s.border_color = Color(edge.r, edge.g, edge.b, 0.3)
+			s.border_width_bottom = 3
+		_:
+			s.bg_color = bg
+			s.border_color = edge
+			s.border_width_bottom = 4
+			s.shadow_color = Color(edge.r, edge.g, edge.b, 0.18)
+			s.shadow_size = 6
+	s.border_blend = false
+	return s
+
+
+func _style_action_button(btn: Button, kind: String) -> void:
+	if btn == null or str(btn.get_meta("action_kind", "")) == kind:
+		return
+	btn.set_meta("action_kind", kind)
+	var k: Dictionary = ACTION_KINDS[kind]
+	btn.theme_type_variation = &""
+	btn.custom_minimum_size = ACTION_BTN_SIZE
+	for state in ["normal", "hover", "pressed", "disabled"]:
+		btn.add_theme_stylebox_override(state, _action_box(k["bg"], k["edge"], state))
+	btn.add_theme_stylebox_override("hover_pressed", _action_box(k["bg"], k["edge"], "pressed"))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.add_theme_color_override("font_color", k["font"])
+	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1))
+	btn.add_theme_color_override("font_focus_color", k["font"])
+	btn.add_theme_color_override("font_pressed_color", k["font"].darkened(0.1))
+	btn.add_theme_color_override("font_hover_pressed_color", k["font"])
+	if _heading_font == null:
+		_heading_font = load("res://fonts/Orbitron.ttf") as Font
+	if _heading_font:
+		btn.add_theme_font_override("font", _heading_font)
+	btn.add_theme_font_size_override("font_size", 13)
+
+
+func _style_action_buttons() -> void:
+	if actions_right == null:
+		return
+	for c in actions_right.get_children():
+		if not c is Button:
+			continue
+		var b := c as Button
+		var kind := "secondary"
+		if b == surrender_planet_btn:
+			kind = "danger"
+		elif b.theme_type_variation == &"PrimaryButton":
+			kind = "primary"
+		_style_action_button(b, kind)
+
+
+## Speech-bubble icon for the chat toggle.
+static func _make_chat_icon(tint: Color) -> ImageTexture:
+	var sz := 18
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var edge := Color(tint.r, tint.g, tint.b, 0.95)
+	var fill := Color(tint.r * 0.35, tint.g * 0.35, tint.b * 0.35, 0.6)
+	for y in range(2, 13):
+		for x in range(1, 17):
+			var corner: bool = (x < 3 or x > 14) and (y < 4 or y > 11)
+			if corner:
+				continue
+			var is_edge: bool = y == 2 or y == 12 or x == 1 or x == 16
+			img.set_pixel(x, y, edge if is_edge else fill)
+	for i in range(4):
+		for x in range(4, 8 - i):
+			img.set_pixel(x, 13 + i, edge)
+	for x in [5, 9, 13]:
+		img.set_pixel(x - 1, 7, edge)
+		img.set_pixel(x, 7, edge)
+	return ImageTexture.create_from_image(img)
+
+
+var _chat_badge: PanelContainer = null
+var _chat_badge_label: Label = null
+
+
+func _setup_chat_toggle() -> void:
+	if chat_toggle_btn == null:
+		return
+	chat_toggle_btn.icon = _make_chat_icon(Color(0.6, 0.78, 1.0))
+	chat_toggle_btn.add_theme_constant_override("h_separation", 6)
+	chat_toggle_btn.custom_minimum_size = Vector2(96, 34)
+	concede_btn.custom_minimum_size = Vector2(0, 34)
+	_chat_badge = PanelContainer.new()
+	_chat_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.95, 0.78, 0.32)
+	s.set_corner_radius_all(9)
+	s.content_margin_left = 5
+	s.content_margin_right = 5
+	s.content_margin_top = 0
+	s.content_margin_bottom = 0
+	_chat_badge.add_theme_stylebox_override("panel", s)
+	_chat_badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_chat_badge.offset_left = -12
+	_chat_badge.offset_top = -7
+	_chat_badge.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_chat_badge_label = Label.new()
+	_chat_badge_label.add_theme_font_size_override("font_size", 11)
+	_chat_badge_label.add_theme_color_override("font_color", Color(0.08, 0.06, 0.02))
+	_chat_badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_chat_badge.add_child(_chat_badge_label)
+	_chat_badge.visible = false
+	chat_toggle_btn.add_child(_chat_badge)
 
 var _plates: Dictionary = {}
 
@@ -6487,6 +7145,7 @@ func _fit_board_to_window() -> void:
 		for card in starting_location_slot.get_children():
 			if card is Control:
 				_size_board_card(card as Control, true)
+	_fit_location_choices()
 	_fitting_board = false
 
 
