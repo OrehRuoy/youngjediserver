@@ -88,6 +88,12 @@ function printedDamage(cardId: string, set?: string): number {
   return typeof d === "number" ? d : 0;
 }
 
+function cardName(cardId: string, set?: string): string {
+  const def = getCard(cardId, set);
+  const name = def ? (def as { name?: string }).name : "";
+  return name && name.length > 0 ? name : cardId;
+}
+
 function isCharacter(cardId: string, set?: string): boolean {
   const def = getCard(cardId, set);
   return !!def && (def as { type?: string }).type === "character";
@@ -282,6 +288,16 @@ function endDuel(state: GameStateData, koSide?: Side): void {
   const defenderCharId = cardIdForInstance(state, d.defenderCharInstanceId);
   const attackerSide = d.initiator;
   const defenderSide: Side = attackerSide === "light" ? "dark" : "light";
+  const atkCard = findAtLocation(state, attackerSide, d.attackerCharInstanceId);
+  const defCard = d.defenderCharInstanceId ? findAtLocation(state, defenderSide, d.defenderCharInstanceId) : undefined;
+  const lightCard = attackerSide === "light" ? atkCard : defCard;
+  const darkCard = attackerSide === "dark" ? atkCard : defCard;
+  const lightHits = d.lightHits;
+  const darkHits = d.darkHits;
+  const lightDamage = lightCard ? printedDamage(lightCard.cardId, lightCard.cardSet) : 0;
+  const darkDamage = darkCard ? printedDamage(darkCard.cardId, darkCard.cardSet) : 0;
+  let milledSide: Side | undefined;
+  let milled = 0;
   if (koSide) {
     if (koSide === attackerSide) {
       discardInPlay(state, attackerSide, d.attackerCharInstanceId);
@@ -296,15 +312,36 @@ function endDuel(state: GameStateData, koSide?: Side): void {
     const p = koSide === "light" ? state.light : state.dark;
     const card = [...p.discard].reverse().find((c) => c.instanceId === loserCharId);
     const dmg = card ? printedDamage(card.cardId, card.cardSet) : 0;
-    if (dmg > 0) millFromDeck(state, koSide, dmg);
+    if (dmg > 0) {
+      milledSide = koSide;
+      milled = dmg;
+      millFromDeck(state, koSide, dmg);
+    }
   } else {
-    const lightHits = d.lightHits;
-    const darkHits = d.darkHits;
     reshuffleDuelCards(state);
     restoreHands(state);
-    if (lightHits > darkHits) millFromDeck(state, "dark", lightHits - darkHits);
-    else if (darkHits > lightHits) millFromDeck(state, "light", darkHits - lightHits);
+    // Hits are damage taken. The side that took more loses that many cards. Characters stay.
+    if (lightHits > darkHits) {
+      milledSide = "light";
+      milled = lightHits - darkHits;
+      millFromDeck(state, "light", milled);
+    } else if (darkHits > lightHits) {
+      milledSide = "dark";
+      milled = darkHits - lightHits;
+      millFromDeck(state, "dark", milled);
+    }
   }
+  state.lastDuelResult = {
+    id: String(Date.now()),
+    lightName: lightCard ? cardName(lightCard.cardId, lightCard.cardSet) : "Light",
+    darkName: darkCard ? cardName(darkCard.cardId, darkCard.cardSet) : "Dark",
+    lightHits,
+    darkHits,
+    lightDamage,
+    darkDamage,
+    ...(koSide ? { koSide } : {}),
+    ...(milledSide && milled > 0 ? { milledSide, milled } : { milled: 0 }),
+  };
   markFoughtThisTurn(state, attackerCharId, defenderCharId);
   state.duelUsedThisTurn = true;
   state.duelState = undefined;
@@ -339,6 +376,7 @@ export function initiateDuel(
   if (!isDuelist(char.cardId, side, char.cardSet)) return false;
   if (!isLightsaber(weapon.cardId, weapon.cardSet)) return false;
   if (!weaponUsableBy(weapon.cardId, char.cardId, weapon.cardSet)) return false;
+  state.lastDuelResult = undefined;
   state.duelState = {
     step: "choose_target",
     initiator: side,

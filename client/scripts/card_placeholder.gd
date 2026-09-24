@@ -122,7 +122,7 @@ func set_card(card_id: String, instance_id: String = "", side_hint: String = "",
 
 	var side: String = info.get("side", "")
 	if side and img and CardCatalog:
-		var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side_hint)
+		var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side_hint, set_hint)
 		for path in paths_to_try:
 			var tex = load(path) as Texture2D
 			if tex:

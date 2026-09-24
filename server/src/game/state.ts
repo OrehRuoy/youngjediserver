@@ -847,6 +847,19 @@ export interface GameStateData {
   };
   /** Lightsaber duel in progress. */
   duelState?: import("./duel").DuelState;
+  /** Shown once after a duel ends so the players can see why a character was lost. */
+  lastDuelResult?: {
+    id: string;
+    lightName: string;
+    darkName: string;
+    lightHits: number;
+    darkHits: number;
+    lightDamage: number;
+    darkDamage: number;
+    koSide?: Side;
+    milledSide?: Side;
+    milled: number;
+  };
   duelUsedThisTurn?: boolean;
   /** Card IDs of characters that already completed a duel or battle pair this turn. */
   foughtThisTurn?: string[];
@@ -1493,6 +1506,7 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
     };
   }
   publicState.duelUsedThisTurn = state.duelUsedThisTurn === true;
+  if (state.lastDuelResult) publicState.lastDuelResult = state.lastDuelResult;
   return {
     phase: state.phase,
     turnSide: state.turnSide,
