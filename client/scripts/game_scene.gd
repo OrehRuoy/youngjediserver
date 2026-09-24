@@ -1872,11 +1872,44 @@ func _is_duelist_card(card_id: String, side: String) -> bool:
 	return idl.begins_with("darthmaul") or idl.begins_with("darthsidious") or idl.begins_with("aurrasing")
 
 
+func _duelist_has_usable_saber(char_id: String, mine: Array) -> bool:
+	for c in mine:
+		if bool(c.get("faceDown", false)):
+			continue
+		var weapon_id := str(c.get("cardId", ""))
+		if _is_lightsaber_card(weapon_id) and _weapon_fits_character(weapon_id, str(c.get("set", "")), char_id):
+			return true
+	return false
+
+
+func _duel_pick_glow(card: Dictionary, my_side: String, mine: Array) -> String:
+	if not _picking_duel or bool(card.get("faceDown", false)):
+		return ""
+	var cid := str(card.get("cardId", ""))
+	var inst := str(card.get("instanceId", ""))
+	var chosen_id := ""
+	if not _duel_char_id.is_empty():
+		for c in mine:
+			if str(c.get("instanceId", "")) == _duel_char_id:
+				chosen_id = str(c.get("cardId", ""))
+				break
+	if chosen_id.is_empty():
+		if _is_duelist_card(cid, my_side) and _duelist_has_usable_saber(cid, mine):
+			return "play"
+		return ""
+	if inst == _duel_char_id:
+		return "ability"
+	if _is_lightsaber_card(cid) and _weapon_fits_character(cid, str(card.get("set", "")), chosen_id):
+		return "play"
+	return ""
+
+
 func _on_duel_pressed() -> void:
 	_picking_duel = true
 	_duel_char_id = ""
 	_duel_weapon_id = ""
-	status_label.text = "Click your Jedi/Sith, then their lightsaber."
+	status_label.text = "Click a highlighted fighter, then a highlighted lightsaber."
+	_refresh()
 
 
 func _try_send_initiate_duel() -> void:
@@ -2214,6 +2247,7 @@ func _duel_center_stage(d: Dictionary, pending: Dictionary, my_side: String) -> 
 			v.add_child(title)
 			var who := "You take" if hit_side == my_side else "Opponent takes"
 			v.add_child(_duel_label("%s %d hit%s" % [who, n, "" if n == 1 else "s"], 15, Color(0.93, 0.95, 1.0)))
+			v.add_child(_duel_label("Then you swing." if hit_side == my_side else "Then they swing.", 14, DUEL_MUTED))
 			var cid := str(_duel_flash.get("card", ""))
 			if not cid.is_empty():
 				_duel_card(v, cid, str(_duel_flash.get("side", "")), str(_duel_flash.get("set", "")), Vector2(70, 99))
@@ -2223,7 +2257,7 @@ func _duel_center_stage(d: Dictionary, pending: Dictionary, my_side: String) -> 
 			title = _duel_label("BLOCKED!", 30, DUEL_GOLD, true)
 			v.add_child(title)
 			var dest := int(_duel_flash.get("dest", 0))
-			v.add_child(_duel_label(("You matched their %d" if blocker == my_side else "They matched your %d") % dest, 15, Color(0.93, 0.95, 1.0)))
+			v.add_child(_duel_label(("You matched their %d. That card is now your swing." if blocker == my_side else "They matched your %d. That card is now their swing.") % dest, 15, Color(0.93, 0.95, 1.0)))
 			var pair := HBoxContainer.new()
 			pair.alignment = BoxContainer.ALIGNMENT_CENTER
 			pair.add_theme_constant_override("separation", 8)
@@ -2252,18 +2286,25 @@ func _duel_result_lines(result: Dictionary, my_side: String) -> Dictionary:
 	var ko: String = str(result.get("koSide", ""))
 	var milled_side: String = str(result.get("milledSide", ""))
 	var milled: int = int(result.get("milled", 0))
-	if ko == my_side:
-		return {"title": "DEFEATED", "color": DUEL_HIT_COLOR, "sub": "%s is defeated" % mine_name,
-			"note": "Your fighter and weapon are discarded. You lose %d cards from your deck." % milled}
 	if not ko.is_empty():
-		return {"title": "VICTORY", "color": DUEL_GOLD, "sub": "%s is defeated" % opp_name,
-			"note": "Their fighter and weapon are discarded. They lose %d cards from their deck." % milled}
+		var loser_key := "light" if ko == "light" else "dark"
+		var winner_key := "dark" if ko == "light" else "light"
+		var damage := int(result.get(loser_key + "Damage", 0))
+		var hits_taken := int(result.get(loser_key + "Hits", 0))
+		var hits_landed := int(result.get(winner_key + "Hits", 0))
+		var loser_name := mine_name if ko == my_side else opp_name
+		var you := ko == my_side
+		var note := "%s took %d hits and fell at damage %d. Cards lost are that damage minus the %d hits %s landed, so %d." % [
+			loser_name, hits_taken, damage, hits_landed, "you" if you else "they", milled]
+		if you:
+			return {"title": "DEFEATED", "color": DUEL_HIT_COLOR, "sub": "%s is defeated" % mine_name, "note": note}
+		return {"title": "VICTORY", "color": DUEL_GOLD, "sub": "%s is defeated" % opp_name, "note": note}
 	if milled > 0 and milled_side == my_side:
 		return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
-			"note": "You took more hits, so you lose %d cards from your deck." % milled}
+			"note": "You took more hits. You lose %d cards, the difference in hits. Neither fighter is discarded." % milled}
 	if milled > 0:
 		return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
-			"note": "They took more hits, so they lose %d cards from their deck." % milled}
+			"note": "They took more hits. They lose %d cards, the difference in hits. Neither fighter is discarded." % milled}
 	return {"title": "NO KNOCKOUT", "color": Color(0.93, 0.95, 1.0), "sub": "Both fighters stay in play",
 		"note": "Hits were tied. Nobody loses cards."}
 
@@ -2286,6 +2327,11 @@ func _maybe_show_duel_result(pub: Dictionary, my_side: String) -> void:
 	vbox.add_child(title)
 	_duel_pop_in(title)
 	vbox.add_child(_duel_label(str(lines["sub"]), 16, Color(0.93, 0.95, 1.0)))
+	var ko_side := str(r.get("koSide", ""))
+	if not ko_side.is_empty():
+		var ko_id := str(r.get(ko_side + "CardId", ""))
+		if not ko_id.is_empty():
+			_duel_card(vbox, ko_id, ko_side, str(r.get(ko_side + "Set", "")), Vector2(96, 136))
 	var opp_side: String = "dark" if my_side == "light" else "light"
 	var scores := HBoxContainer.new()
 	scores.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -2300,6 +2346,9 @@ func _maybe_show_duel_result(pub: Dictionary, my_side: String) -> void:
 		col.add_theme_constant_override("separation", 6)
 		box.add_child(col)
 		col.add_child(_duel_label("YOU" if side == my_side else "OPPONENT", 13, _duel_side_color(side).lightened(0.3), true))
+		var side_id := str(r.get(side + "CardId", ""))
+		if not side_id.is_empty():
+			_duel_card(col, side_id, side, str(r.get(side + "Set", "")), Vector2(72, 102))
 		var fighter := _duel_label(str(r.get(side + "Name", "")), 14, Color(0.93, 0.95, 1.0))
 		fighter.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		fighter.clip_text = true
@@ -2392,7 +2441,7 @@ func _build_duel_play_screen(pub: Dictionary, d: Dictionary, my_side: String) ->
 		line.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		line.color = Color(0.86, 0.72, 0.32, 0.5)
 		header.add_child(line)
-	vbox.add_child(_duel_label("Match their destiny to block. Miss and you take a hit.", 13, DUEL_MUTED))
+	vbox.add_child(_duel_label("You swing first. A match blocks and becomes their swing. A miss is a hit, then they swing.", 13, DUEL_MUTED))
 
 	var pending: Dictionary = {}
 	if d.get("pendingAttack") is Dictionary:
@@ -2424,14 +2473,14 @@ func _build_duel_play_screen(pub: Dictionary, d: Dictionary, my_side: String) ->
 	elif not pending.is_empty() and str(pending.get("side", "")) != my_side:
 		my_turn_to_play = true
 		need = int(pending.get("destiny", 0))
-		prompt_text = "Block with a %d, or any other card takes the hit" % need
+		prompt_text = "Their swing is %d. Match it and that card becomes your swing. Any other card: you take the hit, then you swing." % need
 	elif pending.is_empty() and attacker == my_side:
 		my_turn_to_play = true
-		prompt_text = "Your attack: play any card"
+		prompt_text = "Your swing. Play any card. They must match that number."
 	elif not pending.is_empty():
-		prompt_text = "Waiting: they need a %d to block" % int(pending.get("destiny", 0))
+		prompt_text = "Your swing is %d. If they match it, that card becomes their swing. If they miss, they take the hit and then they swing." % int(pending.get("destiny", 0))
 	else:
-		prompt_text = "Waiting for their attack"
+		prompt_text = "Their swing next. Wait for them to play a card."
 	var prompt := PanelContainer.new()
 	prompt.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	var psb := StyleBoxFlat.new()
@@ -4589,22 +4638,39 @@ func _on_my_table_card_clicked(instance_id: String) -> void:
 	var pub: Dictionary = Connection.get_state().game_state.get("publicState", {})
 	var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
 	var card_id: String = ""
+	var card_set: String = ""
 	for c in mine:
 		if c.get("instanceId", "") == instance_id:
 			card_id = c.get("cardId", "")
+			card_set = str(c.get("set", ""))
 			break
 	if card_id.is_empty():
 		return
-	if _is_lightsaber_card(card_id):
-		_duel_weapon_id = instance_id
-		status_label.text = "Lightsaber chosen. Click your duelist if you haven't yet."
-	elif _is_duelist_card(card_id, my_side):
-		_duel_char_id = instance_id
-		status_label.text = "Duelist chosen. Click their lightsaber."
-	else:
-		status_label.text = "Click a Jedi/Sith and a lightsaber."
+	if _duel_char_id.is_empty():
+		if _is_duelist_card(card_id, my_side) and _duelist_has_usable_saber(card_id, mine):
+			_duel_char_id = instance_id
+			status_label.text = "Fighter chosen. Click a highlighted lightsaber."
+			_refresh()
+		else:
+			status_label.text = "Click a highlighted fighter first."
 		return
-	_try_send_initiate_duel()
+	var chosen_id := ""
+	for c in mine:
+		if str(c.get("instanceId", "")) == _duel_char_id:
+			chosen_id = str(c.get("cardId", ""))
+			break
+	if _is_lightsaber_card(card_id) and _weapon_fits_character(card_id, card_set, chosen_id):
+		_duel_weapon_id = instance_id
+		status_label.text = "Lightsaber chosen."
+		_try_send_initiate_duel()
+		return
+	if _is_duelist_card(card_id, my_side) and _duelist_has_usable_saber(card_id, mine):
+		_duel_char_id = instance_id
+		_duel_weapon_id = ""
+		status_label.text = "Fighter chosen. Click a highlighted lightsaber."
+		_refresh()
+		return
+	status_label.text = "Click a highlighted lightsaber."
 
 
 func _on_card_selected(instance_id: String) -> void:
@@ -6049,7 +6115,10 @@ func _build_in_play(state: RefCounted) -> void:
 				cp.set_card(card.get("cardId", "?"), card.get("instanceId", ""), my_side, card.get("set", ""), face_down, true)
 				_size_board_card(cp, false)
 				if cp.has_method("set_action_glow"):
-					cp.set_action_glow(_table_ability_glow(card, pub, my_side, phase, turn_side))
+					var glow := _table_ability_glow(card, pub, my_side, phase, turn_side)
+					if _picking_duel:
+						glow = _duel_pick_glow(card, my_side, my_in_play)
+					cp.set_action_glow(glow)
 				_animate_in_play_card(cp, my_turn_count, face_down)
 				var played_type := ""
 				if CardCatalog:

@@ -312,11 +312,10 @@ function endDuel(state: GameStateData, koSide?: Side): void {
     const p = koSide === "light" ? state.light : state.dark;
     const card = [...p.discard].reverse().find((c) => c.instanceId === loserCharId);
     const dmg = card ? printedDamage(card.cardId, card.cardSet) : 0;
-    if (dmg > 0) {
-      milledSide = koSide;
-      milled = dmg;
-      millFromDeck(state, koSide, dmg);
-    }
+    const hitsScored = koSide === "light" ? darkHits : lightHits;
+    milledSide = koSide;
+    milled = Math.max(0, dmg - hitsScored);
+    if (milled > 0) millFromDeck(state, koSide, milled);
   } else {
     reshuffleDuelCards(state);
     restoreHands(state);
@@ -335,6 +334,10 @@ function endDuel(state: GameStateData, koSide?: Side): void {
     id: String(Date.now()),
     lightName: lightCard ? cardName(lightCard.cardId, lightCard.cardSet) : "Light",
     darkName: darkCard ? cardName(darkCard.cardId, darkCard.cardSet) : "Dark",
+    lightCardId: lightCard?.cardId ?? "",
+    darkCardId: darkCard?.cardId ?? "",
+    lightSet: lightCard?.cardSet ?? "",
+    darkSet: darkCard?.cardSet ?? "",
     lightHits,
     darkHits,
     lightDamage,

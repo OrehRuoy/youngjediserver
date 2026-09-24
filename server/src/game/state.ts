@@ -852,6 +852,10 @@ export interface GameStateData {
     id: string;
     lightName: string;
     darkName: string;
+    lightCardId?: string;
+    darkCardId?: string;
+    lightSet?: string;
+    darkSet?: string;
     lightHits: number;
     darkHits: number;
     lightDamage: number;
