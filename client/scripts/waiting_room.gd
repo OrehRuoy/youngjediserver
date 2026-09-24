@@ -192,7 +192,12 @@ func _refresh() -> void:
 	start_btn.disabled = not both_ready or light_name == "—" or dark_name == "—"
 	var my_ready: bool = light_ready if state.my_side == "light" else dark_ready
 	ready_btn.button_pressed = my_ready
-	ready_btn.text = "Ready" if my_ready else "Not ready"
+	_update_ready_btn(my_ready)
+
+
+func _update_ready_btn(is_ready: bool) -> void:
+	ready_btn.text = "Cancel ready" if is_ready else "Ready up"
+	ready_btn.theme_type_variation = &"" if is_ready else &"PrimaryButton"
 
 
 func _populate_deck_dropdown(btn: OptionButton, decks: Array[Dictionary], selected_id: String, custom_override_id: String = "") -> void:
@@ -287,10 +292,13 @@ func _apply_seat_art(tex_rect: TextureRect, side: String, cover_var: Variant) ->
 			return
 	var back_path := "res://assets/card_back_light.png" if side == "light" else "res://assets/card_back_dark.png"
 	var back_tex := load(back_path) as Texture2D
-	if back_tex and CardCatalog:
-		back_tex = CardCatalog.smooth_texture(back_tex)
-	tex_rect.texture = back_tex
-	tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	if back_tex and CardCatalog and CardCatalog.has_method("smooth_texture"):
+		var sharp: Texture2D = CardCatalog.smooth_texture(back_tex)
+		if sharp != null:
+			back_tex = sharp
+	if back_tex:
+		tex_rect.texture = back_tex
+		tex_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func _game_number(table_id: String) -> String:
@@ -319,7 +327,7 @@ func _on_leave_pressed() -> void:
 
 func _on_ready_pressed() -> void:
 	Connection.get_client().table_ready(ready_btn.button_pressed)
-	ready_btn.text = "Ready" if ready_btn.button_pressed else "Not ready"
+	_update_ready_btn(ready_btn.button_pressed)
 
 
 func _on_start_pressed() -> void:

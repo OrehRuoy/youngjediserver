@@ -10,15 +10,17 @@ const RANDOM_ID := "random"
 @onready var title_label: Label = $Margin/VBox/Title
 @onready var player_panel: PanelContainer = $Margin/VBox/Seats/PlayerSeat
 @onready var player_name_label: Label = $Margin/VBox/Seats/PlayerSeat/VBox/NameLabel
-@onready var player_side_select: OptionButton = $Margin/VBox/Seats/PlayerSeat/VBox/SideSelect
+@onready var player_side_select: OptionButton = %SideSelect
+@onready var player_side_tag: Label = %SideTag
 @onready var player_card_back: TextureRect = $Margin/VBox/Seats/PlayerSeat/VBox/CardGlow/CardBack
 @onready var player_card_glow: PanelContainer = $Margin/VBox/Seats/PlayerSeat/VBox/CardGlow
-@onready var player_deck_select: OptionButton = $Margin/VBox/Seats/PlayerSeat/VBox/DeckSelect
+@onready var player_deck_select: OptionButton = %PlayerDeckSelect
 @onready var bot_panel: PanelContainer = $Margin/VBox/Seats/BotSeat
 @onready var bot_avatar: TextureRect = $Margin/VBox/Seats/BotSeat/VBox/BotAvatar
 @onready var bot_name_label: Label = $Margin/VBox/Seats/BotSeat/VBox/NameLabel
-@onready var bot_deck_select: OptionButton = $Margin/VBox/Seats/BotSeat/VBox/DeckSelect
-@onready var bot_style_select: OptionButton = $Margin/VBox/Seats/BotSeat/VBox/StyleSelect
+@onready var bot_side_tag: Label = %BotSideTag
+@onready var bot_deck_select: OptionButton = %BotDeckSelect
+@onready var bot_style_select: OptionButton = %StyleSelect
 @onready var leave_btn: Button = $Margin/VBox/ActionsBar/Actions/LeaveBtn
 @onready var start_btn: Button = $Margin/VBox/ActionsBar/Actions/StartBtn
 @onready var status_label: Label = $Margin/VBox/StatusLabel
@@ -186,6 +188,8 @@ func _refresh_ui() -> void:
 	player_panel.add_theme_stylebox_override("panel", _make_panel_style(player_is_light))
 	bot_panel.add_theme_stylebox_override("panel", _make_panel_style(not player_is_light))
 	player_card_glow.add_theme_stylebox_override("panel", _make_glow_style(player_is_light))
+	_set_side_tag(player_side_tag, player_is_light)
+	_set_side_tag(bot_side_tag, not player_is_light)
 
 	var player_decks: Array[Dictionary] = _light_decks if player_is_light else _dark_decks
 	var bot_side: String = "dark" if player_is_light else "light"
@@ -204,6 +208,11 @@ func _refresh_ui() -> void:
 		DropdownStyle.apply(bot_style_select, bot_accent, theme)
 	status_label.text = ""
 	call_deferred("_update_wires")
+
+
+func _set_side_tag(tag: Label, is_light: bool) -> void:
+	tag.text = "LIGHT SIDE" if is_light else "DARK SIDE"
+	tag.add_theme_color_override("font_color", Color(0.55, 0.75, 1.0) if is_light else Color(1.0, 0.55, 0.52))
 
 
 func _populate_deck_dropdown(btn: OptionButton, decks: Array[Dictionary]) -> void:
@@ -260,10 +269,13 @@ func _apply_player_cover_art(player_is_light: bool, player_decks: Array[Dictiona
 			player_card_back.texture = tex
 			return
 	var back_tex := load("res://assets/card_back_light.png" if player_is_light else "res://assets/card_back_dark.png") as Texture2D
-	if back_tex and CardCatalog:
-		back_tex = CardCatalog.smooth_texture(back_tex)
-	player_card_back.texture = back_tex
-	player_card_back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	if back_tex and CardCatalog and CardCatalog.has_method("smooth_texture"):
+		var sharp: Texture2D = CardCatalog.smooth_texture(back_tex)
+		if sharp != null:
+			back_tex = sharp
+	if back_tex:
+		player_card_back.texture = back_tex
+		player_card_back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 
 
 func _on_bot_deck_selected(_idx: int) -> void:
@@ -302,11 +314,11 @@ func _get_bot_deck_selection() -> Dictionary:
 func _fill_style_dropdown() -> void:
 	if bot_style_select == null or bot_style_select.item_count > 0:
 		return
-	bot_style_select.add_item("Style: Random", 0)
-	bot_style_select.add_item("Style: Match deck", 1)
-	bot_style_select.add_item("Style: Neutral", 2)
-	bot_style_select.add_item("Style: Aggressive", 3)
-	bot_style_select.add_item("Style: Passive", 4)
+	bot_style_select.add_item("Random", 0)
+	bot_style_select.add_item("Match deck", 1)
+	bot_style_select.add_item("Neutral", 2)
+	bot_style_select.add_item("Aggressive", 3)
+	bot_style_select.add_item("Passive", 4)
 	bot_style_select.selected = 1
 
 

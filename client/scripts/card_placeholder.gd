@@ -321,7 +321,18 @@ func _on_popup_mouse_exited() -> void:
 	_on_mouse_exited()
 
 
+## Board cards are smaller than hand cards so the lanes and location fit on screen together.
+func set_board_size(size: Vector2) -> void:
+	custom_minimum_size = size
+	var img: TextureRect = card_image
+	if img == null:
+		img = get_node_or_null("Panel/Margin/CardImage") as TextureRect
+	if img:
+		img.custom_minimum_size = size
+
+
 ## Gold border: this card can be deployed now. Blue border: an ability on it can be used now.
+## The ring is drawn just outside the art so it does not cover the top or left of the picture.
 func set_action_glow(mode: String) -> void:
 	var panel: PanelContainer = get_node_or_null("Panel") as PanelContainer
 	if panel == null:
@@ -333,6 +344,8 @@ func set_action_glow(mode: String) -> void:
 	style.bg_color = Color(0, 0, 0, 0)
 	style.set_border_width_all(3)
 	style.set_corner_radius_all(4)
+	style.set_expand_margin_all(3)
+	style.set_content_margin_all(0)
 	if mode == "ability":
 		style.border_color = Color(0.35, 0.9, 1.0, 1)
 	else:

@@ -33,4 +33,4 @@ window/size/min_height=600
 
 [gui]
 
-theme="res://theme/game_theme.tres"
+theme/custom="res://theme/lobby_theme.tres"

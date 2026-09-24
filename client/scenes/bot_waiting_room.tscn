@@ -196,6 +196,15 @@ theme_override_fonts/font = ExtResource("9_font")
 text = "Player"
 horizontal_alignment = 1
 
+[node name="SideTag" type="Label" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.75, 1, 1)
+theme_override_font_sizes/font_size = 12
+theme_override_fonts/font = ExtResource("9_font")
+text = "LIGHT SIDE"
+horizontal_alignment = 1
+
 [node name="CardGlow" type="PanelContainer" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
@@ -208,20 +217,44 @@ texture = ExtResource("3_light")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="SideSelect" type="OptionButton" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
+[node name="SideField" type="VBoxContainer" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(220, 0)
+theme_override_constants/separation = 4
+
+[node name="Caption" type="Label" parent="Margin/VBox/Seats/PlayerSeat/VBox/SideField"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "Your side"
+
+[node name="SideSelect" type="OptionButton" parent="Margin/VBox/Seats/PlayerSeat/VBox/SideField"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(240, 0)
+fit_to_longest_item = false
 theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("StyleBoxFlat_dropdown")
 item_count = 2
 selected = 0
 text = "Light"
 
-[node name="DeckSelect" type="OptionButton" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
+[node name="DeckField" type="VBoxContainer" parent="Margin/VBox/Seats/PlayerSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(220, 0)
+theme_override_constants/separation = 4
+
+[node name="Caption" type="Label" parent="Margin/VBox/Seats/PlayerSeat/VBox/DeckField"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "Your deck"
+
+[node name="PlayerDeckSelect" type="OptionButton" parent="Margin/VBox/Seats/PlayerSeat/VBox/DeckField"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(240, 0)
+fit_to_longest_item = false
 theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("StyleBoxFlat_dropdown")
 text = "Deck"
@@ -255,6 +288,15 @@ theme_override_fonts/font = ExtResource("9_font")
 text = "R1-V4L"
 horizontal_alignment = 1
 
+[node name="BotSideTag" type="Label" parent="Margin/VBox/Seats/BotSeat/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.55, 0.52, 1)
+theme_override_font_sizes/font_size = 12
+theme_override_fonts/font = ExtResource("9_font")
+text = "DARK SIDE"
+horizontal_alignment = 1
+
 [node name="BotAvatar" type="TextureRect" parent="Margin/VBox/Seats/BotSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
@@ -263,21 +305,45 @@ texture = ExtResource("5_bot")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="DeckSelect" type="OptionButton" parent="Margin/VBox/Seats/BotSeat/VBox"]
+[node name="DeckField" type="VBoxContainer" parent="Margin/VBox/Seats/BotSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(220, 0)
+theme_override_constants/separation = 4
+
+[node name="Caption" type="Label" parent="Margin/VBox/Seats/BotSeat/VBox/DeckField"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "Bot deck"
+
+[node name="BotDeckSelect" type="OptionButton" parent="Margin/VBox/Seats/BotSeat/VBox/DeckField"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(240, 0)
+fit_to_longest_item = false
 theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("StyleBoxFlat_dropdown")
 text = "Bot deck"
 
-[node name="StyleSelect" type="OptionButton" parent="Margin/VBox/Seats/BotSeat/VBox"]
+[node name="StyleField" type="VBoxContainer" parent="Margin/VBox/Seats/BotSeat/VBox"]
 layout_mode = 2
 size_flags_horizontal = 4
-custom_minimum_size = Vector2(220, 0)
+theme_override_constants/separation = 4
+
+[node name="Caption" type="Label" parent="Margin/VBox/Seats/BotSeat/VBox/StyleField"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.82, 1)
+theme_override_font_sizes/font_size = 12
+text = "Play style"
+
+[node name="StyleSelect" type="OptionButton" parent="Margin/VBox/Seats/BotSeat/VBox/StyleField"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(240, 0)
+fit_to_longest_item = false
 theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("StyleBoxFlat_dropdown")
-text = "Style: Random"
+text = "Match deck"
 
 ; ═══════════ BOTTOM ACTIONS BAR ═══════════
 
@@ -293,11 +359,12 @@ alignment = 1
 [node name="LeaveBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
 layout_mode = 2
 custom_minimum_size = Vector2(140, 42)
-text = "Leave table"
+text = "Back"
 
 [node name="StartBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
 layout_mode = 2
-custom_minimum_size = Vector2(140, 42)
+custom_minimum_size = Vector2(160, 42)
+theme_type_variation = &"PrimaryButton"
 text = "Start Game"
 
 ; ── Status label ──

@@ -335,11 +335,13 @@ text = "Leave table"
 layout_mode = 2
 custom_minimum_size = Vector2(140, 42)
 toggle_mode = true
-text = "Not ready"
+theme_type_variation = &"PrimaryButton"
+text = "Ready up"
 
 [node name="StartBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
 layout_mode = 2
-custom_minimum_size = Vector2(140, 42)
+custom_minimum_size = Vector2(160, 42)
+theme_type_variation = &"PrimaryButton"
 text = "Start game"
 
 ; ── Status label (for errors etc.) ──

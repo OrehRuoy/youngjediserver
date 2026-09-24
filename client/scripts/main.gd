@@ -148,27 +148,27 @@ static func _make_book_icon(tint: Color) -> ImageTexture:
 	var sz := 24
 	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	# Book body
-	for y in range(3, 21):
-		for x in range(4, 20):
-			var edge := mini(mini(x - 4, 19 - x), mini(y - 3, 20 - y))
-			if edge == 0:
-				img.set_pixel(x, y, Color(tint.r, tint.g, tint.b, 0.85))
-			elif edge <= 1:
-				img.set_pixel(x, y, Color(tint.r * 0.4, tint.g * 0.4, tint.b * 0.4, 0.5))
-			else:
-				img.set_pixel(x, y, Color(tint.r * 0.12, tint.g * 0.12, tint.b * 0.12, 0.45))
+	var edge_c := Color(tint.r, tint.g, tint.b, 0.95)
+	var page_c := Color(tint.r * 0.3, tint.g * 0.3, tint.b * 0.3, 0.7)
+	var line_c := Color(tint.r, tint.g, tint.b, 0.6)
+	# Two open pages, each dipping toward the spine
+	for x in range(2, 22):
+		var from_spine: int = absi(x - 11) if x <= 11 else absi(x - 12)
+		var top: int = 5 + (1 if from_spine <= 2 else 0)
+		var bottom: int = 19 + (1 if from_spine <= 2 else 0)
+		for y in range(top, bottom + 1):
+			var is_edge: bool = y == top or y == bottom or x == 2 or x == 21
+			img.set_pixel(x, y, edge_c if is_edge else page_c)
 	# Spine
-	for y in range(3, 21):
-		img.set_pixel(4, y, Color(tint.r * 0.8, tint.g * 0.8, tint.b * 0.8, 0.9))
-		img.set_pixel(5, y, Color(tint.r * 0.6, tint.g * 0.6, tint.b * 0.6, 0.7))
-	# Text lines
-	for x in range(7, 17):
-		img.set_pixel(x, 7, Color(tint.r * 0.7, tint.g * 0.7, tint.b * 0.7, 0.45))
-		img.set_pixel(x, 10, Color(tint.r * 0.6, tint.g * 0.6, tint.b * 0.6, 0.35))
-		img.set_pixel(x, 13, Color(tint.r * 0.6, tint.g * 0.6, tint.b * 0.6, 0.35))
-	for x in range(7, 14):
-		img.set_pixel(x, 16, Color(tint.r * 0.5, tint.g * 0.5, tint.b * 0.5, 0.3))
+	for y in range(5, 21):
+		img.set_pixel(11, y, edge_c)
+		img.set_pixel(12, y, edge_c)
+	# Text lines on both pages
+	for row in [9, 12, 15]:
+		for x in range(4, 10):
+			img.set_pixel(x, row, line_c)
+		for x in range(14, 20):
+			img.set_pixel(x, row, line_c)
 	return ImageTexture.create_from_image(img)
 
 
@@ -211,12 +211,12 @@ func _style_side_button(btn: Button, is_light: bool) -> void:
 	if not btn:
 		return
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.12, 0.2, 0.9) if is_light else Color(0.18, 0.06, 0.28, 0.9)
+	style.bg_color = Color(0.07, 0.14, 0.32, 0.9) if is_light else Color(0.18, 0.06, 0.28, 0.9)
 	style.border_width_left = 2
 	style.border_width_top = 1
 	style.border_width_right = 1
 	style.border_width_bottom = 1
-	style.border_color = Color(0.7, 0.78, 0.95, 1) if is_light else Color(0.55, 0.3, 0.75, 1)
+	style.border_color = Color(0.4, 0.62, 1.0, 1) if is_light else Color(0.55, 0.3, 0.75, 1)
 	style.corner_radius_top_left = 6
 	style.corner_radius_top_right = 6
 	style.corner_radius_bottom_right = 6
@@ -225,16 +225,18 @@ func _style_side_button(btn: Button, is_light: bool) -> void:
 	style.content_margin_right = 14
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.6, 0.7, 0.9, 0.18) if is_light else Color(0.4, 0.15, 0.6, 0.18)
+	style.shadow_color = Color(0.3, 0.5, 1.0, 0.18) if is_light else Color(0.4, 0.15, 0.6, 0.18)
 	style.shadow_size = 4
 	btn.add_theme_stylebox_override("normal", style)
 	var hover := style.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(0.16, 0.2, 0.3, 0.95) if is_light else Color(0.25, 0.1, 0.38, 0.95)
-	hover.border_color = Color(0.85, 0.9, 1.0, 1) if is_light else Color(0.7, 0.45, 0.9, 1)
+	hover.bg_color = Color(0.1, 0.2, 0.42, 0.95) if is_light else Color(0.25, 0.1, 0.38, 0.95)
+	hover.border_color = Color(0.6, 0.78, 1.0, 1) if is_light else Color(0.7, 0.45, 0.9, 1)
 	hover.shadow_size = 6
 	btn.add_theme_stylebox_override("hover", hover)
-	var tint := Color(0.92, 0.95, 1.0, 1) if is_light else Color(0.75, 0.5, 0.9, 1)
+	btn.add_theme_stylebox_override("hover_pressed", hover)
+	var tint := Color(0.7, 0.84, 1.0, 1) if is_light else Color(0.75, 0.5, 0.9, 1)
 	btn.add_theme_color_override("font_color", tint)
+	btn.add_theme_color_override("font_hover_color", tint.lightened(0.25))
 
 
 func _process(delta: float) -> void:
@@ -382,10 +384,10 @@ func _add_player_entry(pname: String, in_game: bool) -> void:
 
 
 func _build_tables_list() -> void:
-	for c in tables_container.get_children():
-		c.queue_free()
-	for c in playing_tables_container.get_children():
-		c.queue_free()
+	for list in [tables_container, playing_tables_container]:
+		for c in list.get_children():
+			list.remove_child(c)
+			c.queue_free()
 	var state: RefCounted = Connection.get_state()
 	for t in state.tables:
 		var row: Control = _table_row_scene.instantiate()
@@ -397,6 +399,19 @@ func _build_tables_list() -> void:
 			row.join_light_pressed.connect(_on_join_light.bind(t))
 			row.join_dark_pressed.connect(_on_join_dark.bind(t))
 		row.set_table(t, state, started)
+	if tables_container.get_child_count() == 0:
+		tables_container.add_child(_make_empty_note("No open tables yet. Create one to start a game."))
+	if playing_tables_container.get_child_count() == 0:
+		playing_tables_container.add_child(_make_empty_note("No games in progress."))
+
+
+func _make_empty_note(text: String) -> Label:
+	var note := Label.new()
+	note.text = text
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override("font_size", 13)
+	note.add_theme_color_override("font_color", Color(0.55, 0.62, 0.78, 1))
+	return note
 
 
 func _on_create_light() -> void:

@@ -7,62 +7,69 @@ const BattlePlanCardScene = preload("res://scenes/battle_plan_card.tscn")
 var CARD_BACK_LIGHT: Texture2D = preload("res://assets/card_back_light.png")
 var CARD_BACK_DARK: Texture2D = preload("res://assets/card_back_dark.png")
 
-@onready var phase_label: Label = $HBoxContainer/Margin/GameArea/VBox/PhaseLabel
-@onready var opp_discard_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentDiscard/OppDiscardWrapper
-@onready var opp_discard: TextureRect = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentDiscard/OppDiscardWrapper/OppDiscard
-@onready var opp_discard_label: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentDiscard/OppDiscardLabel
-@onready var opp_deck_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppDeckWrapper
-@onready var opp_deck: TextureRect = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppDeckWrapper/OppDeck
-@onready var opp_deck_count_label: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OppDeckWrapper/OppDeckCount
-@onready var your_discard_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/BottomBar/YourDiscard/YourDiscardPileWrapper
-@onready var your_discard: TextureRect = $HBoxContainer/Margin/GameArea/VBox/BottomBar/YourDiscard/YourDiscardPileWrapper/YourDiscardPile
-@onready var your_discard_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/YourDiscard/YourDiscardLabel
-@onready var your_deck_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourDeckWrapper
-@onready var your_deck: TextureRect = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourDeckWrapper/YourDeck
-@onready var your_deck_count_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourDeckWrapper/YourDeckCount
-@onready var hand_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/HandLabel
-@onready var hand_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/BottomBar/HandCenter/Scroll/HandList
-@onready var your_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourInPlayScroll/YourInPlayCenter/YourInPlayRow
-@onready var opp_play_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OpponentInPlayScroll/OpponentInPlayCenter/OpponentInPlayRow
-@onready var play_card_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PlayCardBtn
-@onready var pass_phase_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/PassPhaseBtn
-@onready var battle_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/BattleBtn
-@onready var discard_hand_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DiscardHandBtn
-@onready var even_up_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/EvenUpBtn
-@onready var discard_location_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DiscardLocationBtn
-@onready var evacuate_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/EvacuateBtn
-@onready var duel_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/DuelBtn
-@onready var your_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper
-@onready var your_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper/YourHyperspace
-@onready var your_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/YourPlayBand/YourHyperspaceCol/YourHyperspaceWrapper/YourHyperspaceCount
-@onready var opp_hs_wrapper: Control = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper
-@onready var opp_hs_tex: TextureRect = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper/OppHyperspace
-@onready var opp_hs_count: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/OpponentPlayBand/OppHyperspaceCol/OppHyperspaceWrapper/OppHyperspaceCount
-@onready var surrender_planet_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/SurrenderPlanetBtn
-@onready var concede_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ConcedeBtn
-@onready var return_to_lobby_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BottomBar/ActionsRight/ReturnToLobbyBtn
-@onready var status_label: Label = $HBoxContainer/Margin/GameArea/VBox/StatusLabel
-@onready var destiny_compare_section: VBoxContainer = $HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection
-@onready var destiny_compare_label: Label = $HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/DestinyCompareLabel
-@onready var opponent_destiny_slot: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/OpponentDestinySlot
-@onready var your_destiny_slot: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection/YourDestinySlot
-@onready var location_row: Control = $HBoxContainer/Margin/GameArea/VBox/TableSection/LocationRow
-@onready var starting_location_label: Label = $HBoxContainer/Margin/GameArea/VBox/TableSection/LocationRow/LocationVBox/StartingLocationLabel
-@onready var starting_location_slot: CenterContainer = $HBoxContainer/Margin/GameArea/VBox/TableSection/LocationRow/LocationVBox/StartingLocationSlot
-@onready var location_choice_section: VBoxContainer = $HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection
-@onready var location_choice_label: Label = $HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection/LocationChoiceLabel
-@onready var location_choice_cards: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/LocationChoiceSection/LocationChoiceCards
-@onready var battle_plan_section: VBoxContainer = $HBoxContainer/Margin/GameArea/VBox/BattlePlanSection
-@onready var battle_plan_label: Label = $HBoxContainer/Margin/GameArea/VBox/BattlePlanSection/BattlePlanLabel
-@onready var battle_plan_row: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/BattlePlanSection/BattlePlanRow
-@onready var battle_plan_ready_btn: Button = $HBoxContainer/Margin/GameArea/VBox/BattlePlanSection/BattlePlanReadyBtn
-@onready var opponent_hand_container: HBoxContainer = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentHandContainer
-@onready var opp_force_label: Label = $HBoxContainer/Margin/GameArea/VBox/OpponentSection/OpponentLeft/OpponentForceLabel
-@onready var your_force_label: Label = $HBoxContainer/Margin/GameArea/VBox/BottomBar/DeckLeft/YourForceLabel
-@onready var chat_messages: VBoxContainer = $HBoxContainer/ChatPanel/Margin/VBox/ChatScroll/Messages
-@onready var chat_scroll: ScrollContainer = $HBoxContainer/ChatPanel/Margin/VBox/ChatScroll
-@onready var chat_input: LineEdit = $HBoxContainer/ChatPanel/Margin/VBox/ChatInputRow/ChatInput
-@onready var chat_send_btn: Button = $HBoxContainer/ChatPanel/Margin/VBox/ChatInputRow/ChatSendBtn
+@onready var phase_label: Label = %PhaseLabel
+@onready var opp_discard_wrapper: Control = %OppDiscardWrapper
+@onready var opp_discard: TextureRect = %OppDiscard
+@onready var opp_discard_label: Label = %OppDiscardLabel
+@onready var opp_deck_wrapper: Control = %OppDeckWrapper
+@onready var opp_deck: TextureRect = %OppDeck
+@onready var opp_deck_count_label: Label = %OppDeckCount
+@onready var opp_deck_label: Label = %OppDeckLabel
+@onready var your_deck_label: Label = %YourDeckLabel
+@onready var your_discard_wrapper: Control = %YourDiscardPileWrapper
+@onready var your_discard: TextureRect = %YourDiscardPile
+@onready var your_discard_label: Label = %YourDiscardLabel
+@onready var your_deck_wrapper: Control = %YourDeckWrapper
+@onready var your_deck: TextureRect = %YourDeck
+@onready var your_deck_count_label: Label = %YourDeckCount
+@onready var hand_label: Label = %HandLabel
+@onready var hand_container: HBoxContainer = %HandList
+@onready var your_play_container: HBoxContainer = %YourInPlayRow
+@onready var opp_play_container: HBoxContainer = %OpponentInPlayRow
+@onready var play_card_btn: Button = %PlayCardBtn
+@onready var pass_phase_btn: Button = %PassPhaseBtn
+@onready var battle_btn: Button = %BattleBtn
+@onready var discard_hand_btn: Button = %DiscardHandBtn
+@onready var even_up_btn: Button = %EvenUpBtn
+@onready var discard_location_btn: Button = %DiscardLocationBtn
+@onready var evacuate_btn: Button = %EvacuateBtn
+@onready var duel_btn: Button = %DuelBtn
+@onready var your_hs_wrapper: Control = %YourHyperspaceWrapper
+@onready var your_hs_tex: TextureRect = %YourHyperspace
+@onready var your_hs_count: Label = %YourHyperspaceCount
+@onready var opp_hs_wrapper: Control = %OppHyperspaceWrapper
+@onready var opp_hs_tex: TextureRect = %OppHyperspace
+@onready var opp_hs_count: Label = %OppHyperspaceCount
+@onready var surrender_planet_btn: Button = %SurrenderPlanetBtn
+@onready var concede_btn: Button = %ConcedeBtn
+@onready var return_to_lobby_btn: Button = %ReturnToLobbyBtn
+@onready var status_label: Label = %StatusLabel
+@onready var destiny_compare_section: Control = %DestinyCompareSection
+@onready var destiny_compare_label: Label = %DestinyCompareLabel
+@onready var opponent_destiny_slot: HBoxContainer = %OpponentDestinySlot
+@onready var your_destiny_slot: HBoxContainer = %YourDestinySlot
+@onready var location_row: Control = %LocationRow
+@onready var starting_location_label: Label = %StartingLocationLabel
+@onready var starting_location_slot: CenterContainer = %StartingLocationSlot
+@onready var location_choice_section: Control = %LocationChoiceSection
+@onready var location_choice_label: Label = %LocationChoiceLabel
+@onready var location_choice_hint: Label = %LocationChoiceHint
+@onready var location_choice_cards: HBoxContainer = %LocationChoiceCards
+@onready var battle_plan_section: VBoxContainer = %BattlePlanSection
+@onready var battle_plan_label: Label = %BattlePlanLabel
+@onready var battle_plan_row: HBoxContainer = %BattlePlanRow
+@onready var battle_plan_ready_btn: Button = %BattlePlanReadyBtn
+@onready var opponent_hand_container: HBoxContainer = %OpponentHandContainer
+@onready var opp_corner: HBoxContainer = %OppCorner
+@onready var your_corner: VBoxContainer = %YourCorner
+@onready var actions_panel: PanelContainer = %ActionsPanel
+@onready var actions_right: VBoxContainer = %ActionsRight
+@onready var chat_panel: PanelContainer = %ChatPanel
+@onready var chat_toggle_btn: Button = %ChatToggleBtn
+@onready var chat_messages: VBoxContainer = %Messages
+@onready var chat_scroll: ScrollContainer = %ChatScroll
+@onready var chat_input: LineEdit = %ChatInput
+@onready var chat_send_btn: Button = %ChatSendBtn
 
 var _selected_instance_id: String = ""
 var _discard_location_mode: bool = false
@@ -154,8 +161,12 @@ func _ready() -> void:
 		if back_rect:
 			back_rect.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_lift_setup_banners()
-	_place_decks_under_counters()
-	_keep_table_from_pushing_decks_offscreen()
+	_build_info_plates()
+	_build_pile_frames()
+	_fit_board_to_window()
+	var board_box: Control = get_node_or_null("HBoxContainer/Margin/GameArea/VBox") as Control
+	if board_box and not board_box.resized.is_connected(_fit_board_to_window):
+		board_box.resized.connect(_fit_board_to_window)
 	var client: RefCounted = Connection.get_client()
 	var state: RefCounted = Connection.get_state()
 	client.message_received.connect(_on_message)
@@ -184,6 +195,8 @@ func _ready() -> void:
 	if surrender_planet_btn:
 		surrender_planet_btn.pressed.connect(_on_surrender_planet_pressed)
 	concede_btn.pressed.connect(_on_concede_pressed)
+	if chat_toggle_btn:
+		chat_toggle_btn.toggled.connect(_on_chat_toggled)
 	if return_to_lobby_btn:
 		return_to_lobby_btn.pressed.connect(_on_return_to_lobby_pressed)
 	_ensure_effect_decline_btn()
@@ -354,19 +367,15 @@ func _build_controlled_planets_panel() -> void:
 	add_child(_controlled_planets_layer)
 	_controlled_planets_panel = PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.12, 0.18, 0.85)
-	style.border_width_left = 1
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = Color(0.3, 0.4, 0.6, 0.7)
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_left = 6
-	style.corner_radius_bottom_right = 6
-	style.set_content_margin_all(6)
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.88)
+	style.set_border_width_all(1)
+	style.border_color = Color(0.18, 0.38, 0.65, 0.8)
+	style.set_corner_radius_all(8)
+	style.set_content_margin_all(8)
 	_controlled_planets_panel.add_theme_stylebox_override("panel", style)
-	_controlled_planets_panel.position = Vector2(4, 4)
+	_controlled_planets_panel.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	_controlled_planets_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_controlled_planets_panel.offset_left = 14
 	_controlled_planets_panel.visible = false
 	_controlled_planets_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var vbox := VBoxContainer.new()
@@ -1282,38 +1291,36 @@ func _begin_choice_overlay(kind: String, title_text: String) -> VBoxContainer:
 	add_child(_dotf_overlay)
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.05, 0.05, 0.12, 0.82)
+	bg.color = Color(0.02, 0.03, 0.08, 0.78)
 	_dotf_overlay.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_dotf_overlay.add_child(center)
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -360
-	panel.offset_top = -280
-	panel.offset_right = 360
-	panel.offset_bottom = 280
+	panel.custom_minimum_size = Vector2(600, 0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.14, 0.22, 0.98)
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.45, 0.65, 0.95, 0.9)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 16
-	style.content_margin_right = 16
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.97)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.7)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 18
+	style.content_margin_bottom = 20
+	style.shadow_color = Color(0, 0, 0, 0.55)
+	style.shadow_size = 18
+	style.shadow_offset = Vector2(0, 4)
 	panel.add_theme_stylebox_override("panel", style)
-	_dotf_overlay.add_child(panel)
+	center.add_child(panel)
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
+	vbox.add_theme_constant_override("separation", 12)
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = title_text
+	title.text = title_text.to_upper()
+	title.theme_type_variation = &"HeaderLabel"
 	title.add_theme_font_size_override("font_size", 16)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(title)
 	return vbox
 
@@ -1340,6 +1347,8 @@ func _add_card_row(parent: Node, cards: Array, side: String, on_pick: Callable) 
 
 
 func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String) -> void:
+	if status_label and (status_label.text.begins_with("Opponent may ") or status_label.text.begins_with("Opponent is ")):
+		status_label.text = ""
 	var fetch: Variant = pub.get("planetEffectFetch", null)
 	if fetch is Dictionary and str(fetch.get("chooserSide", "")) == my_side:
 		if _dotf_overlay_kind != "planet_effect":
@@ -1513,9 +1522,6 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (replace_damage is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand") and not (pounded is Dictionary) and not (drawp is Dictionary):
 			_clear_dotf_overlay()
 
-	if status_label and (status_label.text.begins_with("Opponent may ") or status_label.text.begins_with("Opponent is ")):
-		status_label.text = ""
-
 	_update_duel_ui(state, pub, my_side)
 
 
@@ -1549,13 +1555,6 @@ func _side_force(my_side: String) -> int:
 func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 	var force := _side_force(my_side)
 	var vbox := _begin_choice_overlay("jedi_training", "Deploy a lightsaber from your deck")
-	if _dotf_overlay and _dotf_overlay.get_child_count() > 1:
-		var panel := _dotf_overlay.get_child(1) as PanelContainer
-		if panel:
-			panel.offset_left = -360
-			panel.offset_top = -240
-			panel.offset_right = 360
-			panel.offset_bottom = 240
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.text = "Discard this Effect and pay the lightsaber's cost. You have %d counters." % force
@@ -1747,13 +1746,6 @@ func _begin_win_control_overlay(state: RefCounted, pending: Dictionary, my_side:
 	var vbox := _begin_choice_overlay("win_control", "Discard %d, then draw %d" % [needed, draw_n])
 	_win_control_selected.clear()
 	_win_control_needed = needed
-	if _dotf_overlay and _dotf_overlay.get_child_count() > 1:
-		var panel := _dotf_overlay.get_child(1) as PanelContainer
-		if panel:
-			panel.offset_left = -360
-			panel.offset_top = -250
-			panel.offset_right = 360
-			panel.offset_bottom = 250
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.text = "Using %s. Select exactly %d cards from your hand to discard." % [cname, _win_control_needed]
@@ -2401,6 +2393,12 @@ func _browse_hyperspace(yours: bool) -> void:
 	vbox.add_child(close_btn)
 
 
+func _build_pile_frames() -> void:
+	for wrapper in [your_deck_wrapper, your_discard_wrapper, opp_deck_wrapper, opp_discard_wrapper]:
+		if wrapper:
+			_ensure_hs_empty_frame(wrapper as Control)
+
+
 func _ensure_hs_empty_frame(wrapper: Control) -> Panel:
 	var frame: Panel = wrapper.get_node_or_null("EmptyFrame") as Panel
 	if frame:
@@ -2410,18 +2408,15 @@ func _ensure_hs_empty_frame(wrapper: Control) -> Panel:
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.08, 0.14, 0.35)
-	style.border_color = Color(0.55, 0.72, 0.95, 0.4)
+	style.bg_color = Color(0.04, 0.07, 0.15, 0.55)
+	style.border_color = Color(0.45, 0.62, 0.9, 0.45)
 	style.set_border_width_all(1)
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
+	style.set_corner_radius_all(5)
 	frame.add_theme_stylebox_override("panel", style)
 	wrapper.add_child(frame)
 	wrapper.move_child(frame, 0)
 	var caption := Label.new()
-	caption.text = "HS"
+	caption.text = "Empty"
 	caption.set_anchors_preset(Control.PRESET_FULL_RECT)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -3077,6 +3072,41 @@ func _process(_delta: float) -> void:
 	Connection.get_client().poll()
 	if _dragging_instance_id and _drag_preview:
 		_drag_preview.position = get_viewport().get_mouse_position() - _drag_preview.size / 2
+	_sync_actions_panel()
+
+
+var _actions_idle_label: Label = null
+
+
+func _sync_actions_panel() -> void:
+	if actions_right == null:
+		return
+	if _actions_idle_label == null:
+		_actions_idle_label = Label.new()
+		_actions_idle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_actions_idle_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_actions_idle_label.add_theme_font_size_override("font_size", 12)
+		_actions_idle_label.add_theme_color_override("font_color", Color(0.62, 0.68, 0.82))
+		actions_right.add_child(_actions_idle_label)
+		actions_right.move_child(_actions_idle_label, 0)
+	var any_button := false
+	for c in actions_right.get_children():
+		if c is Button and (c as Button).visible:
+			any_button = true
+			break
+	_actions_idle_label.visible = not any_button
+	if not any_button:
+		var g: Dictionary = Connection.get_state().game_state
+		var idle_text: String = "Waiting…"
+		if _game_over_received:
+			idle_text = "Game over"
+		elif str(g.get("turnSide", "")) != Connection.get_state().game_side and str(g.get("phase", "")) in ["draw", "deploy", "battle", "even_up"]:
+			idle_text = "Opponent's turn"
+		if _actions_idle_label.text != idle_text:
+			_actions_idle_label.text = idle_text
+	var pass_variation: StringName = &"" if battle_btn.visible else &"PrimaryButton"
+	if pass_phase_btn.theme_type_variation != pass_variation:
+		pass_phase_btn.theme_type_variation = pass_variation
 
 
 func _on_hand_card_drag_started(instance_id: String) -> void:
@@ -3318,10 +3348,16 @@ func _on_game_ended(payload: Dictionary) -> void:
 		reason_text = "Planet Victory!"
 	elif reason == "deck_empty":
 		reason_text = "Deck Victory!"
-	elif reason == "concede":
-		reason_text = "Opponent Conceded"
 	var won: bool = (winner == my_side)
+	if reason == "concede":
+		reason_text = "Opponent Conceded" if won else "You Conceded"
 	_game_over_received = true
+	if _concede_dialog and _concede_dialog.visible:
+		_concede_dialog.hide()
+	if location_choice_section:
+		location_choice_section.visible = false
+	if destiny_compare_section:
+		destiny_compare_section.visible = false
 	status_label.text = ("You Won!" if won else "You Lost!") + (" " + reason_text if reason_text else "")
 	if return_to_lobby_btn:
 		return_to_lobby_btn.visible = true
@@ -3346,42 +3382,72 @@ func _show_game_over_overlay(won: bool, reason_text: String) -> void:
 	bg.color = Color(0.0, 0.0, 0.05, 0.75)
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_game_over_layer.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_game_over_layer.add_child(center)
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(460, 0)
+	var accent: Color = Color(0.86, 0.72, 0.32) if won else Color(0.85, 0.3, 0.28)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.96)
+	style.set_border_width_all(2)
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.8)
+	style.set_corner_radius_all(14)
+	style.content_margin_left = 36
+	style.content_margin_right = 36
+	style.content_margin_top = 28
+	style.content_margin_bottom = 30
+	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.22)
+	style.shadow_size = 24
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
 	var vbox := VBoxContainer.new()
-	vbox.set_anchors_preset(Control.PRESET_CENTER)
-	vbox.offset_left = -300
-	vbox.offset_top = -120
-	vbox.offset_right = 300
-	vbox.offset_bottom = 120
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	vbox.add_theme_constant_override("separation", 16)
-	_game_over_layer.add_child(vbox)
+	vbox.add_theme_constant_override("separation", 14)
+	panel.add_child(vbox)
 	var main_label := Label.new()
-	main_label.text = "YOU WON!" if won else "YOU LOST"
+	main_label.text = "VICTORY" if won else "DEFEAT"
+	main_label.theme_type_variation = &"TitleLabel"
 	main_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	main_label.add_theme_font_size_override("font_size", 56)
+	main_label.add_theme_font_size_override("font_size", 48)
 	if won:
-		main_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2, 1))
+		main_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1))
 	else:
-		main_label.add_theme_color_override("font_color", Color(0.9, 0.25, 0.2, 1))
+		main_label.add_theme_color_override("font_color", Color(0.92, 0.32, 0.28, 1))
 	main_label.modulate = Color(1, 1, 1, 0)
-	main_label.scale = Vector2(0.5, 0.5)
-	main_label.pivot_offset = Vector2(300, 30)
 	vbox.add_child(main_label)
+	var sub_label := Label.new()
+	sub_label.text = "You won the game" if won else "You lost the game"
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub_label.add_theme_font_size_override("font_size", 15)
+	sub_label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.88, 1))
+	vbox.add_child(sub_label)
+	panel.pivot_offset = Vector2(230, 110)
+	panel.scale = Vector2(0.85, 0.85)
+	var pop := create_tween()
+	pop.set_ease(Tween.EASE_OUT)
+	pop.set_trans(Tween.TRANS_BACK)
+	pop.tween_property(panel, "scale", Vector2.ONE, 0.45)
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_OUT)
 	tween.set_trans(Tween.TRANS_BACK)
 	tween.tween_property(main_label, "modulate:a", 1.0, 0.5)
-	tween.parallel().tween_property(main_label, "scale", Vector2(1.0, 1.0), 0.6)
 	if reason_text:
 		var reason_label := Label.new()
 		reason_label.text = reason_text
 		reason_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		reason_label.add_theme_font_size_override("font_size", 22)
-		reason_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.95, 1))
+		reason_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		reason_label.add_theme_font_size_override("font_size", 20)
+		reason_label.add_theme_color_override("font_color", Color(0.9, 0.92, 1.0, 1))
 		vbox.add_child(reason_label)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	vbox.add_child(spacer)
 	var lobby_btn := Button.new()
 	lobby_btn.text = "Return to Lobby"
-	lobby_btn.custom_minimum_size = Vector2(200, 40)
+	lobby_btn.theme_type_variation = &"PrimaryButton"
+	lobby_btn.custom_minimum_size = Vector2(220, 42)
 	lobby_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	lobby_btn.pressed.connect(_on_return_to_lobby_pressed)
 	vbox.add_child(lobby_btn)
@@ -3414,7 +3480,93 @@ func _on_game_chat(from: String, text: String, _at: int) -> void:
 	_append_chat_line(from, text)
 
 
+var _chat_unread: int = 0
+var _toast_layer: CanvasLayer = null
+var _toast_box: VBoxContainer = null
+
+
+func _on_chat_toggled(open: bool) -> void:
+	if chat_panel:
+		chat_panel.visible = open
+	if open:
+		_chat_unread = 0
+		if chat_scroll:
+			call_deferred("_scroll_chat_to_bottom", chat_scroll)
+		if chat_input:
+			chat_input.call_deferred("grab_focus")
+	_update_chat_toggle_text()
+	call_deferred("_fit_board_to_window")
+
+
+func _update_chat_toggle_text() -> void:
+	if chat_toggle_btn == null:
+		return
+	if _chat_unread > 0 and not chat_toggle_btn.button_pressed:
+		chat_toggle_btn.text = "Chat  (%d)" % _chat_unread
+		chat_toggle_btn.add_theme_color_override("font_color", Color(1.0, 0.86, 0.42))
+		chat_toggle_btn.add_theme_color_override("font_hover_color", Color(1.0, 0.9, 0.55))
+	else:
+		chat_toggle_btn.text = "Hide Chat" if chat_toggle_btn.button_pressed else "Chat"
+		chat_toggle_btn.remove_theme_color_override("font_color")
+		chat_toggle_btn.remove_theme_color_override("font_hover_color")
+
+
+func _show_toast(text: String) -> void:
+	if _toast_layer == null:
+		_toast_layer = CanvasLayer.new()
+		_toast_layer.layer = 60
+		add_child(_toast_layer)
+		var anchor := Control.new()
+		anchor.set_anchors_preset(Control.PRESET_FULL_RECT)
+		anchor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_toast_layer.add_child(anchor)
+		_toast_box = VBoxContainer.new()
+		_toast_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_toast_box.add_theme_constant_override("separation", 6)
+		_toast_box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		_toast_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		_toast_box.offset_top = 58
+		_toast_box.offset_right = -16
+		_toast_box.alignment = BoxContainer.ALIGNMENT_BEGIN
+		anchor.add_child(_toast_box)
+	while _toast_box.get_child_count() >= 3:
+		var oldest: Node = _toast_box.get_child(0)
+		_toast_box.remove_child(oldest)
+		oldest.queue_free()
+	var panel := PanelContainer.new()
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.92)
+	style.set_border_width_all(1)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.6)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 14
+	style.content_margin_right = 14
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", style)
+	var label := Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_color_override("font_color", Color(0.96, 0.9, 0.7))
+	if text.length() > 44:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size.x = 300
+	panel.add_child(label)
+	_toast_box.add_child(panel)
+	var tw := panel.create_tween()
+	tw.tween_interval(3.5)
+	tw.tween_property(panel, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(panel.queue_free)
+
+
 func _append_chat_line(from: String, text: String) -> void:
+	if chat_panel and not chat_panel.visible:
+		_chat_unread += 1
+		_update_chat_toggle_text()
+		if from == "System":
+			_show_toast(text)
 	var line: Label = Label.new()
 	line.text = "%s: %s" % [from, text]
 	line.add_theme_font_size_override("font_size", 13)
@@ -3545,49 +3697,36 @@ func _refresh() -> void:
 			opp_discard.texture = opp_back
 			_opp_discard_top_texture = null
 	if your_discard_label:
-		your_discard_label.text = "Discard (%s)" % my_discard_count
+		your_discard_label.text = "Discard %s" % my_discard_count
 	if opp_discard_label:
-		opp_discard_label.text = "Discard (%s)" % opp_discard_count
+		opp_discard_label.text = "Discard %s" % opp_discard_count
 	var light_planets_won: int = int(pub.get("lightPlanetsWon", 0))
 	var dark_planets_won: int = int(pub.get("darkPlanetsWon", 0))
-	var planet_score: String = ""
-	if light_planets_won > 0 or dark_planets_won > 0:
-		planet_score = "  |  Planets: L%d - D%d" % [light_planets_won, dark_planets_won]
+	var whose_turn: String = "Your turn" if turn_side == my_side else "Opponent's turn"
 	if phase == "determine_first":
-		phase_label.text = "Determining first player..."
+		phase_label.text = "SETUP   ·   Drawing destiny to see who goes first"
 	elif phase == "choose_starting_location":
-		if turn_side == my_side:
-			phase_label.text = "Winner goes first — Choose your starting location"
-		else:
-			# Message shown once in location_choice_label (larger); avoid duplicate here
-			phase_label.text = "Choose starting location"
+		phase_label.text = "SETUP   ·   " + ("You go first" if turn_side == my_side else "Opponent goes first")
 	elif phase == "choose_next_planet":
-		if turn_side == my_side:
-			phase_label.text = "Planet controlled! Choose the next planet location" + planet_score
-		else:
-			phase_label.text = "Opponent choosing next planet..." + planet_score
+		phase_label.text = "PLANET WON   ·   Choose the next planet"
 	else:
-		var display_phase: String = _phase_display_name(phase)
-		phase_label.text = "Phase: %s  |  Turn: %s%s" % [display_phase, turn_side.capitalize(), planet_score]
+		var display_phase: String = _phase_display_name(phase).to_upper()
+		phase_label.text = "%s   ·   %s" % [display_phase, whose_turn]
 	# Deck counts for hover display (deck count text at top removed)
 	_your_deck_count = int((light if my_side == "light" else dark).get("deckCount", 0))
 	_opp_deck_count = int((dark if my_side == "light" else light).get("deckCount", 0))
-	# Force from server (counters per deploy turn)
-	var my_force: int = int((light if my_side == "light" else dark).get("force", 0))
-	var opp_force: int = int((dark if my_side == "light" else light).get("force", 0))
-	# Force indicators: just ||| (no "Your force" text)
-	if your_force_label:
-		if phase == "deploy":
-			your_force_label.visible = true
-			your_force_label.text = "|".repeat(my_force) if my_force > 0 else "—"
-		else:
-			your_force_label.visible = false
-	if opp_force_label:
-		if phase == "deploy":
-			opp_force_label.visible = true
-			opp_force_label.text = "|".repeat(opp_force) if opp_force > 0 else "—"
-		else:
-			opp_force_label.visible = false
+	if your_deck_label:
+		your_deck_label.text = "Deck %d" % _your_deck_count
+	if opp_deck_label:
+		opp_deck_label.text = "Deck %d" % _opp_deck_count
+	var opp_side_key: String = "dark" if my_side == "light" else "light"
+	var my_info: Dictionary = light if my_side == "light" else dark
+	var opp_info: Dictionary = dark if my_side == "light" else light
+	var in_play_phase: bool = phase != "determine_first" and phase != "choose_starting_location"
+	var my_planets: int = light_planets_won if my_side == "light" else dark_planets_won
+	var opp_planets: int = dark_planets_won if my_side == "light" else light_planets_won
+	_update_info_plate("you", str(my_info.get("name", "You")), my_side, my_info, my_planets, in_play_phase and turn_side == my_side, phase == "deploy")
+	_update_info_plate("opp", str(opp_info.get("name", "Opponent")), opp_side_key, opp_info, opp_planets, in_play_phase and turn_side == opp_side_key, phase == "deploy")
 	# Opponent hand: show N card backs at top center
 	if opponent_hand_container:
 		var opp_hand_count: int = int(dark.get("handCount", 0)) if my_side == "light" else int(light.get("handCount", 0))
@@ -3645,7 +3784,8 @@ func _refresh() -> void:
 			_battle_cards_in_plan = _declared_battle_cards.duplicate()
 			_build_battle_plan_row(state, pub)
 			if battle_plan_label:
-				battle_plan_label.text = "Battle Plan — drag cards left/right in the table above to set order (left = first to battle)"
+				battle_plan_label.visible = true
+				battle_plan_label.text = "Battle Plan — drag your cards left or right on the table to set the order (left battles first)"
 			var my_ready: bool = pub.get("lightBattlePlanReady", false) if my_side == "light" else pub.get("darkBattlePlanReady", false)
 			var opp_ready: bool = pub.get("darkBattlePlanReady", false) if my_side == "light" else pub.get("lightBattlePlanReady", false)
 			if battle_plan_ready_btn:
@@ -3658,9 +3798,9 @@ func _refresh() -> void:
 			else:
 				var bc_count: int = _battle_cards_in_plan.size()
 				if bc_count > 0:
-					status_label.text = "Drag to reorder. %d Battle card%s added. Click Ready." % [bc_count, "s" if bc_count > 1 else ""]
+					status_label.text = "%d Battle card%s added to your plan." % [bc_count, "s" if bc_count > 1 else ""]
 				else:
-					status_label.text = "Drag cards to set battle order, then click Battle Plan Ready."
+					status_label.text = ""
 		else:
 			var old_declare_ui2: Node = battle_plan_section.get_node_or_null("BattleCardDeclareUI")
 			if old_declare_ui2:
@@ -3797,20 +3937,19 @@ func _refresh() -> void:
 	# Hand label hidden (per request); only show choose-location hint when in that phase
 	if hand_label:
 		hand_label.visible = false
-	if phase == "choose_starting_location":
+	if _game_over_received:
+		location_choice_section.visible = false
+	elif phase == "choose_starting_location" or phase == "choose_next_planet":
 		location_choice_section.visible = true
+		var starting_pick: bool = phase == "choose_starting_location"
+		var my_pick: bool = turn_side == my_side
 		if location_choice_label:
-			if turn_side == my_side:
-				location_choice_label.text = "Choose your starting location"
+			if my_pick:
+				location_choice_label.text = "Choose your starting location" if starting_pick else "Choose the next planet"
 			else:
-				location_choice_label.text = "Opponent choosing starting location"
-	elif phase == "choose_next_planet":
-		location_choice_section.visible = true
-		if location_choice_label:
-			if turn_side == my_side:
-				location_choice_label.text = "Choose the next planet location"
-			else:
-				location_choice_label.text = "Opponent choosing next planet location"
+				location_choice_label.text = "Opponent is choosing the starting location" if starting_pick else "Opponent is choosing the next planet"
+		if location_choice_hint:
+			location_choice_hint.text = "Click a location to play it." if my_pick else "Waiting for their pick…"
 	else:
 		location_choice_section.visible = false
 	# Starting location card centered in table (planet name above it); table cards below
@@ -3834,6 +3973,7 @@ func _refresh() -> void:
 	_update_hyperspace_piles(pub, my_side)
 	_update_evacuation_ui(state, pub, phase, my_side)
 	_update_dotf_choice_ui(state, pub, my_side)
+	_fit_board_to_window()
 	_previous_phase = phase
 
 
@@ -3998,31 +4138,24 @@ func _build_hand(state: RefCounted) -> void:
 	var turn_side: String = g.get("turnSide", "")
 	var my_side: String = state.game_side
 	var pub: Dictionary = g.get("publicState", {})
-	if phase == "choose_starting_location":
-		if turn_side == my_side:
-			var starting_choices: Array = pub.get("startingLocationChoices", [])
-			for choice in starting_choices:
+	if location_choice_cards:
+		for c in location_choice_cards.get_children():
+			c.queue_free()
+	if phase == "choose_starting_location" or phase == "choose_next_planet":
+		if turn_side == my_side and location_choice_cards:
+			var starting: bool = phase == "choose_starting_location"
+			var choices: Array = pub.get("startingLocationChoices" if starting else "nextPlanetChoices", [])
+			for choice in choices:
 				var inst_id: String = choice.get("instanceId", "")
 				var card_id: String = choice.get("cardId", "")
 				if not card_id:
 					continue
 				var card: Control = CardPlaceholderScene.instantiate()
-				hand_container.add_child(card)
+				location_choice_cards.add_child(card)
 				card.set_card(card_id, inst_id, my_side, choice.get("set", ""))
-				card.card_selected.connect(_on_starting_location_chosen)
-		return
-	if phase == "choose_next_planet":
-		if turn_side == my_side:
-			var next_choices: Array = pub.get("nextPlanetChoices", [])
-			for choice in next_choices:
-				var inst_id: String = choice.get("instanceId", "")
-				var card_id: String = choice.get("cardId", "")
-				if not card_id:
-					continue
-				var card: Control = CardPlaceholderScene.instantiate()
-				hand_container.add_child(card)
-				card.set_card(card_id, inst_id, my_side, choice.get("set", ""))
-				card.card_selected.connect(_on_next_planet_chosen)
+				if card.has_method("set_board_size"):
+					card.set_board_size(CHOICE_LOCATION_SIZE)
+				card.card_selected.connect(_on_starting_location_chosen if starting else _on_next_planet_chosen)
 		return
 	for entry in state.hand_with_instances:
 		var inst_id: String = entry.get("instanceId", "")
@@ -4209,6 +4342,7 @@ func _build_starting_location_card(state: RefCounted, instance_id: String, pub: 
 			var cp: Control = CardPlaceholderScene.instantiate()
 			starting_location_slot.add_child(cp)
 			cp.set_card(card_id, instance_id, "light")
+			_size_board_card(cp, true)
 			cp.card_selected.connect(_on_location_card_clicked)
 			return
 	for card in dark_in_play:
@@ -4218,6 +4352,7 @@ func _build_starting_location_card(state: RefCounted, instance_id: String, pub: 
 			var cp: Control = CardPlaceholderScene.instantiate()
 			starting_location_slot.add_child(cp)
 			cp.set_card(card_id, instance_id, "dark")
+			_size_board_card(cp, true)
 			cp.card_selected.connect(_on_location_card_clicked)
 			return
 	if starting_location_label:
@@ -4277,17 +4412,24 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 	container.add_theme_constant_override("separation", 10)
 	section.add_child(container)
 	section.move_child(container, 0)
+	if battle_plan_label:
+		battle_plan_label.visible = false
 	if is_my_turn:
 		var prompt_label: Label = Label.new()
-		prompt_label.text = "Drag Battle cards from your hand onto the table, then click Confirm."
+		prompt_label.text = "Drag Battle cards from your hand onto the table, then confirm."
+		prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		prompt_label.add_theme_font_size_override("font_size", 14)
-		prompt_label.add_theme_color_override("font_color", Color(0.85, 0.75, 0.4, 1))
+		prompt_label.add_theme_color_override("font_color", Color(0.95, 0.84, 0.5, 1))
 		container.add_child(prompt_label)
 		var btn_row: HBoxContainer = HBoxContainer.new()
+		btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
 		btn_row.add_theme_constant_override("separation", 12)
 		container.add_child(btn_row)
 		var confirm_btn: Button = Button.new()
-		confirm_btn.text = "Confirm Battle Cards (%d)" % _declared_battle_cards.size()
+		confirm_btn.theme_type_variation = &"PrimaryButton"
+		confirm_btn.custom_minimum_size = Vector2(220, 0)
+		var declared_n: int = _declared_battle_cards.size()
+		confirm_btn.text = "Confirm %d Battle card%s" % [declared_n, "" if declared_n == 1 else "s"] if declared_n > 0 else "Confirm — no Battle cards"
 		confirm_btn.pressed.connect(_on_declare_battle_cards_confirmed)
 		btn_row.add_child(confirm_btn)
 		if not _declared_battle_cards.is_empty():
@@ -4295,14 +4437,15 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 			undo_btn.text = "Remove All"
 			undo_btn.pressed.connect(_on_declare_battle_cards_clear)
 			btn_row.add_child(undo_btn)
-		status_label.text = "Declare your Battle cards. Drag from hand onto the table."
+		status_label.text = ""
 	else:
 		var wait_label: Label = Label.new()
-		wait_label.text = "Waiting for opponent to declare Battle cards..."
+		wait_label.text = "Waiting for opponent to declare Battle cards…"
+		wait_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		wait_label.add_theme_font_size_override("font_size", 14)
-		wait_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 1))
+		wait_label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.88, 1))
 		container.add_child(wait_label)
-		status_label.text = "Waiting for opponent to declare Battle cards..."
+		status_label.text = ""
 
 
 func _on_declare_battle_cards_confirmed() -> void:
@@ -4508,17 +4651,11 @@ func _ensure_battle_reveal_overlay() -> void:
 	_battle_reveal_panel.offset_right = -20
 	_battle_reveal_panel.offset_bottom = -10
 	var ps: StyleBoxFlat = StyleBoxFlat.new()
-	ps.bg_color = Color(0.07, 0.08, 0.14, 0.88)
-	ps.border_width_left = 1
-	ps.border_width_top = 1
-	ps.border_width_right = 1
-	ps.border_width_bottom = 1
-	ps.border_color = Color(0.3, 0.4, 0.6, 0.4)
-	ps.corner_radius_top_left = 10
-	ps.corner_radius_top_right = 10
-	ps.corner_radius_bottom_left = 10
-	ps.corner_radius_bottom_right = 10
-	ps.set_content_margin_all(10)
+	ps.bg_color = Color(0.03, 0.05, 0.12, 0.94)
+	ps.set_border_width_all(1)
+	ps.border_color = Color(0.86, 0.72, 0.32, 0.45)
+	ps.set_corner_radius_all(12)
+	ps.set_content_margin_all(12)
 	_battle_reveal_panel.add_theme_stylebox_override("panel", ps)
 	_battle_reveal_overlay.add_child(_battle_reveal_panel)
 	var main_vbox: VBoxContainer = VBoxContainer.new()
@@ -4549,8 +4686,8 @@ func _ensure_battle_reveal_overlay() -> void:
 	title_lbl.name = "BattleRevealTitle"
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_lbl.add_theme_font_size_override("font_size", 20)
-	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4, 1))
+	title_lbl.theme_type_variation = &"HeaderLabel"
+	title_lbl.add_theme_font_size_override("font_size", 18)
 	top_bar.add_child(title_lbl)
 	var dpile: HBoxContainer = HBoxContainer.new()
 	dpile.name = "DarkPileInfo"
@@ -4583,7 +4720,7 @@ func _ensure_battle_reveal_overlay() -> void:
 	var vs_circle: PanelContainer = PanelContainer.new()
 	vs_circle.custom_minimum_size = Vector2(56, 56)
 	var vs_style: StyleBoxFlat = StyleBoxFlat.new()
-	vs_style.bg_color = Color(0.15, 0.16, 0.25, 0.95)
+	vs_style.bg_color = Color(0.05, 0.08, 0.17, 0.95)
 	vs_style.corner_radius_top_left = 28
 	vs_style.corner_radius_top_right = 28
 	vs_style.corner_radius_bottom_left = 28
@@ -4644,7 +4781,7 @@ func _ensure_battle_reveal_overlay() -> void:
 	winner_panel.name = "WinnerBannerPanel"
 	winner_panel.custom_minimum_size = Vector2(280, 40)
 	var wps: StyleBoxFlat = StyleBoxFlat.new()
-	wps.bg_color = Color(0.12, 0.14, 0.22, 0.9)
+	wps.bg_color = Color(0.04, 0.06, 0.14, 0.95)
 	wps.border_width_left = 2
 	wps.border_width_top = 2
 	wps.border_width_right = 2
@@ -4703,28 +4840,24 @@ func _build_side_panel(parent: Control, side: String) -> void:
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var cs: StyleBoxFlat = StyleBoxFlat.new()
-	cs.bg_color = Color(0.11, 0.12, 0.2, 0.85)
-	cs.border_width_left = 2
-	cs.border_width_top = 2
-	cs.border_width_right = 2
-	cs.border_width_bottom = 2
-	cs.border_color = Color(0.3, 0.6, 0.9, 0.5) if side == "light" else Color(0.8, 0.25, 0.2, 0.5)
-	cs.corner_radius_top_left = 8
-	cs.corner_radius_top_right = 8
-	cs.corner_radius_bottom_left = 8
-	cs.corner_radius_bottom_right = 8
-	cs.set_content_margin_all(6)
+	var side_color: Color = SIDE_COLOR_LIGHT if side == "light" else SIDE_COLOR_DARK
+	cs.bg_color = Color(0.05, 0.08, 0.17, 0.85)
+	cs.set_border_width_all(2)
+	cs.border_color = Color(side_color.r, side_color.g, side_color.b, 0.55)
+	cs.set_corner_radius_all(10)
+	cs.set_content_margin_all(10)
 	column.add_theme_stylebox_override("panel", cs)
 	parent.add_child(column)
 	var vb: VBoxContainer = VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 3)
+	vb.add_theme_constant_override("separation", 6)
 	vb.alignment = BoxContainer.ALIGNMENT_BEGIN
 	column.add_child(vb)
 	var sl: Label = Label.new()
 	sl.name = "SideLabel"
 	sl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sl.theme_type_variation = &"HeaderLabel"
 	sl.add_theme_font_size_override("font_size", 13)
-	sl.add_theme_color_override("font_color", Color(0.4, 0.75, 1.0, 1) if side == "light" else Color(1.0, 0.35, 0.3, 1))
+	sl.add_theme_color_override("font_color", side_color)
 	sl.text = side.to_upper()
 	vb.add_child(sl)
 	var bca: VBoxContainer = VBoxContainer.new()
@@ -4793,7 +4926,7 @@ func _build_side_panel(parent: Control, side: String) -> void:
 	bl.scroll_active = false
 	bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	bl.add_theme_font_size_override("normal_font_size", 12)
+	bl.add_theme_font_size_override("normal_font_size", 13)
 	bl.visible = false
 	bl.custom_minimum_size.y = 18
 	vb.add_child(bl)
@@ -4901,6 +5034,26 @@ func _create_weapon_with_badge(weapon_id: String, side_str: String, w: float, h:
 	return wrapper
 
 
+## Card sizes in the reveal are tuned for a 720px-tall window; grow them on taller
+## windows so the columns fill, but never wider than a column can hold.
+## The labels, power pill and breakdown under the cards don't scale, so only the
+## card heights (fighter + battle card) share the spare column height.
+const REVEAL_FIXED_COLUMN_H := 210.0
+const REVEAL_BATTLE_CARD_H := 96.0
+
+func _battle_reveal_scale(row_w: float, base_card_h: float) -> float:
+	var vp: Vector2 = get_viewport().get_visible_rect().size
+	var fight: Control = _battle_reveal_panel.find_child("FightArea", true, false) as Control
+	var avail: float = (vp.y - 84.0) * 0.75 - 24.0
+	if fight and fight.size.y > 10.0:
+		avail = fight.size.y - 24.0
+	var s: float = clampf((avail - REVEAL_FIXED_COLUMN_H) / (base_card_h + REVEAL_BATTLE_CARD_H), 1.0, 2.2)
+	var col_w: float = (vp.x - 40.0 - 24.0 - 64.0) / 2.0 - 24.0
+	if row_w > 0.0:
+		s = minf(s, col_w / row_w)
+	return maxf(s, 0.6)
+
+
 func _populate_side_fighters(side: String, char_id: String, weapon_id: String, bc_id: String, char_id2: String = "", weapon_id2: String = "", char_id3: String = "", weapon_id3: String = "") -> void:
 	var col: PanelContainer = _battle_reveal_panel.find_child(side.capitalize() + "Column", true, false) as PanelContainer
 	if not col:
@@ -4912,20 +5065,32 @@ func _populate_side_fighters(side: String, char_id: String, weapon_id: String, b
 		c.queue_free()
 	var multi: bool = not char_id2.is_empty()
 	var has_3: bool = not char_id3.is_empty()
-	var cw: float = 110.0
-	var ch: float = 156.0
-	var ww: float = 72.0
-	var wh: float = 102.0
+	var cw: float = 136.0
+	var ch: float = 192.0
+	var ww: float = 88.0
+	var wh: float = 124.0
 	if has_3:
-		cw = 68.0
-		ch = 96.0
-		ww = 46.0
-		wh = 65.0
+		cw = 78.0
+		ch = 110.0
+		ww = 52.0
+		wh = 73.0
 	elif multi:
-		cw = 84.0
-		ch = 120.0
-		ww = 56.0
-		wh = 80.0
+		cw = 100.0
+		ch = 142.0
+		ww = 64.0
+		wh = 90.0
+	var row_w: float = 0.0
+	for pair in [[char_id, weapon_id], [char_id2, weapon_id2], [char_id3, weapon_id3]]:
+		if str(pair[0]).is_empty():
+			continue
+		row_w += cw + 4.0
+		if not str(pair[1]).is_empty():
+			row_w += ww + 4.0
+	var s: float = _battle_reveal_scale(row_w, ch)
+	cw *= s
+	ch *= s
+	ww *= s
+	wh *= s
 	if not weapon_id.is_empty():
 		fighter_area.add_child(_create_weapon_with_badge(weapon_id, side, ww, wh))
 	fighter_area.add_child(_create_battle_card(char_id, side, cw, ch, ch * 0.55))
@@ -4945,7 +5110,7 @@ func _populate_side_fighters(side: String, char_id: String, weapon_id: String, b
 				c2.queue_free()
 		if not bc_id.is_empty() and bc_slot:
 			bc_area.visible = true
-			bc_slot.add_child(_create_battle_card(bc_id, side, 56.0, 80.0, 40.0))
+			bc_slot.add_child(_create_battle_card(bc_id, side, 68.0 * s, 96.0 * s, 48.0 * s))
 			var bcn: Label = bc_area.find_child("BattleCardName", true, false) as Label
 			if bcn and CardCatalog:
 				var nm: String = CardCatalog.get_card_info(bc_id, side).get("name", bc_id)
@@ -5551,6 +5716,7 @@ func _build_in_play(state: RefCounted) -> void:
 				your_play_container.add_child(cp)
 				var face_down: bool = card.get("faceDown", false)
 				cp.set_card(card.get("cardId", "?"), card.get("instanceId", ""), my_side, card.get("set", ""), face_down, true)
+				_size_board_card(cp, false)
 				if cp.has_method("set_action_glow"):
 					cp.set_action_glow(_table_ability_glow(card, pub, my_side, phase, turn_side))
 				_animate_in_play_card(cp, my_turn_count, face_down)
@@ -5580,6 +5746,7 @@ func _build_in_play(state: RefCounted) -> void:
 					var cp: Control = CardPlaceholderScene.instantiate()
 					your_play_container.add_child(cp)
 					cp.set_card(card_id, inst_id, my_side, hand_card_set, false, true)
+					_size_board_card(cp, false)
 	if opp_play_container:
 		var opp_face_down: bool = in_battle_plan
 		for card in opp_in_play:
@@ -5597,12 +5764,14 @@ func _build_in_play(state: RefCounted) -> void:
 			opp_play_container.add_child(cp)
 			var face_down: bool = opp_face_down or card.get("faceDown", false)
 			cp.set_card(card.get("cardId", "?"), card.get("instanceId", ""), opp_side, card.get("set", ""), face_down, false)
+			_size_board_card(cp, false)
 			_animate_in_play_card(cp, opp_turn_count, face_down)
 		if in_declare_or_plan and opp_bc_declared and opp_bc_count > 0:
 			for i in range(opp_bc_count):
 				var cp: Control = CardPlaceholderScene.instantiate()
 				opp_play_container.add_child(cp)
 				cp.set_card("", "", opp_side, "", true, false)
+				_size_board_card(cp, false)
 				_tag_face_down_battle_card(cp)
 	_maybe_announce_opp_battle_cards(pub, my_side, in_declare_or_plan, opp_bc_declared)
 
@@ -5759,6 +5928,7 @@ func _build_your_play_battle_plan_order(state: RefCounted, pub: Dictionary, my_i
 		var cp: Control = BattlePlanCardScene.instantiate()
 		your_play_container.add_child(cp)
 		cp.set_card(card_id, inst_id, my_side)
+		_size_board_card(cp, false)
 		cp.set_face_down(false)
 		_animate_in_play_card(cp, my_turn_count, false)
 		if cp.has_signal("drag_started"):
@@ -5987,8 +6157,20 @@ func _on_discard_location_pressed() -> void:
 	status_label.text = "Click a location card in your hand to discard it."
 
 
+var _concede_dialog: ConfirmationDialog = null
+
+
 func _on_concede_pressed() -> void:
-	Connection.get_client().game_concede()
+	if _concede_dialog == null:
+		_concede_dialog = ConfirmationDialog.new()
+		_concede_dialog.title = "Concede"
+		_concede_dialog.dialog_text = "Concede this game? Your opponent will be given the win."
+		_concede_dialog.ok_button_text = "Concede"
+		_concede_dialog.cancel_button_text = "Keep playing"
+		_concede_dialog.get_ok_button().theme_type_variation = &"DangerButton"
+		_concede_dialog.confirmed.connect(func() -> void: Connection.get_client().game_concede())
+		add_child(_concede_dialog)
+	_concede_dialog.popup_centered(Vector2i(380, 0))
 
 
 func _on_return_to_lobby_pressed() -> void:
@@ -6080,44 +6262,232 @@ func _on_next_planet_chosen(instance_id: String) -> void:
 	_refresh()
 
 
-func _place_decks_under_counters() -> void:
-	# Counters on top, deck card back directly underneath, on both sides.
-	if opp_force_label and opp_deck_wrapper:
-		var opp_col: Node = opp_deck_wrapper.get_parent()
-		if opp_col:
-			opp_col.move_child(opp_force_label, 0)
-			opp_col.move_child(opp_deck_wrapper, 1)
-			var opp_section: Control = opp_col.get_parent() as Control
-			if opp_section:
-				opp_section.custom_minimum_size.y = max(opp_section.custom_minimum_size.y, 108)
-	if your_force_label and your_deck_wrapper:
-		var your_col: Node = your_deck_wrapper.get_parent()
-		if your_col:
-			your_col.move_child(your_force_label, 0)
-			your_col.move_child(your_deck_wrapper, 1)
+const CHOICE_LOCATION_SIZE := Vector2(196, 138)
+const SIDE_COLOR_LIGHT := Color(0.35, 0.62, 1.0)
+const SIDE_COLOR_DARK := Color(0.95, 0.32, 0.3)
+const MAX_FORCE_PIPS := 10
+
+var _plates: Dictionary = {}
 
 
-func _keep_table_from_pushing_decks_offscreen() -> void:
+func _build_info_plates() -> void:
+	_plates["opp"] = _make_info_plate()
+	_plates["you"] = _make_info_plate()
+	if opp_corner:
+		opp_corner.add_child(_plates["opp"]["panel"])
+		opp_corner.move_child(_plates["opp"]["panel"], 0)
+	if your_corner:
+		your_corner.add_child(_plates["you"]["panel"])
+		your_corner.move_child(_plates["you"]["panel"], 0)
+
+
+func _make_info_plate() -> Dictionary:
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(176, 0)
+	panel.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.88)
+	style.set_border_width_all(1)
+	style.border_width_left = 3
+	style.border_color = Color(0.18, 0.38, 0.65, 0.8)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 7
+	panel.add_theme_stylebox_override("panel", style)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 3)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(vbox)
+
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 8)
+	vbox.add_child(top)
+	var name_label := Label.new()
+	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_label.clip_text = true
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_label.add_theme_font_size_override("font_size", 14)
+	name_label.add_theme_color_override("font_color", Color(0.94, 0.95, 1.0))
+	top.add_child(name_label)
+	var side_tag := Label.new()
+	side_tag.theme_type_variation = &"HeaderLabel"
+	side_tag.add_theme_font_size_override("font_size", 9)
+	side_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	top.add_child(side_tag)
+
+	var stats := Label.new()
+	stats.add_theme_font_size_override("font_size", 11)
+	stats.add_theme_color_override("font_color", Color(0.66, 0.72, 0.86))
+	vbox.add_child(stats)
+
+	var force_row := HBoxContainer.new()
+	force_row.add_theme_constant_override("separation", 6)
+	vbox.add_child(force_row)
+	var force_caption := Label.new()
+	force_caption.text = "Force"
+	force_caption.add_theme_font_size_override("font_size", 11)
+	force_caption.add_theme_color_override("font_color", Color(0.66, 0.72, 0.86))
+	force_row.add_child(force_caption)
+	var pips := HBoxContainer.new()
+	pips.add_theme_constant_override("separation", 3)
+	pips.alignment = BoxContainer.ALIGNMENT_BEGIN
+	pips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	force_row.add_child(pips)
+	var extra := Label.new()
+	extra.add_theme_font_size_override("font_size", 11)
+	extra.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	force_row.add_child(extra)
+
+	return {
+		"panel": panel, "style": style, "name": name_label, "side": side_tag,
+		"stats": stats, "pips": pips, "extra": extra, "force_row": force_row, "last_force": -1,
+	}
+
+
+func _make_force_pip() -> Panel:
+	var pip := Panel.new()
+	pip.custom_minimum_size = Vector2(9, 9)
+	pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(1.0, 0.84, 0.36)
+	s.set_corner_radius_all(5)
+	s.shadow_color = Color(1.0, 0.72, 0.18, 0.55)
+	s.shadow_size = 3
+	pip.add_theme_stylebox_override("panel", s)
+	return pip
+
+
+func _update_info_plate(key: String, player_name: String, side: String, info: Dictionary, planets_won: int, active: bool, deploy: bool) -> void:
+	if not _plates.has(key):
+		return
+	var p: Dictionary = _plates[key]
+	var side_color: Color = SIDE_COLOR_LIGHT if side == "light" else SIDE_COLOR_DARK
+	(p["name"] as Label).text = player_name if not player_name.is_empty() else ("You" if key == "you" else "Opponent")
+	var tag := p["side"] as Label
+	tag.text = "LIGHT" if side == "light" else "DARK"
+	tag.add_theme_color_override("font_color", side_color)
+	(p["stats"] as Label).text = "Hand %d   ·   Planets %d" % [int(info.get("handCount", 0)), planets_won]
+	var style := p["style"] as StyleBoxFlat
+	if active:
+		style.border_color = Color(0.86, 0.72, 0.32, 0.95)
+		style.shadow_color = Color(0.86, 0.72, 0.32, 0.25)
+		style.shadow_size = 8
+	else:
+		style.border_color = Color(side_color.r, side_color.g, side_color.b, 0.55)
+		style.shadow_size = 0
+	var force: int = int(info.get("force", 0))
+	if int(p["last_force"]) != force:
+		p["last_force"] = force
+		var pips := p["pips"] as HBoxContainer
+		for c in pips.get_children():
+			c.queue_free()
+		for i in range(mini(force, MAX_FORCE_PIPS)):
+			pips.add_child(_make_force_pip())
+		var extra := p["extra"] as Label
+		if force <= 0:
+			extra.text = "0"
+		elif force > MAX_FORCE_PIPS:
+			extra.text = "+%d" % (force - MAX_FORCE_PIPS)
+		else:
+			extra.text = ""
+	(p["force_row"] as Control).modulate.a = 1.0 if deploy else 0.5
+
+
+var _board_character_size := Vector2(72, 100)
+var _board_location_size := Vector2(136, 96)
+var _fitting_board: bool = false
+
+
+func _size_board_card(cp: Control, is_location: bool) -> void:
+	var size := _board_location_size if is_location else _board_character_size
+	if cp.has_method("set_board_size"):
+		cp.set_board_size(size)
+	else:
+		cp.custom_minimum_size = size
+
+
+## The lanes, both hyperspace piles, and the location stay on screen together.
+## Nothing in the main board scrolls up and down.
+func _fit_board_to_window() -> void:
+	if _fitting_board:
+		return
+	var vbox: Control = get_node_or_null("HBoxContainer/Margin/GameArea/VBox") as Control
 	var table: Control = get_node_or_null("HBoxContainer/Margin/GameArea/VBox/TableSection") as Control
-	if table == null or table.get_parent() == null:
+	if table == null:
+		var wrapped: Node = get_node_or_null("HBoxContainer/Margin/GameArea/VBox/TableScroll/TableSection")
+		table = wrapped as Control
+	if vbox == null or table == null or vbox.size.y < 200:
 		return
-	if table.get_parent().name == "TableScroll":
-		return
-	var vbox: Node = table.get_parent()
-	var scroll := ScrollContainer.new()
-	scroll.name = "TableScroll"
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.mouse_filter = Control.MOUSE_FILTER_PASS
-	var idx: int = table.get_index()
-	vbox.remove_child(table)
-	vbox.add_child(scroll)
-	vbox.move_child(scroll, idx)
-	scroll.add_child(table)
-	table.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	table.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	if table.get_parent() != null and str(table.get_parent().name) == "TableScroll":
+		var scroll: Node = table.get_parent()
+		var idx: int = scroll.get_index()
+		scroll.remove_child(table)
+		vbox.add_child(table)
+		vbox.move_child(table, idx)
+		scroll.queue_free()
+	_fitting_board = true
+	var reserved := 0.0
+	var visible_count := 0
+	for child in vbox.get_children():
+		if not child is Control:
+			continue
+		var row := child as Control
+		if not row.visible:
+			continue
+		visible_count += 1
+		if row == table:
+			continue
+		reserved += row.get_combined_minimum_size().y
+	var sep := vbox.get_theme_constant("separation")
+	if visible_count > 1:
+		reserved += sep * (visible_count - 1)
+	var table_h := int(vbox.size.y - reserved)
+	var table_sep := 4
+	if table is BoxContainer:
+		table_sep = (table as BoxContainer).get_theme_constant("separation")
+	# Gaps between the two lanes, the location, and the spacers, plus the label under the location art.
+	table_h -= table_sep * 4 + 6
+	var label_h := 22
+	var loc_card_h := 96
+	var loc_block := label_h + loc_card_h
+	var band := 100
+	if table_h > loc_block + 80:
+		band = int((table_h - loc_block) / 2.0)
+	else:
+		loc_card_h = max(64, int((table_h - 80) * 0.34))
+		loc_block = label_h + loc_card_h
+		band = max(64, int((table_h - loc_block) / 2.0))
+	band = clampi(band, 64, 150)
+	if band * 2 + loc_block > table_h and table_h > 160:
+		band = int((table_h - loc_block) / 2.0)
+		band = max(64, band)
+	var loc_spare: int = table_h - band * 2 - loc_block
+	if loc_spare > 0:
+		loc_card_h += mini(loc_spare, 24)
+	_board_character_size = Vector2(maxi(52, int(float(band - 8) * 96.0 / 136.0)), band - 8)
+	_board_location_size = Vector2(maxi(96, int(float(loc_card_h) * 136.0 / 96.0)), loc_card_h)
+	var opp_band: Control = table.get_node_or_null("OpponentPlayBand") as Control
+	var your_band: Control = table.get_node_or_null("YourPlayBand") as Control
+	if opp_band:
+		opp_band.custom_minimum_size.y = band
+	if your_band:
+		your_band.custom_minimum_size.y = band
+	if starting_location_slot:
+		starting_location_slot.custom_minimum_size = _board_location_size
+	for container in [your_play_container, opp_play_container]:
+		if container == null:
+			continue
+		for card in container.get_children():
+			if card is Control:
+				_size_board_card(card as Control, false)
+	if starting_location_slot:
+		for card in starting_location_slot.get_children():
+			if card is Control:
+				_size_board_card(card as Control, true)
+	_fitting_board = false
 
 
 func _lift_setup_banners() -> void:

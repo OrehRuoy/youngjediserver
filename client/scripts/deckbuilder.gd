@@ -24,6 +24,8 @@ const CARD_TYPES: Array[String] = ["All", "Character", "Weapon", "Location", "Ba
 const REQUIRED_LOCATION_PLANETS: Array[String] = ["Tatooine", "Coruscant", "Naboo"]
 const DECK_THEME: Theme = preload("res://theme/lobby_theme.tres")
 const GOLD := Color(0.95, 0.82, 0.35, 1)
+const FILTER_LABEL_COLOR := Color(0.62, 0.68, 0.82, 1)
+const GRID_SPACING := 6
 
 var _deck_name: String = "New Deck"
 var _deck_slots: Dictionary = {}
@@ -44,6 +46,7 @@ var _trait_filter: OptionButton
 var _title_search: LineEdit
 var _gametext_search: LineEdit
 var _card_scroll: ScrollContainer
+var _results_label: Label
 var _drag_preview_card: Dictionary = {}
 
 var _hover_popup: Control = null
@@ -86,78 +89,102 @@ func _build_ui() -> void:
 	margin.add_theme_constant_override("margin_bottom", 16)
 	add_child(margin)
 
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 12)
+	margin.add_child(outer)
+	_build_header(outer)
+
 	var root_hbox := HBoxContainer.new()
+	root_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root_hbox.add_theme_constant_override("separation", 12)
-	margin.add_child(root_hbox)
+	outer.add_child(root_hbox)
 
 	_build_deck_panel(root_hbox)
 	_build_card_browser(root_hbox)
 
 
+func _build_header(parent: VBoxContainer) -> void:
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 8)
+	parent.add_child(header)
+
+	var title := Label.new()
+	title.text = "DECK BUILDER"
+	title.theme_type_variation = &"TitleLabel"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header.add_child(title)
+
+	var buttons := [
+		["New Deck", _on_new_deck, &"ToolbarButton"],
+		["Load", _on_load_deck, &"ToolbarButton"],
+		["Save", _on_save_deck, &"PrimaryButton"],
+		["Delete", _on_delete_deck_pressed, &"DangerButton"],
+		["Back", _on_back, &"ToolbarButton"],
+	]
+	for spec in buttons:
+		var btn := Button.new()
+		btn.text = spec[0]
+		btn.theme_type_variation = spec[2]
+		btn.custom_minimum_size = Vector2(88, 34)
+		btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		btn.pressed.connect(spec[1])
+		header.add_child(btn)
+
+
+func _section_panel(border: Color) -> PanelContainer:
+	var panel := PanelContainer.new()
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.03, 0.05, 0.12, 0.88)
+	s.border_color = border
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(10)
+	s.set_content_margin_all(12)
+	panel.add_theme_stylebox_override("panel", s)
+	return panel
+
+
 func _build_deck_panel(parent: HBoxContainer) -> void:
+	var deck_panel := _section_panel(Color(0.18, 0.38, 0.65, 0.8))
+	deck_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	deck_panel.size_flags_stretch_ratio = 0.9
+	deck_panel.custom_minimum_size = Vector2(380, 0)
+	parent.add_child(deck_panel)
+
 	var deck_vbox := VBoxContainer.new()
-	deck_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	deck_vbox.size_flags_stretch_ratio = 0.65
-	deck_vbox.custom_minimum_size = Vector2(380, 0)
-	deck_vbox.add_theme_constant_override("separation", 8)
-	parent.add_child(deck_vbox)
+	deck_vbox.add_theme_constant_override("separation", 10)
+	deck_panel.add_child(deck_vbox)
 
-	var toolbar := HBoxContainer.new()
-	toolbar.add_theme_constant_override("separation", 6)
-	toolbar.alignment = BoxContainer.ALIGNMENT_BEGIN
-	deck_vbox.add_child(toolbar)
+	var info_row := HBoxContainer.new()
+	info_row.add_theme_constant_override("separation", 14)
+	deck_vbox.add_child(info_row)
+	_build_cover_slot(info_row)
 
-	var new_btn := Button.new()
-	new_btn.text = "New Deck"
-	new_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	new_btn.pressed.connect(_on_new_deck)
-	toolbar.add_child(new_btn)
-
-	var save_btn := Button.new()
-	save_btn.text = "Save"
-	save_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	save_btn.pressed.connect(_on_save_deck)
-	toolbar.add_child(save_btn)
-	_style_accent_button(save_btn, GOLD)
-
-	var load_btn := Button.new()
-	load_btn.text = "Load"
-	load_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	load_btn.pressed.connect(_on_load_deck)
-	toolbar.add_child(load_btn)
-
-	var delete_btn := Button.new()
-	delete_btn.text = "Delete"
-	delete_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	delete_btn.pressed.connect(_on_delete_deck_pressed)
-	toolbar.add_child(delete_btn)
-	_style_accent_button(delete_btn, DropdownStyle.DARK_ACCENT)
-
-	var back_btn := Button.new()
-	back_btn.text = "Back"
-	back_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	back_btn.pressed.connect(_on_back)
-	toolbar.add_child(back_btn)
-
-	_build_cover_slot(toolbar)
+	var info_col := VBoxContainer.new()
+	info_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	info_col.add_theme_constant_override("separation", 4)
+	info_row.add_child(info_col)
 
 	_deck_name_label = Label.new()
 	_deck_name_label.text = _deck_name
-	_deck_name_label.add_theme_font_size_override("font_size", 20)
-	_deck_name_label.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35))
-	deck_vbox.add_child(_deck_name_label)
+	_deck_name_label.theme_type_variation = &"HeaderLabel"
+	_deck_name_label.add_theme_font_size_override("font_size", 18)
+	_deck_name_label.clip_text = true
+	_deck_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	info_col.add_child(_deck_name_label)
 
 	_deck_avg_destiny_label = Label.new()
-	_deck_avg_destiny_label.add_theme_font_size_override("font_size", 16)
-	_deck_avg_destiny_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.9))
-	deck_vbox.add_child(_deck_avg_destiny_label)
+	_deck_avg_destiny_label.add_theme_font_size_override("font_size", 14)
+	_deck_avg_destiny_label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.96))
+	info_col.add_child(_deck_avg_destiny_label)
 	_update_average_destiny()
 
 	_location_warning_label = Label.new()
 	_location_warning_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_location_warning_label.add_theme_font_size_override("font_size", 13)
 	_location_warning_label.add_theme_color_override("font_color", Color(1.0, 0.62, 0.32, 1))
-	deck_vbox.add_child(_location_warning_label)
+	info_col.add_child(_location_warning_label)
 	_update_location_warning()
 
 	var slot_scroll := ScrollContainer.new()
@@ -175,29 +202,17 @@ func _build_deck_panel(parent: HBoxContainer) -> void:
 
 
 func _build_cover_slot(parent: HBoxContainer) -> void:
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	parent.add_child(spacer)
-
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 1)
+	col.add_theme_constant_override("separation", 3)
 	col.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	parent.add_child(col)
 
-	var title := Label.new()
-	title.text = "Cover (optional)"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", Color(0.95, 0.82, 0.35, 1))
-	title.add_theme_font_size_override("font_size", 11)
-	col.add_child(title)
-
 	_cover_panel = PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.09, 0.14, 0.95)
-	style.border_color = Color(0.95, 0.82, 0.35, 1)
-	style.set_border_width_all(2)
-	style.set_corner_radius_all(5)
+	style.bg_color = Color(0.05, 0.08, 0.17, 0.95)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.8)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
 	style.set_content_margin_all(3)
 	_cover_panel.add_theme_stylebox_override("panel", style)
 	_cover_panel.custom_minimum_size = Vector2(56, 76)
@@ -225,48 +240,56 @@ func _build_cover_slot(parent: HBoxContainer) -> void:
 	_cover_tex.add_child(_cover_empty_label)
 	_refresh_cover_display()
 
+	var caption := Label.new()
+	caption.text = "Cover"
+	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption.add_theme_color_override("font_color", Color(0.62, 0.68, 0.82, 1))
+	caption.add_theme_font_size_override("font_size", 11)
+	col.add_child(caption)
+
 
 func _build_color_slot(parent: VBoxContainer, color_name: String) -> void:
+	var slot_color: Color = COLOR_VALUES[color_name]
 	var slot_panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.12, 0.16, 0.9)
-	style.border_color = COLOR_VALUES[color_name]
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 3
-	style.corner_radius_top_left = 4
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_left = 4
-	style.corner_radius_bottom_right = 4
-	style.content_margin_left = 6
-	style.content_margin_right = 6
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
+	style.bg_color = Color(0.05, 0.07, 0.16, 0.85)
+	style.border_color = Color(slot_color.r, slot_color.g, slot_color.b, 0.4)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 12
+	style.content_margin_right = 10
+	style.content_margin_top = 7
+	style.content_margin_bottom = 8
 	slot_panel.add_theme_stylebox_override("panel", style)
 	parent.add_child(slot_panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
+	vbox.add_theme_constant_override("separation", 6)
 	slot_panel.add_child(vbox)
 
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 8)
 	vbox.add_child(header)
 
-	var color_rect := ColorRect.new()
-	color_rect.custom_minimum_size = Vector2(16, 16)
-	color_rect.color = COLOR_VALUES[color_name]
-	header.add_child(color_rect)
+	var dot := Panel.new()
+	dot.custom_minimum_size = Vector2(10, 10)
+	dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var dot_style := StyleBoxFlat.new()
+	dot_style.bg_color = slot_color
+	dot_style.set_corner_radius_all(5)
+	dot.add_theme_stylebox_override("panel", dot_style)
+	header.add_child(dot)
 
 	var title := Label.new()
 	title.text = color_name.capitalize()
-	title.add_theme_color_override("font_color", COLOR_VALUES[color_name])
+	title.add_theme_font_size_override("font_size", 14)
+	title.add_theme_color_override("font_color", slot_color.lightened(0.25))
 	header.add_child(title)
 
 	var counter := Label.new()
 	counter.text = "0 / %d" % MAX_PER_COLOR
-	counter.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	counter.add_theme_font_size_override("font_size", 13)
+	counter.add_theme_color_override("font_color", Color(0.62, 0.68, 0.82))
 	counter.size_flags_horizontal = Control.SIZE_EXPAND | Control.SIZE_SHRINK_END
 	header.add_child(counter)
 	_slot_counters[color_name] = counter
@@ -274,28 +297,50 @@ func _build_color_slot(parent: VBoxContainer, color_name: String) -> void:
 	var cards_flow := HFlowContainer.new()
 	cards_flow.add_theme_constant_override("h_separation", 4)
 	cards_flow.add_theme_constant_override("v_separation", 4)
-	cards_flow.custom_minimum_size = Vector2(0, 50)
+	cards_flow.custom_minimum_size = Vector2(0, 60)
 	vbox.add_child(cards_flow)
 	_slot_containers[color_name] = cards_flow
+	_refresh_slot_display(color_name)
 
 
 func _build_card_browser(parent: HBoxContainer) -> void:
+	var browser_panel := _section_panel(Color(0.86, 0.72, 0.32, 0.45))
+	browser_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	browser_panel.size_flags_stretch_ratio = 1.0
+	browser_panel.custom_minimum_size = Vector2(280, 0)
+	parent.add_child(browser_panel)
+
 	var browser_vbox := VBoxContainer.new()
-	browser_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	browser_vbox.size_flags_stretch_ratio = 0.35
-	browser_vbox.custom_minimum_size = Vector2(280, 0)
 	browser_vbox.add_theme_constant_override("separation", 8)
-	parent.add_child(browser_vbox)
+	browser_panel.add_child(browser_vbox)
+
+	var browser_header := HBoxContainer.new()
+	browser_header.add_theme_constant_override("separation", 10)
+	browser_vbox.add_child(browser_header)
+
+	var browser_title := Label.new()
+	browser_title.text = "CARD LIBRARY"
+	browser_title.theme_type_variation = &"HeaderLabel"
+	browser_header.add_child(browser_title)
+
+	_results_label = Label.new()
+	_results_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_results_label.add_theme_font_size_override("font_size", 13)
+	_results_label.add_theme_color_override("font_color", FILTER_LABEL_COLOR)
+	browser_header.add_child(_results_label)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset filters"
+	reset_btn.theme_type_variation = &"ToolbarButton"
+	reset_btn.pressed.connect(_on_reset_filters)
+	browser_header.add_child(reset_btn)
 
 	# Filter row 1: Side, Type, Color
 	var filter_row1 := HBoxContainer.new()
 	filter_row1.add_theme_constant_override("separation", 8)
 	browser_vbox.add_child(filter_row1)
 
-	var side_label := Label.new()
-	side_label.text = "Side:"
-	side_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row1.add_child(side_label)
+	filter_row1.add_child(_filter_label("Side"))
 
 	_side_filter = OptionButton.new()
 	_side_filter.add_item("All")
@@ -305,10 +350,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row1.add_child(_side_filter)
 	_style_dropdown(_side_filter)
 
-	var type_label := Label.new()
-	type_label.text = "Type:"
-	type_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row1.add_child(type_label)
+	filter_row1.add_child(_filter_label("Type"))
 
 	_type_filter = OptionButton.new()
 	for t in CARD_TYPES:
@@ -317,10 +359,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row1.add_child(_type_filter)
 	_style_dropdown(_type_filter)
 
-	var color_label := Label.new()
-	color_label.text = "Color:"
-	color_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row1.add_child(color_label)
+	filter_row1.add_child(_filter_label("Color"))
 
 	_color_filter = OptionButton.new()
 	_color_filter.add_item("All")
@@ -336,12 +375,11 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row2_setdest.add_theme_constant_override("separation", 8)
 	browser_vbox.add_child(filter_row2_setdest)
 
-	var set_label := Label.new()
-	set_label.text = "Set:"
-	set_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row2_setdest.add_child(set_label)
+	filter_row2_setdest.add_child(_filter_label("Set"))
 
 	_set_filter = OptionButton.new()
+	_set_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_set_filter.clip_text = true
 	_set_filter.add_item("All")
 	var sets_found: Array[String] = []
 	for card in _all_cards:
@@ -355,10 +393,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row2_setdest.add_child(_set_filter)
 	_style_dropdown(_set_filter)
 
-	var destiny_label := Label.new()
-	destiny_label.text = "Destiny:"
-	destiny_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row2_setdest.add_child(destiny_label)
+	filter_row2_setdest.add_child(_filter_label("Destiny"))
 
 	_destiny_filter = OptionButton.new()
 	_destiny_filter.add_item("All")
@@ -368,12 +403,11 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row2_setdest.add_child(_destiny_filter)
 	_style_dropdown(_destiny_filter)
 
-	var trait_label := Label.new()
-	trait_label.text = "Trait:"
-	trait_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row2_setdest.add_child(trait_label)
+	filter_row2_setdest.add_child(_filter_label("Trait"))
 
 	_trait_filter = OptionButton.new()
+	_trait_filter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_trait_filter.clip_text = true
 	_trait_filter.add_item("All")
 	var traits_found: Dictionary = {}
 	for card in _all_cards:
@@ -399,72 +433,69 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 	filter_row2.add_theme_constant_override("separation", 8)
 	browser_vbox.add_child(filter_row2)
 
-	var title_label := Label.new()
-	title_label.text = "Title:"
-	title_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row2.add_child(title_label)
+	filter_row2.add_child(_filter_label("Title"))
 
 	_title_search = LineEdit.new()
 	_title_search.placeholder_text = "Search title..."
 	_title_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_search.clear_button_enabled = true
 	_title_search.text_changed.connect(_on_filter_text_changed)
 	filter_row2.add_child(_title_search)
 
-	var gametext_label := Label.new()
-	gametext_label.text = "Gametext:"
-	gametext_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
-	filter_row2.add_child(gametext_label)
+	filter_row2.add_child(_filter_label("Text"))
 
 	_gametext_search = LineEdit.new()
 	_gametext_search.placeholder_text = "Search gametext..."
 	_gametext_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gametext_search.clear_button_enabled = true
 	_gametext_search.text_changed.connect(_on_filter_text_changed)
 	filter_row2.add_child(_gametext_search)
+
+	var divider := HSeparator.new()
+	divider.add_theme_constant_override("separation", 4)
+	browser_vbox.add_child(divider)
 
 	_card_scroll = ScrollContainer.new()
 	_card_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_card_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_card_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_card_scroll.resized.connect(_fit_card_grid_columns)
 	browser_vbox.add_child(_card_scroll)
 
 	_card_grid = GridContainer.new()
-	_card_grid.columns = 6
-	_card_grid.add_theme_constant_override("h_separation", 6)
-	_card_grid.add_theme_constant_override("v_separation", 6)
-	_card_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_card_grid.columns = 2
+	_card_grid.add_theme_constant_override("h_separation", GRID_SPACING)
+	_card_grid.add_theme_constant_override("v_separation", GRID_SPACING)
+	_card_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER | Control.SIZE_EXPAND
 	_card_scroll.add_child(_card_grid)
+
+
+func _fit_card_grid_columns() -> void:
+	var usable := _card_scroll.size.x - 14.0
+	var cols := int(floor((usable + GRID_SPACING) / float(CARD_WIDTH + GRID_SPACING)))
+	cols = maxi(cols, 2)
+	if _card_grid.columns != cols:
+		_card_grid.columns = cols
+
+
+func _filter_label(text: String) -> Label:
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", FILTER_LABEL_COLOR)
+	return lbl
+
+
+func _on_reset_filters() -> void:
+	for ob in [_side_filter, _type_filter, _color_filter, _set_filter, _destiny_filter, _trait_filter]:
+		ob.select(0)
+	_title_search.text = ""
+	_gametext_search.text = ""
+	_apply_filters()
 
 
 func _style_dropdown(btn: OptionButton) -> void:
 	DropdownStyle.apply(btn, GOLD, DECK_THEME)
-
-
-func _style_accent_button(btn: Button, accent: Color) -> void:
-	var fill := Color(0.04, 0.06, 0.14, 0.96)
-	if accent.r > accent.b + 0.15:
-		fill = Color(0.14, 0.08, 0.04, 0.96)
-	elif accent.r > accent.g:
-		fill = Color(0.14, 0.04, 0.05, 0.96)
-	btn.add_theme_stylebox_override("normal", _control_box(fill, accent))
-	btn.add_theme_stylebox_override("hover", _control_box(fill.lightened(0.1), accent.lightened(0.12)))
-	btn.add_theme_stylebox_override("pressed", _control_box(fill.darkened(0.08), accent.darkened(0.1)))
-	btn.add_theme_stylebox_override("focus", _control_box(fill.lightened(0.1), accent.lightened(0.12)))
-	btn.add_theme_color_override("font_color", Color(0.96, 0.94, 0.85, 1))
-	btn.add_theme_color_override("font_hover_color", GOLD)
-	btn.add_theme_color_override("font_pressed_color", GOLD)
-
-
-func _control_box(bg: Color, border: Color) -> StyleBoxFlat:
-	var s := StyleBoxFlat.new()
-	s.bg_color = bg
-	s.border_color = border
-	s.set_border_width_all(1)
-	s.set_corner_radius_all(8)
-	s.content_margin_left = 14
-	s.content_margin_top = 8
-	s.content_margin_right = 14
-	s.content_margin_bottom = 8
-	return s
 
 
 func _themed_dialog(dialog: Window) -> void:
@@ -489,6 +520,8 @@ func _populate_card_grid() -> void:
 			_card_grid.add_child(_create_draggable_card(card, tex))
 		shown += 1
 
+	if _results_label:
+		_results_label.text = "%d card%s" % [shown, "" if shown == 1 else "s"]
 	if shown == 0:
 		var empty := Label.new()
 		empty.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -588,8 +621,8 @@ func _show_hover_preview_for_card(card: Dictionary) -> void:
 	var popup := PanelContainer.new()
 	popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var popup_style := StyleBoxFlat.new()
-	popup_style.bg_color = Color(0.08, 0.08, 0.12, 0.95)
-	popup_style.border_color = Color(0.5, 0.5, 0.6)
+	popup_style.bg_color = Color(0.03, 0.05, 0.12, 0.96)
+	popup_style.border_color = Color(0.86, 0.72, 0.32, 0.9)
 	popup_style.border_width_left = 2
 	popup_style.border_width_top = 2
 	popup_style.border_width_right = 2
@@ -927,8 +960,9 @@ func _update_average_destiny() -> void:
 			total_destiny += int(card.get("destiny", 0))
 			card_count += 1
 	if _deck_avg_destiny_label:
+		var count_text := "%d card%s" % [card_count, "" if card_count == 1 else "s"]
 		if card_count == 0:
-			_deck_avg_destiny_label.text = "Average Destiny: —"
+			_deck_avg_destiny_label.text = "%s   ·   Average Destiny —" % count_text
 		else:
 			var avg: float = total_destiny / float(card_count)
 			var display: String
@@ -936,7 +970,7 @@ func _update_average_destiny() -> void:
 				display = "%d" % int(roundf(avg))
 			else:
 				display = "%.1f" % avg
-			_deck_avg_destiny_label.text = "Average Destiny: %s" % display
+			_deck_avg_destiny_label.text = "%s   ·   Average Destiny %s" % [count_text, display]
 
 
 func _refresh_slot_display(color_name: String) -> void:
@@ -945,9 +979,21 @@ func _refresh_slot_display(color_name: String) -> void:
 		c.queue_free()
 
 	var cards: Array = _deck_slots[color_name]
-	_slot_counters[color_name].text = "%d / %d" % [cards.size(), MAX_PER_COLOR]
+	var counter: Label = _slot_counters[color_name]
+	counter.text = "%d / %d" % [cards.size(), MAX_PER_COLOR]
+	counter.add_theme_color_override("font_color", GOLD if cards.size() >= MAX_PER_COLOR else FILTER_LABEL_COLOR)
 	_update_average_destiny()
 	_update_location_warning()
+
+	if cards.is_empty():
+		var hint := Label.new()
+		hint.text = "Drag cards here"
+		hint.custom_minimum_size = Vector2(0, 60)
+		hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hint.add_theme_font_size_override("font_size", 12)
+		hint.add_theme_color_override("font_color", Color(0.5, 0.56, 0.7, 0.7))
+		hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		container.add_child(hint)
 
 	for i in range(cards.size()):
 		var card: Dictionary = cards[i]
@@ -1316,24 +1362,50 @@ func _load_card_texture(card_id: String, side: String, set_hint: String = "", _c
 	return CardArt.load_texture(card_id, side, set_hint)
 
 
-var _toast_label: Label = null
+var _toast_label: Control = null
 
 func _show_toast(message: String) -> void:
 	if _toast_label and is_instance_valid(_toast_label):
 		_toast_label.queue_free()
 
-	_toast_label = Label.new()
-	_toast_label.text = message
-	_toast_label.add_theme_font_size_override("font_size", 14)
-	_toast_label.add_theme_color_override("font_color", Color(1, 1, 0.7))
-	_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast_label.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
-	_toast_label.offset_top = -40
-	_toast_label.offset_bottom = -10
-	add_child(_toast_label)
+	var holder := CenterContainer.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.set_anchors_and_offsets_preset(PRESET_BOTTOM_WIDE)
+	holder.offset_top = -64
+	holder.offset_bottom = -22
+	add_child(holder)
 
+	var pill := PanelContainer.new()
+	pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.03, 0.05, 0.12, 0.95)
+	s.border_color = Color(0.86, 0.72, 0.32, 0.85)
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(16)
+	s.content_margin_left = 18
+	s.content_margin_right = 18
+	s.content_margin_top = 7
+	s.content_margin_bottom = 7
+	s.shadow_color = Color(0, 0, 0, 0.5)
+	s.shadow_size = 8
+	pill.add_theme_stylebox_override("panel", s)
+	holder.add_child(pill)
+
+	var label := Label.new()
+	label.text = message
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color(0.98, 0.93, 0.75))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if message.length() > 70:
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.custom_minimum_size = Vector2(520, 0)
+	pill.add_child(label)
+	_toast_label = holder
+
+	var toast := holder
 	get_tree().create_timer(3.0).timeout.connect(func():
-		if is_instance_valid(_toast_label):
-			_toast_label.queue_free()
+		if is_instance_valid(toast):
+			toast.queue_free()
+		if _toast_label == toast:
 			_toast_label = null
 	)
