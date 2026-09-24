@@ -3,6 +3,8 @@
 ## When instance_id is set, clicking emits card_selected(instance_id).
 extends Button
 
+const CardArt = preload("res://scripts/card_art.gd")
+
 signal card_selected(instance_id: String)
 signal drag_started(instance_id: String)
 signal drag_ended(instance_id: String)
@@ -53,6 +55,7 @@ func _apply_clear_card_chrome() -> void:
 	add_theme_stylebox_override("focus", empty)
 	var panel: PanelContainer = get_node_or_null("Panel") as PanelContainer
 	if panel:
+		panel.theme = Theme.new()
 		panel.add_theme_stylebox_override("panel", empty)
 	var margin: MarginContainer = get_node_or_null("Panel/Margin") as MarginContainer
 	if margin:
@@ -66,6 +69,19 @@ func _exit_tree() -> void:
 	_hide_hover_popup()
 	if _hover_timer and is_instance_valid(_hover_timer):
 		_hover_timer.stop()
+
+
+func _show_card_art(img: TextureRect, lbl: Label, tex: Texture2D) -> void:
+	_current_texture = tex
+	img.custom_minimum_size = custom_minimum_size
+	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	img.texture = tex
+	img.visible = true
+	img.z_index = 1
+	if lbl:
+		lbl.visible = false
 
 
 func set_card(card_id: String, instance_id: String = "", side_hint: String = "", set_hint: String = "", face_down: bool = false, is_mine: bool = true) -> void:
@@ -109,29 +125,19 @@ func set_card(card_id: String, instance_id: String = "", side_hint: String = "",
 	if face_down and img:
 		var back_path: String = "res://assets/card_back_light.png" if (side_hint == "light" or info.get("side", "") == "light") else "res://assets/card_back_dark.png"
 		var back_tex := load(back_path) as Texture2D
-		if back_tex and CardCatalog:
+		if back_tex and CardCatalog and CardCatalog.has_method("smooth_texture"):
 			back_tex = CardCatalog.smooth_texture(back_tex)
 		if back_tex:
 			_current_texture = null
-			img.texture = back_tex
-			img.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-			img.visible = true
-			if lbl:
-				lbl.visible = false
+			_show_card_art(img, lbl, back_tex)
+			_current_texture = null
 			return
 
-	var side: String = info.get("side", "")
-	if side and img and CardCatalog:
-		var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side_hint, set_hint)
-		for path in paths_to_try:
-			var tex = load(path) as Texture2D
-			if tex:
-				_current_texture = tex
-				img.texture = tex
-				img.visible = true
-				if lbl:
-					lbl.visible = false
-				return
+	if img:
+		var tex := CardArt.load_texture(card_id, side_hint, set_hint)
+		if tex:
+			_show_card_art(img, lbl, tex)
+			return
 	# Fallback: no image or not found
 	_current_texture = null
 	if img:

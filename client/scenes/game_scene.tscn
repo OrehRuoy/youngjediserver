@@ -178,12 +178,12 @@ text = "Determining first player..."
 horizontal_alignment = 1
 
 [node name="OpponentDestinySlot" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection" unique_id=1799084924]
-custom_minimum_size = Vector2(0, 70)
+custom_minimum_size = Vector2(220, 160)
 layout_mode = 2
 alignment = 1
 
 [node name="YourDestinySlot" type="HBoxContainer" parent="HBoxContainer/Margin/GameArea/VBox/DestinyCompareSection" unique_id=1580927016]
-custom_minimum_size = Vector2(0, 70)
+custom_minimum_size = Vector2(220, 160)
 layout_mode = 2
 alignment = 1
 

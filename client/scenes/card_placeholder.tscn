@@ -26,11 +26,13 @@ theme_override_constants/margin_right = 0
 theme_override_constants/margin_bottom = 0
 
 [node name="CardImage" type="TextureRect" parent="Panel/Margin"]
+custom_minimum_size = Vector2(96, 136)
 layout_mode = 2
 expand_mode = 1
-stretch_mode = 4
+stretch_mode = 5
 
 [node name="Label" type="Label" parent="Panel/Margin"]
+visible = false
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "Card"

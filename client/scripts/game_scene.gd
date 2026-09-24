@@ -1899,11 +1899,13 @@ func _in_play_entry(pub: Dictionary, instance_id: String) -> Dictionary:
 
 func _duel_thumb(card_id: String, side: String, set_name: String, caption: String) -> Control:
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(104, 168)
+	box.custom_minimum_size = Vector2(104, 180)
 	var card: Control = CardPlaceholderScene.instantiate()
 	box.add_child(card)
 	if card.has_method("set_card"):
 		card.set_card(card_id, "duel-view", side, set_name)
+	card.custom_minimum_size = Vector2(96, 136)
+	card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	if card is BaseButton:
 		(card as BaseButton).disabled = false
 		(card as BaseButton).toggle_mode = false

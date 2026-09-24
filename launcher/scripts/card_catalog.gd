@@ -95,8 +95,13 @@ func get_card_image_paths(card_id: String, side_hint: String = "", set_hint: Str
 func load_card_texture(card_id: String, side_hint: String = "", set_hint: String = "") -> Texture2D:
 	if card_id.is_empty():
 		return null
-	for p in get_card_image_paths(card_id, side_hint, set_hint):
-		var tex: Texture2D = load(p) as Texture2D
+	var paths: Array[String] = get_card_image_paths(card_id, side_hint, set_hint)
+	if not set_hint.is_empty():
+		for path in get_card_image_paths(card_id, side_hint, ""):
+			if not paths.has(path):
+				paths.append(path)
+	for path in paths:
+		var tex := load(path) as Texture2D
 		if tex:
 			return tex
 	return null

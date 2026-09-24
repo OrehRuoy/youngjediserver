@@ -1,6 +1,8 @@
 ## Deckbuilder scene: browse cards, build decks with 6 color-coded slots.
 extends Control
 
+const CardArt = preload("res://scripts/card_art.gd")
+
 const CARD_WIDTH := 100
 const CARD_HEIGHT := 140
 const MAX_PER_COLOR := 10
@@ -1310,30 +1312,8 @@ func _on_back() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
-func _load_card_texture(card_id: String, side: String, set_hint: String = "", card: Dictionary = {}) -> Texture2D:
-	var set_name := str(card.get("set", set_hint))
-	var side_name := str(card.get("side", side))
-	var image_file := str(card.get("image", ""))
-	if (set_name.is_empty() or side_name.is_empty() or image_file.is_empty()) and CardCatalog and CardCatalog.has_method("get_card_info"):
-		var info: Dictionary = CardCatalog.get_card_info(card_id, side, set_hint)
-		if set_name.is_empty():
-			set_name = str(info.get("set", ""))
-		if side_name.is_empty():
-			side_name = str(info.get("side", ""))
-		if image_file.is_empty():
-			image_file = str(info.get("image", ""))
-	if set_name.is_empty() or side_name.is_empty() or image_file.is_empty():
-		return null
-	var paths: Array[String] = ["res://assets/%s/%s/%s" % [set_name, side_name, image_file]]
-	if image_file.to_lower().ends_with(".gif"):
-		paths.append("res://assets/%s/%s/%s.png" % [set_name, side_name, image_file.get_basename()])
-	for p in paths:
-		if not ResourceLoader.exists(p):
-			continue
-		var tex: Texture2D = ResourceLoader.load(p, "", ResourceLoader.CACHE_MODE_REUSE) as Texture2D
-		if tex:
-			return tex
-	return null
+func _load_card_texture(card_id: String, side: String, set_hint: String = "", _card: Dictionary = {}) -> Texture2D:
+	return CardArt.load_texture(card_id, side, set_hint)
 
 
 var _toast_label: Label = null

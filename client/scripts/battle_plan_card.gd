@@ -2,6 +2,8 @@
 ## Shows larger image on hover; hover is hidden when drag starts so it doesn't interfere.
 extends Control
 
+const CardArt = preload("res://scripts/card_art.gd")
+
 signal drag_started(instance_id: String)
 signal drag_ended(instance_id: String)
 
@@ -57,13 +59,7 @@ func set_card(card_id: String, instance_id: String, side: String) -> void:
 	_card_id = card_id
 	_instance_id = instance_id
 	_side = side
-	var tex: Texture2D = null
-	if CardCatalog:
-		var paths_to_try: Array[String] = CardCatalog.get_card_image_paths(card_id, side)
-		for p in paths_to_try:
-			tex = load(p) as Texture2D
-			if tex:
-				break
+	var tex: Texture2D = CardArt.load_texture(card_id, side, "")
 	if not tex:
 		tex = load("res://assets/card_back_light.png") as Texture2D if side == "light" else load("res://assets/card_back_dark.png") as Texture2D
 		if tex and CardCatalog:

@@ -3,6 +3,8 @@
 ## Cards with the same id in different sets (e.g. same location title light vs dark) are stored by "id:set"; use set_hint to look up a specific set's version.
 extends Node
 
+const CardArt = preload("res://scripts/card_art.gd")
+
 var _by_id: Dictionary = {}
 var _by_id_first: Dictionary = {}
 
@@ -120,10 +122,5 @@ func smooth_texture(source: Texture2D) -> Texture2D:
 
 
 func load_card_texture(card_id: String, side_hint: String = "", set_hint: String = "") -> Texture2D:
-	if card_id.is_empty():
-		return null
-	for p in get_card_image_paths(card_id, side_hint, set_hint):
-		var tex: Texture2D = load(p) as Texture2D
-		if tex:
-			return tex
-	return null
+	# Same loader the table and deck builder use. A wrong set must not hide a picture that exists.
+	return CardArt.load_texture(card_id, side_hint, set_hint)
