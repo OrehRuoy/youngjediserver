@@ -208,6 +208,7 @@ func _ready() -> void:
 	_ensure_effect_decline_btn()
 	if battle_plan_ready_btn:
 		battle_plan_ready_btn.pressed.connect(_on_battle_plan_ready_pressed)
+		_style_action_button(battle_plan_ready_btn, "primary")
 	if chat_send_btn:
 		chat_send_btn.pressed.connect(_on_chat_send)
 	if chat_input:
@@ -1041,7 +1042,7 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 	vbox.add_child(btn_row)
 	var confirm_btn := Button.new()
 	confirm_btn.text = "Launch Evacuation"
-	confirm_btn.add_theme_font_size_override("font_size", 14)
+	_style_action_button(confirm_btn, "primary")
 	confirm_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({
 			"type": "game_action",
@@ -1058,7 +1059,7 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 	btn_row.add_child(confirm_btn)
 	var cancel_btn := Button.new()
 	cancel_btn.text = "Cancel"
-	cancel_btn.add_theme_font_size_override("font_size", 14)
+	_style_action_button(cancel_btn, "secondary")
 	cancel_btn.pressed.connect(func() -> void:
 		if _evacuation_overlay:
 			_evacuation_overlay.queue_free()
@@ -1208,7 +1209,7 @@ func _show_interception_prompt(state: RefCounted, evac_state: Dictionary) -> voi
 	vbox.add_child(spacer)
 	var decline_btn := Button.new()
 	decline_btn.text = "Let them evacuate"
-	decline_btn.add_theme_font_size_override("font_size", 14)
+	_style_action_button(decline_btn, "secondary")
 	decline_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({
 			"type": "game_action",
@@ -1274,6 +1275,7 @@ func _show_dotf_intercept_bar(state: RefCounted, evac_state: Dictionary) -> void
 	vbox.add_child(row)
 	var intercept_btn := Button.new()
 	intercept_btn.text = "Intercept with Hyperspace"
+	_style_action_button(intercept_btn, "primary")
 	intercept_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "intercept_transport"}})
 		_clear_dotf_overlay()
@@ -1281,6 +1283,7 @@ func _show_dotf_intercept_bar(state: RefCounted, evac_state: Dictionary) -> void
 	row.add_child(intercept_btn)
 	var decline_btn := Button.new()
 	decline_btn.text = "Let them evacuate"
+	_style_action_button(decline_btn, "secondary")
 	decline_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_intercept"}})
 		_clear_dotf_overlay()
@@ -1328,6 +1331,7 @@ func _begin_choice_overlay(kind: String, title_text: String) -> VBoxContainer:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(title)
+	vbox.child_entered_tree.connect(_style_overlay_child)
 	return vbox
 
 
@@ -1565,42 +1569,42 @@ func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 	var vbox := _begin_choice_overlay("jedi_training", "Deploy a lightsaber from your deck")
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Discard this Effect and pay the lightsaber's cost. You have %d counters." % force
+	note.text = "Discard this Effect and pay the cost on the card. You have %d counters." % force
 	vbox.add_child(note)
 	var choices: Array = pending.get("choices", [])
 	var affordable := 0
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(640, 180)
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(520, 268)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	scroll.add_child(row)
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	scroll.add_child(grid)
 	for entry in choices:
 		if not (entry is Dictionary):
 			continue
 		var cid := str(entry.get("cardId", ""))
 		var inst := str(entry.get("instanceId", ""))
 		var cost := int(entry.get("cost", 0))
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 4)
-		var card: Control = CardPlaceholderScene.instantiate()
-		col.add_child(card)
 		var can_pay := cost <= force
+		var card: Control = CardPlaceholderScene.instantiate()
+		grid.add_child(card)
 		card.set_card(cid, inst, my_side, str(entry.get("set", "")))
-		var cost_lbl := Label.new()
-		cost_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		if card.has_method("set_board_size"):
+			card.set_board_size(Vector2(92, 128))
 		if can_pay:
 			affordable += 1
-			cost_lbl.text = "Deploy (%d)" % cost
+			if card.has_method("set_action_glow"):
+				card.set_action_glow("play")
 			if card.has_signal("card_selected"):
 				card.card_selected.connect((func(chosen: String) -> void:
 					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_jedi_training", "instanceId": chosen}})
 				))
 		else:
-			cost_lbl.text = "Need %d" % cost
-		col.add_child(cost_lbl)
-		row.add_child(col)
+			card.modulate = Color(1, 1, 1, 0.38)
+		_jedi_cost_badge(card, cost, can_pay)
 	if affordable == 0 and not choices.is_empty():
 		note.text = "You have %d counters, so none of these lightsabers can be deployed. Skip for now." % force
 	var skip := Button.new()
@@ -1609,6 +1613,26 @@ func _show_jedi_training(pending: Dictionary, my_side: String) -> void:
 		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_jedi_training"}})
 	)
 	vbox.add_child(skip)
+
+
+func _jedi_cost_badge(card: Control, cost: int, can_pay: bool) -> void:
+	var badge := Label.new()
+	badge.text = str(cost) if can_pay else ("Need %d" % cost)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	badge.offset_left = 6
+	badge.offset_right = -6
+	badge.offset_top = -26
+	badge.offset_bottom = -6
+	badge.add_theme_font_size_override("font_size", 13)
+	badge.add_theme_color_override("font_color", Color(1, 0.93, 0.62) if can_pay else Color(1, 0.72, 0.68))
+	badge.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+	badge.add_theme_constant_override("shadow_offset_x", 0)
+	badge.add_theme_constant_override("shadow_offset_y", 1)
+	badge.add_theme_constant_override("shadow_outline_size", 4)
+	card.add_child(badge)
 
 
 func _show_damage_replace(pending: Dictionary) -> void:
@@ -2573,9 +2597,9 @@ func _build_duel_play_screen(pub: Dictionary, d: Dictionary, my_side: String) ->
 				return
 			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
 				var extra_hits := func() -> void: _play_duel_card(inst, cid, true)
-				_duel_hand_choice(hand_area, "Discard Qui-Gon's Final Stand for +2 hits?", [
+				_duel_hand_choice(hand_area, "Discard it for this swing. If they miss, they take 3 hits. If they match the number, it is blocked and the card stays discarded.", [
 					{"text": "Play normally", "kind": "secondary", "cb": play_normal},
-					{"text": "+2 hits", "kind": "primary", "cb": extra_hits},
+					{"text": "Discard for +2 hits", "kind": "primary", "cb": extra_hits},
 				])
 				return
 			_play_duel_card(inst, cid, false)
@@ -4434,6 +4458,13 @@ func _have_effect_at_location(pub: Dictionary, my_side: String) -> bool:
 	return false
 
 
+func _hand_battle_card_ready(card_id: String, card_set: String, my_side: String, pub: Dictionary) -> bool:
+	if str(pub.get("battleCardDeclareSide", "")) != my_side or _play_blocked(pub) or not CardCatalog or card_id.is_empty():
+		return false
+	var info: Dictionary = CardCatalog.get_card_info(card_id, my_side, card_set)
+	return str(info.get("type", "")).to_lower() == "battle"
+
+
 func _hand_card_can_deploy(card_id: String, card_set: String, my_side: String, pub: Dictionary, phase: String, turn_side: String) -> bool:
 	if phase != "deploy" or turn_side != my_side or _play_blocked(pub):
 		return false
@@ -4544,7 +4575,7 @@ func _build_hand(state: RefCounted) -> void:
 					card.set_action_glow("play")
 			else:
 				card.modulate = Color(1, 1, 1, 0.4)
-		elif card.has_method("set_action_glow") and _hand_card_can_deploy(card_id, str(entry.get("set", "")), my_side, pub, phase, turn_side):
+		elif card.has_method("set_action_glow") and (_hand_card_can_deploy(card_id, str(entry.get("set", "")), my_side, pub, phase, turn_side) or _hand_battle_card_ready(card_id, str(entry.get("set", "")), my_side, pub)):
 			card.set_action_glow("play")
 		card.button_pressed = (inst_id == _selected_instance_id)
 		card.card_selected.connect(_on_card_selected)
@@ -4823,15 +4854,15 @@ func _build_battle_card_declare_ui(state: RefCounted, pub: Dictionary, declare_s
 		btn_row.add_theme_constant_override("separation", 12)
 		container.add_child(btn_row)
 		var confirm_btn: Button = Button.new()
-		confirm_btn.theme_type_variation = &"PrimaryButton"
-		confirm_btn.custom_minimum_size = Vector2(220, 0)
 		var declared_n: int = _declared_battle_cards.size()
 		confirm_btn.text = "Confirm %d Battle card%s" % [declared_n, "" if declared_n == 1 else "s"] if declared_n > 0 else "Confirm — no Battle cards"
+		_style_action_button(confirm_btn, "primary")
 		confirm_btn.pressed.connect(_on_declare_battle_cards_confirmed)
 		btn_row.add_child(confirm_btn)
 		if not _declared_battle_cards.is_empty():
 			var undo_btn: Button = Button.new()
 			undo_btn.text = "Remove All"
+			_style_action_button(undo_btn, "secondary")
 			undo_btn.pressed.connect(_on_declare_battle_cards_clear)
 			btn_row.add_child(undo_btn)
 		status_label.text = ""
@@ -6898,6 +6929,17 @@ func _action_box(bg: Color, edge: Color, state: String) -> StyleBoxFlat:
 			s.shadow_size = 6
 	s.border_blend = false
 	return s
+
+
+func _style_overlay_child(n: Node) -> void:
+	if not n is Button:
+		return
+	var b := n as Button
+	var t := b.text.to_lower()
+	var kind := "primary"
+	if t.contains("skip") or t.contains("cancel") or t.contains("keep") or t.contains("decline") or t.contains("back") or t.begins_with("no"):
+		kind = "secondary"
+	_style_action_button(b, kind)
 
 
 func _style_action_button(btn: Button, kind: String) -> void:

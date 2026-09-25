@@ -97,6 +97,26 @@ func get_card_image_paths(card_id: String, side_hint: String = "", set_hint: Str
 
 var _smooth_cache: Dictionary = {}
 
+
+## Clear pixels are stored as white. Scaling them pulls a white fringe around the card, so paint that fringe black first.
+func _blacken_clear_margin(img: Image) -> void:
+	var w := img.get_width()
+	var h := img.get_height()
+	var clear := Color(0, 0, 0, 0)
+	var band := 8
+	for y in h:
+		var x0 := 0
+		var x1 := w
+		if y >= band and y < h - band:
+			x1 = mini(band, w)
+		for x in range(x0, x1):
+			if img.get_pixel(x, y).a < 0.04:
+				img.set_pixel(x, y, clear)
+		if y >= band and y < h - band:
+			for x in range(maxi(0, w - band), w):
+				if img.get_pixel(x, y).a < 0.04:
+					img.set_pixel(x, y, clear)
+
 ## Upscale a small texture in memory so it stays sharp when drawn larger. Does not rewrite the file.
 func smooth_texture(source: Texture2D) -> Texture2D:
 	if source == null:
@@ -114,6 +134,7 @@ func smooth_texture(source: Texture2D) -> Texture2D:
 	var w := img.get_width()
 	var h := img.get_height()
 	if w > 0 and h > 0 and w < 480:
+		_blacken_clear_margin(img)
 		img.resize(w * 3, h * 3, Image.INTERPOLATE_LANCZOS)
 	img.generate_mipmaps()
 	var tex := ImageTexture.create_from_image(img)

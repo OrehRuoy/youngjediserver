@@ -210,6 +210,29 @@ function planetAlreadyLost(myCharCount: number, oppCharCount: number, hidden: bo
   return !hidden && myCharCount === 0 && oppCharCount > 0;
 }
 
+/**
+ * A won planet is only worth a rare evacuation: a strong unique character, and not on most turns.
+ * Generic leftovers and ordinary uniques stay where they are.
+ */
+function rareStrandedUniquePlanet(g: GameStateData, botSide: Side): number | null {
+  if ((g.turnNumber ?? 0) % 4 !== 0) return null;
+  let bestIndex: number | null = null;
+  let bestPower = 4;
+  for (const planetIndex of state.getEvacuatablePlanets(g, botSide)) {
+    if (planetIndex < 0) continue;
+    const cards = state.getEvacuatableCards(g, botSide, planetIndex);
+    for (const c of cards) {
+      if (!isUniqueCard(c.cardId) || !isCharacter(c.cardId)) continue;
+      const power = getPower(c.cardId);
+      if (power > bestPower) {
+        bestPower = power;
+        bestIndex = planetIndex;
+      }
+    }
+  }
+  return bestIndex;
+}
+
 function weaponMatchesAny(weaponId: string, characters: { cardId: string }[]): boolean {
   return characters.some((ch) => isCharacter(ch.cardId) && canWeaponBeUsedBy(weaponId, ch.cardId));
 }
@@ -573,7 +596,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     const choices = g.nextPlanetChoices ?? [];
     if (choices.length === 0) return null;
     const best = pickBestLocationChoice(g, botSide, choices, cfg);
-    return { kind: "choose_next_planet", instanceId: best.instanceId };
+      return { kind: "choose_next_planet", instanceId: best.instanceId };
   }
 
   if (g.evacuationState?.awaitingInterception && g.evacuationState.evacuatingSide === oppSide) {
@@ -607,69 +630,44 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   }
 
   if (phase === "deploy") {
+    const hyperspaceEvac =
+      !g.evacuationState && usesHyperspace(g) && hyperspace.hasTransportInHyperspace(g, botSide);
+    const classicTransport =
+      !g.evacuationState && !usesHyperspace(g)
+        ? p.hand.find(
+            (c) =>
+              getCardType(c.cardId) === "starship" &&
+              ((getCard(c.cardId) as { trait?: string } | undefined)?.trait ?? "").toLowerCase() === "transport"
+          )
+        : undefined;
+    const canEvacuate = hyperspaceEvac || !!classicTransport;
+    const startEvac = (targetPlanetIndex: number): GameAction =>
+      classicTransport
+        ? { kind: "evacuate_start", transportInstanceId: classicTransport.instanceId, targetPlanetIndex }
+        : { kind: "evacuate_start", targetPlanetIndex };
+
+    // Current planet is legal to evacuate, but only when it is already lost and there is no character left to deploy into it.
+    const canContestLostPlanet =
+      lost &&
+      p.hand.some((c) => {
+        if (!isCharacter(c.cardId)) return false;
+        return state.getDeployCostWithGametextBonus(g, botSide, c.cardId, c.cardSet) <= force;
+      });
+    if (
+      canEvacuate &&
+      lost &&
+      !canContestLostPlanet &&
+      oppCharCount >= 2 &&
+      state.getEvacuatablePlanets(g, botSide).includes(-1)
+    ) {
+      return startEvac(-1);
+    }
+
     if (force <= 0 && usesHyperspace(g)) {
       const ship = p.hand.find((c) => getCardType(c.cardId) === "starship" && !hyperspace.wouldViolateStarshipUniqueness(g, botSide, c.cardId, c.cardSet));
       if (ship) return { kind: "play_card", instanceId: ship.instanceId };
     }
     if (force <= 0) return { kind: "pass_phase" };
-    if (!g.evacuationState && usesHyperspace(g) && hyperspace.hasTransportInHyperspace(g, botSide)) {
-      const myPower = state.totalPowerInPlay(g, botSide);
-      const oppPower = state.totalPowerInPlay(g, oppSide);
-      const controlledCount = g.controlledPlanets?.length ?? 0;
-      const myPlanetsWon = botSide === "light" ? (g.lightPlanetsWon ?? 0) : (g.darkPlanetsWon ?? 0);
-      const evacRatio = aggressive ? 2.1 : passive ? 1.45 : 1.8;
-      const mayEvacuateCurrent =
-        lost ||
-        ((controlledCount === 0 || (controlledCount === 1 && myPlanetsWon === 1)) && oppPower > myPower * evacRatio);
-      const candidates: { planetIndex: number; priority: number }[] = [];
-      for (const planetIndex of state.getEvacuatablePlanets(g, botSide)) {
-        if (planetIndex === -1) {
-          if (!mayEvacuateCurrent) continue;
-          candidates.push({ planetIndex: -1, priority: lost ? 3 : 0 });
-          continue;
-        }
-        const cards = state.getEvacuatableCards(g, botSide, planetIndex);
-        const hasUnique = cards.some((c) => isUniqueCard(c.cardId));
-        candidates.push({ planetIndex, priority: hasUnique ? 2 : 1 });
-      }
-      if (candidates.length > 0) {
-        candidates.sort((a, b) => b.priority - a.priority);
-        return { kind: "evacuate_start", targetPlanetIndex: candidates[0].planetIndex };
-      }
-    }
-    if (!g.evacuationState && !usesHyperspace(g) && state.hasTransportInHand(g, botSide)) {
-      const transport = p.hand.find(
-        (c) =>
-          getCardType(c.cardId) === "starship" &&
-          ((getCard(c.cardId) as { trait?: string } | undefined)?.trait ?? "").toLowerCase() === "transport"
-      );
-      if (transport) {
-        const myPower = state.totalPowerInPlay(g, botSide);
-        const oppPower = state.totalPowerInPlay(g, oppSide);
-        const controlledCount = g.controlledPlanets?.length ?? 0;
-        const myPlanetsWon = botSide === "light" ? (g.lightPlanetsWon ?? 0) : (g.darkPlanetsWon ?? 0);
-        const evacRatio = aggressive ? 2.1 : passive ? 1.45 : 1.8;
-        const mayEvacuateCurrent =
-          lost ||
-          ((controlledCount === 0 || (controlledCount === 1 && myPlanetsWon === 1)) && oppPower > myPower * evacRatio);
-
-        const candidates: { planetIndex: number; priority: number }[] = [];
-        for (const planetIndex of state.getEvacuatablePlanets(g, botSide)) {
-          if (planetIndex === -1) {
-            if (!mayEvacuateCurrent) continue;
-            candidates.push({ planetIndex: -1, priority: lost ? 3 : 0 });
-            continue;
-          }
-          const cards = state.getEvacuatableCards(g, botSide, planetIndex);
-          const hasUnique = cards.some((c) => isUniqueCard(c.cardId));
-          candidates.push({ planetIndex, priority: hasUnique ? 2 : 1 });
-        }
-        if (candidates.length > 0) {
-          candidates.sort((a, b) => b.priority - a.priority);
-          return { kind: "evacuate_start", transportInstanceId: transport.instanceId, targetPlanetIndex: candidates[0].planetIndex };
-        }
-      }
-    }
 
     if (won && !aggressive) return { kind: "pass_phase" };
     if (won && aggressive && myCharCount >= 2) return { kind: "pass_phase" };
@@ -786,7 +784,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
       }
     }
 
-    if (cfg.useMemoryAdjustment) {
+      if (cfg.useMemoryAdjustment) {
       for (const item of playable) {
         const { rate, samples } = memory.getCardPlayWinRate(item.cardId);
         if (samples >= 3) item.score += Math.max(-1.2, Math.min(1.2, (rate - 0.5) * 2.5));
@@ -796,6 +794,10 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     playable.sort((a, b) => b.score - a.score);
     const bestPlay = playable[0];
     if (bestPlay && bestPlay.score >= 1.5) return { kind: "play_card", instanceId: bestPlay.instanceId };
+    if (canEvacuate) {
+      const stranded = rareStrandedUniquePlanet(g, botSide);
+      if (stranded !== null) return startEvac(stranded);
+    }
     return { kind: "pass_phase" };
   }
 
@@ -862,7 +864,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
             orderSet.add(weapon.instanceId);
           }
           if (!orderSet.has(ch.instanceId)) {
-            order.push(ch.instanceId);
+          order.push(ch.instanceId);
             orderSet.add(ch.instanceId);
           }
         }
@@ -995,7 +997,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
           dead = true;
         }
       } else if (type === "starship") {
-        const trait = ((getCard(c.cardId) as { trait?: string } | undefined)?.trait ?? "").toLowerCase();
+      const trait = ((getCard(c.cardId) as { trait?: string } | undefined)?.trait ?? "").toLowerCase();
         if (trait === "transport" && evacuatablePlanets.length > 0) keep += 3;
         else if (trait === "starfighter") keep += aggressive ? 1.2 : 0.4;
         else {

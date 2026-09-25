@@ -2433,13 +2433,20 @@ function fighterBattleCards(f: BattleFighter): CardInstance[] {
   return cards;
 }
 
-/** The character with this battle card must be the last card in the plan, not merely the last character. */
+/** Qui-Gon's Final Stand / To The Death: the character with the card is the last character in the plan. Weapons used with that character may sit after them. */
 function sideSkipsBreakthrough(fighters: BattleFighter[], pile: CardInstance[]): boolean {
-  const last = pile[pile.length - 1];
-  if (!last) return false;
+  let lastCharIndex = -1;
+  for (let i = 0; i < pile.length; i++) {
+    if (getCardType(pile[i].cardId, pile[i].cardSet) === "character") lastCharIndex = i;
+  }
+  if (lastCharIndex < 0) return false;
+  for (let i = lastCharIndex + 1; i < pile.length; i++) {
+    if (getCardType(pile[i].cardId, pile[i].cardSet) !== "weapon") return false;
+  }
+  const lastCharId = pile[lastCharIndex].instanceId;
   return fighters.some((f) => {
     if (!fighterBattleCards(f).some((c) => battleCardSkipsBreakthrough(c.cardId, c.cardSet))) return false;
-    return [f.character, f.character2, f.character3].some((c) => c?.instanceId === last.instanceId);
+    return [f.character, f.character2, f.character3].some((c) => c?.instanceId === lastCharId);
   });
 }
 
