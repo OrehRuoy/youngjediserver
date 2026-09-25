@@ -1516,6 +1516,29 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 			_clear_dotf_overlay()
 		status_label.text = "Opponent is switching destiny numbers..."
 		return
+	var redraw: Variant = pub.get("destinyRedrawPending", null)
+	if redraw is Dictionary and str(redraw.get("side", "")) == my_side:
+		if _dotf_overlay_kind != "destiny_redraw":
+			_show_destiny_redraw(redraw)
+		return
+	if redraw is Dictionary and str(redraw.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "destiny_redraw":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent may discard a destiny card and redraw..."
+		return
+	var choose: Variant = pub.get("destinyChoosePending", null)
+	if choose is Dictionary and str(choose.get("side", "")) == my_side:
+		var choose_draw: Dictionary = choose.get("draw", {})
+		var choose_key := str(choose_draw.get("key", ""))
+		if _dotf_overlay_kind != "destiny_choose" or _damage_replace_key != choose_key:
+			_damage_replace_key = choose_key
+			_show_destiny_choose(choose)
+		return
+	if choose is Dictionary and str(choose.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "destiny_choose":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is choosing a destiny card..."
+		return
 	var replace_damage: Variant = pub.get("damageReplacePending", null)
 	if replace_damage is Dictionary and str(replace_damage.get("side", "")) == my_side:
 		var drawn: Dictionary = replace_damage.get("draw", {})
@@ -1530,8 +1553,8 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 		status_label.text = "Opponent may replace a destiny number with damage..."
 		return
 
-	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "win_control" or _dotf_overlay_kind == "destiny_swap" or _dotf_overlay_kind == "damage_replace" or _dotf_overlay_kind == "peek_opp_deck" or _dotf_overlay_kind == "jedi_training" or _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "pounded" or _dotf_overlay_kind == "deploy_draw":
-		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (replace_damage is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand") and not (pounded is Dictionary) and not (drawp is Dictionary):
+	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "win_control" or _dotf_overlay_kind == "destiny_swap" or _dotf_overlay_kind == "destiny_redraw" or _dotf_overlay_kind == "destiny_choose" or _dotf_overlay_kind == "damage_replace" or _dotf_overlay_kind == "peek_opp_deck" or _dotf_overlay_kind == "jedi_training" or _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "pounded" or _dotf_overlay_kind == "deploy_draw":
+		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (redraw is Dictionary) and not (choose is Dictionary) and not (replace_damage is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand") and not (pounded is Dictionary) and not (drawp is Dictionary):
 			_clear_dotf_overlay()
 
 	_update_duel_ui(state, pub, my_side)
@@ -1633,6 +1656,65 @@ func _jedi_cost_badge(card: Control, cost: int, can_pay: bool) -> void:
 	badge.add_theme_constant_override("shadow_offset_y", 1)
 	badge.add_theme_constant_override("shadow_outline_size", 4)
 	card.add_child(badge)
+
+
+func _show_destiny_choose(pending: Dictionary) -> void:
+	var draw: Dictionary = pending.get("draw", {})
+	var key := str(draw.get("key", ""))
+	var vbox := _begin_choice_overlay("destiny_choose", "Watto draws two destiny cards")
+	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "Choose which destiny to use. Both cards go to your hand."
+	vbox.add_child(note)
+	var options: Array = draw.get("options", [])
+	for option in options:
+		if not (option is Dictionary):
+			continue
+		var cid := str(option.get("cardId", ""))
+		var destiny := int(option.get("destiny", 0))
+		if not cid.is_empty():
+			var preview: Control = CardPlaceholderScene.instantiate()
+			vbox.add_child(preview)
+			preview.set_card(cid, "destiny", "", "")
+		var use_btn := Button.new()
+		use_btn.text = "Use destiny %d" % destiny
+		var picked := cid
+		use_btn.pressed.connect(func() -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_destiny_choose", "key": key, "cardId": picked}})
+		)
+		vbox.add_child(use_btn)
+
+
+func _show_destiny_redraw(pending: Dictionary) -> void:
+	var vbox := _begin_choice_overlay("destiny_redraw", "Anakin may discard one destiny card and redraw")
+	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "Once this turn, when he draws destiny for a battle card, a weapon, or his own power, you may discard that card and draw a new one."
+	vbox.add_child(note)
+	var draws: Array = pending.get("draws", [])
+	for draw in draws:
+		if not (draw is Dictionary):
+			continue
+		var destiny := int(draw.get("destiny", 0))
+		var key := str(draw.get("key", ""))
+		var cid := str(draw.get("cardId", ""))
+		if not cid.is_empty():
+			var preview: Control = CardPlaceholderScene.instantiate()
+			vbox.add_child(preview)
+			preview.set_card(cid, "destiny", "", "")
+		var use_btn := Button.new()
+		use_btn.text = "Discard destiny %d and redraw" % destiny
+		var redraw_key := key
+		use_btn.pressed.connect(func() -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_destiny_redraw", "key": redraw_key}})
+		)
+		vbox.add_child(use_btn)
+	var keep_btn := Button.new()
+	keep_btn.text = "Keep these"
+	keep_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "decline_destiny_redraw"}})
+	)
+	vbox.add_child(keep_btn)
 
 
 func _show_damage_replace(pending: Dictionary) -> void:
@@ -4142,7 +4224,7 @@ func _refresh() -> void:
 	play_card_btn.visible = false
 	var battle_active: bool = pub.get("battlePlanPhase", false) or pub.get("battleCardDeclareSide", "") != ""
 	var evac_in_progress: bool = pub.get("evacuationState", {}).size() > 0
-	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active)) and not (pub.get("planetEffectFetch") is Dictionary) and not (pub.get("deployFromDeckPending") is Dictionary) and not (pub.get("winControlPending") is Dictionary) and not (pub.get("duelState") is Dictionary) and not (pub.get("destinySwapPending") is Dictionary) and not (pub.get("damageReplacePending") is Dictionary) and not (pub.get("effectActivationPending") is Dictionary) and not (pub.get("jediTrainingPending") is Dictionary) and not (pub.get("poundedPending") is Dictionary) and not (pub.get("deployDrawPending") is Dictionary)
+	pass_phase_btn.visible = is_my_turn and not evac_in_progress and (phase == "deploy" or (phase == "battle" and not battle_active)) and not (pub.get("planetEffectFetch") is Dictionary) and not (pub.get("deployFromDeckPending") is Dictionary) and not (pub.get("winControlPending") is Dictionary) and not (pub.get("duelState") is Dictionary) and not (pub.get("destinySwapPending") is Dictionary) and not (pub.get("damageReplacePending") is Dictionary) and not (pub.get("destinyRedrawPending") is Dictionary) and not (pub.get("destinyChoosePending") is Dictionary) and not (pub.get("effectActivationPending") is Dictionary) and not (pub.get("jediTrainingPending") is Dictionary) and not (pub.get("poundedPending") is Dictionary) and not (pub.get("deployDrawPending") is Dictionary)
 	var any_face_down: bool = false
 	for card in pub.get("lightInPlay", []):
 		if card.get("faceDown", false):
@@ -4385,6 +4467,10 @@ func _play_blocked(pub: Dictionary) -> bool:
 	if pub.get("jediTrainingPending") is Dictionary:
 		return true
 	if pub.get("damageReplacePending") is Dictionary:
+		return true
+	if pub.get("destinyRedrawPending") is Dictionary:
+		return true
+	if pub.get("destinyChoosePending") is Dictionary:
 		return true
 	if pub.get("poundedPending") is Dictionary:
 		return true

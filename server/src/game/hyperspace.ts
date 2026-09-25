@@ -17,6 +17,7 @@ import {
   getStarfighterSupportBonus,
   getTransportDamageReductionFromCharacters,
   getTransportSupportBonus,
+  getEvacuatingStarshipPowerBonus,
   millFromDeck,
   shuffleDeck,
 } from "./state";
@@ -401,7 +402,7 @@ function applyStarshipBattleDestiny(state: GameStateData, side: Side, fighter: S
         supportTotal += support;
       }
     } else if (isTransport(ship.cardId, ship.cardSet)) {
-      const support = getTransportSupportBonus(state, side);
+      const support = getTransportSupportBonus(state, side) + getEvacuatingStarshipPowerBonus(state, side, ship.cardId);
       if (support > 0) {
         power += support;
         supportTotal += support;

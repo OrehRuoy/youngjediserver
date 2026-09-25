@@ -138,6 +138,10 @@ export function handleGameAction(
       return { applied: false, error: "Could not play card" };
     }
     const played = (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === instanceId);
+    if (played && cardType === "character") {
+      const deployDamageWinner = deployDraw.maybeApplyDeployDamage(g, side, card.cardId, card.cardSet, played.faceDown);
+      if (deployDamageWinner) return { applied: true, gameOver: { winner: deployDamageWinner, reason: "deck_empty" } };
+    }
     let startedSearch = false;
     if (usesDeployFromDeck(g) && played && !played.faceDown) {
       startedSearch = deployFromDeck.maybeBeginDeployFromDeck(g, side, instanceId, card.cardId, card.cardSet, played.faceDown);
@@ -694,6 +698,32 @@ export function handleGameAction(
   if (action.kind === "decline_damage_replace") {
     const ok = state.declineDamageReplace(g, side);
     return ok ? { applied: true } : { applied: false, error: "No damage replacement to skip" };
+  }
+
+  if (action.kind === "confirm_destiny_redraw") {
+    const key = action.key as string | undefined;
+    if (!key) return { applied: false, error: "Pick a destiny card to redraw" };
+    const ok = state.confirmDestinyRedraw(g, side, key);
+    if (!ok) return { applied: false, error: "That destiny card cannot be redrawn" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
+  if (action.kind === "decline_destiny_redraw") {
+    const ok = state.declineDestinyRedraw(g, side);
+    return ok ? { applied: true } : { applied: false, error: "No destiny redraw to skip" };
+  }
+
+  if (action.kind === "confirm_destiny_choose") {
+    const key = action.key as string | undefined;
+    const cardId = action.cardId as string | undefined;
+    if (!key || !cardId) return { applied: false, error: "Pick one of the destiny cards" };
+    const ok = state.confirmDestinyChoose(g, side, key, cardId);
+    if (!ok) return { applied: false, error: "That destiny card cannot be chosen" };
+    const deckWinner = state.getDeckEmptyWinner(g);
+    if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
+    return { applied: true };
   }
 
   return { applied: false, error: "Unknown action" };

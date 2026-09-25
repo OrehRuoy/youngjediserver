@@ -1439,13 +1439,13 @@
       "type": "battle",
       "powerAdd": 1,
       "lore": "none",
-      "canUse": "◆republicguard",
+      "canUse": "coruscantguard",
       "condition": "2:fighttogether",
       "destiny": 4,
       "destinyAdd": 0,
       "image": "61themightoftherepublic.png",
       "set": "thejedicouncil",
-      "gametext": "",
+      "gametext": "Use with any two Coruscant Guards. They fight together.",
       "gametextbonus": ""
     },
     {

@@ -148,6 +148,7 @@ export function advancePhase(gameId: string, onPhaseChange: (game: GameStateData
   if (nextPhase === "battle") {
     g.duelUsedThisTurn = false;
     g.foughtThisTurn = undefined;
+    g.destinyRedrawUsed = undefined;
   }
 
   if (nextPhase === "deploy") {
@@ -181,7 +182,7 @@ export function startPhaseTimer(
     if (g.evacuationState || g.evacuationResult) {
       return;
     }
-    if (g.effectActivationPending || g.planetEffectFetch || g.deployFromDeckPending || g.deployDrawPending || g.duelState || g.winControlPending || g.destinySwapPending || g.damageReplacePending || g.jediTrainingPending || g.poundedPending) {
+    if (g.effectActivationPending || g.planetEffectFetch || g.deployFromDeckPending || g.deployDrawPending || g.duelState || g.winControlPending || g.destinySwapPending || g.damageReplacePending || g.destinyChoosePending || g.jediTrainingPending || g.poundedPending) {
       return;
     }
     const elapsed = Date.now() - g.phaseStartedAt;

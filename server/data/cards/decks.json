@@ -1459,6 +1459,50 @@
           "count": 1
         }
       ]
+    },
+    {
+      "id": "hyperspace_test_light",
+      "name": "Hyperspace Test (Light)",
+      "side": "light",
+      "cards": [
+        { "id": "nabootheedpalace", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "coruscantcapitalcity", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "tatooinepodracearena", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "amidalasstarshiproyaltransport", "set": "battleofnaboo", "count": 1 },
+        { "id": "republiccruisertransport", "set": "battleofnaboo", "count": 3 },
+        { "id": "bravo3naboostarfighter", "set": "battleofnaboo", "count": 1 },
+        { "id": "naboostarfighter", "set": "battleofnaboo", "count": 3 },
+        { "id": "naboostarfighterduel", "set": "duelofthefates", "count": 2 },
+        { "id": "naboofighterattack", "set": "duelofthefates", "count": 3 },
+        { "id": "runtheblockade", "set": "duelofthefates", "count": 3 },
+        { "id": "r2d2starshipmaintenancedroid", "set": "enhancedbattleofnaboo", "count": 1 },
+        { "id": "ricoliestarshippilot", "set": "duelofthefates", "count": 1 },
+        { "id": "anakinskywalkerrookiepilot", "set": "duelofthefates", "count": 1 },
+        { "id": "bravopilotflyer", "set": "duelofthefates", "count": 4 },
+        { "id": "royalguardveteran", "set": "menaceofdarthmaul", "count": 5 },
+        { "id": "royalguardleader", "set": "menaceofdarthmaul", "count": 6 }
+      ]
+    },
+    {
+      "id": "hyperspace_test_dark",
+      "name": "Hyperspace Test (Dark)",
+      "side": "dark",
+      "cards": [
+        { "id": "naboogunganswamp", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "coruscantjedicouncilchamber", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "tatooinedesertlandingsite", "set": "menaceofdarthmaul", "count": 2 },
+        { "id": "droidcontrolshiptradefederationtransport", "set": "battleofnaboo", "count": 1 },
+        { "id": "battleshiptradefederationtransport", "set": "battleofnaboo", "count": 3 },
+        { "id": "sithinfiltratorstarfighter", "set": "battleofnaboo", "count": 2 },
+        { "id": "droidstarfighter", "set": "battleofnaboo", "count": 2 },
+        { "id": "droidstarfighterduel", "set": "duelofthefates", "count": 2 },
+        { "id": "starfighterscreen", "set": "duelofthefates", "count": 3 },
+        { "id": "impossible", "set": "duelofthefates", "count": 3 },
+        { "id": "teyhowneimoidiancommofficer", "set": "duelofthefates", "count": 1 },
+        { "id": "neimoidiantradefederationpilot", "set": "menaceofdarthmaul", "count": 6 },
+        { "id": "battledroidinfantrymttdivision", "set": "menaceofdarthmaul", "count": 5 },
+        { "id": "battledroidofficeraatdivision", "set": "menaceofdarthmaul", "count": 6 }
+      ]
     }
   ]
 }
