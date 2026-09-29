@@ -7,6 +7,7 @@ const DECKS_PATH := "res://data/decks.json"
 const CUSTOM_DECKS_PATH := "user://decks.json"
 const DEFAULT_LIGHT_DECK := "starter_deck"
 const DEFAULT_DARK_DECK := "starter_dark_deck"
+const SeatStyle = preload("res://scripts/seat_style.gd")
 
 @onready var title_label: Label = $Margin/VBox/Title
 @onready var light_panel: PanelContainer = $Margin/VBox/Seats/LightSeat
@@ -24,6 +25,11 @@ const DEFAULT_DARK_DECK := "starter_dark_deck"
 @onready var start_btn: Button = $Margin/VBox/ActionsBar/Actions/StartBtn
 @onready var status_label: Label = $Margin/VBox/StatusLabel
 @onready var wire_decoration: Control = $WireDecoration
+@onready var light_side_label: Label = $Margin/VBox/Seats/LightSeat/VBox/SideLabel
+@onready var dark_side_label: Label = $Margin/VBox/Seats/DarkSeat/VBox/SideLabel
+
+var _light_ready: bool = false
+var _dark_ready: bool = false
 
 var _light_decks: Array[Dictionary] = []
 var _dark_decks: Array[Dictionary] = []
@@ -50,6 +56,10 @@ func _ready() -> void:
 	dark_deck_select.item_selected.connect(_on_dark_deck_selected)
 	DropdownStyle.apply(light_deck_select, DropdownStyle.LIGHT_ACCENT, theme)
 	DropdownStyle.apply(dark_deck_select, DropdownStyle.DARK_ACCENT, theme)
+	SeatStyle.chip(light_side_label, SeatStyle.LIGHT)
+	SeatStyle.chip(dark_side_label, SeatStyle.DARK)
+	light_side_label.add_theme_font_size_override("font_size", 16)
+	dark_side_label.add_theme_font_size_override("font_size", 16)
 	_refresh()
 	call_deferred("_update_wires")
 
@@ -167,19 +177,24 @@ func _refresh() -> void:
 	var state: RefCounted = Connection.get_state()
 	var table: Dictionary = state.current_table
 	var game_num: String = _game_number(table.get("id", ""))
-	title_label.text = "%s — Waiting for players" % game_num
 	var light_name: String = _player_name(state, table, "lightPlayerId")
 	var dark_name: String = _player_name(state, table, "darkPlayerId")
 	var light_ready: bool = table.get("lightReady", false)
 	var dark_ready: bool = table.get("darkReady", false)
+	var light_seated: bool = light_name != "—"
+	var dark_seated: bool = dark_name != "—"
 	var light_deck_id: String = table.get("lightDeckId", DEFAULT_LIGHT_DECK)
 	var dark_deck_id: String = table.get("darkDeckId", DEFAULT_DARK_DECK)
-	light_name_label.text = "LIGHT" if light_name == "—" else light_name
-	light_status_label.text = "Ready" if light_ready else "Not ready"
-	light_status_label.add_theme_color_override("font_color", Color(0.3, 0.85, 0.35) if light_ready else Color(0.55, 0.6, 0.7))
-	dark_name_label.text = "DARK" if dark_name == "—" else dark_name
-	dark_status_label.text = "Ready" if dark_ready else "Not ready"
-	dark_status_label.add_theme_color_override("font_color", Color(0.3, 0.85, 0.35) if dark_ready else Color(0.55, 0.6, 0.7))
+	var headline: String = "Waiting for an opponent"
+	if light_seated and dark_seated:
+		headline = "Ready to start" if light_ready and dark_ready else "Get ready"
+	title_label.text = "%s — %s" % [game_num, headline]
+	light_name_label.text = light_name if light_seated else "LIGHT"
+	dark_name_label.text = dark_name if dark_seated else "DARK"
+	_apply_seat_state(light_status_label, light_panel, light_card_art, true, light_seated, light_ready)
+	_apply_seat_state(dark_status_label, dark_panel, dark_card_art, false, dark_seated, dark_ready)
+	_light_ready = light_ready
+	_dark_ready = dark_ready
 	_populate_deck_dropdown(light_deck_select, _light_decks, light_deck_id, _last_light_custom_deck_id)
 	_populate_deck_dropdown(dark_deck_select, _dark_decks, dark_deck_id, _last_dark_custom_deck_id)
 	_apply_seat_art(light_card_art, "light", _cover_for_seat("light", table))
@@ -193,6 +208,23 @@ func _refresh() -> void:
 	var my_ready: bool = light_ready if state.my_side == "light" else dark_ready
 	ready_btn.button_pressed = my_ready
 	_update_ready_btn(my_ready)
+	call_deferred("_update_wires")
+
+
+## Status pill, panel border and card brightness for one seat: empty / seated / ready.
+func _apply_seat_state(status: Label, panel: PanelContainer, art: TextureRect, is_light: bool, seated: bool, ready: bool) -> void:
+	if ready:
+		status.text = "READY"
+		SeatStyle.chip(status, SeatStyle.READY)
+	elif seated:
+		status.text = "NOT READY"
+		SeatStyle.chip(status, SeatStyle.IDLE, false)
+	else:
+		status.text = "WAITING FOR PLAYER"
+		SeatStyle.chip(status, SeatStyle.WARN, false)
+	status.add_theme_font_size_override("font_size", 13)
+	panel.add_theme_stylebox_override("panel", SeatStyle.seat_panel(is_light, ready))
+	art.modulate = Color(1, 1, 1, 1) if seated else Color(1, 1, 1, 0.4)
 
 
 func _update_ready_btn(is_ready: bool) -> void:
@@ -344,6 +376,7 @@ func _on_game_ended(_payload: Dictionary) -> void:
 
 func _on_error(msg: String) -> void:
 	status_label.text = "Error: %s" % msg
+	status_label.add_theme_color_override("font_color", Color(0.95, 0.4, 0.35))
 
 
 func _update_wires() -> void:
@@ -351,9 +384,10 @@ func _update_wires() -> void:
 		return
 	var left_rect := Rect2(light_panel.global_position, light_panel.size)
 	var right_rect := Rect2(dark_panel.global_position, dark_panel.size)
-	wire_decoration.setup(left_rect, right_rect,
-		Color(0.25, 0.5, 0.85, 0.35),
-		Color(0.75, 0.25, 0.25, 0.35))
+	# A ready seat's wires turn green to match its panel.
+	var left_color := Color(0.3, 0.8, 0.4, 0.4) if _light_ready else Color(0.25, 0.5, 0.85, 0.35)
+	var right_color := Color(0.3, 0.8, 0.4, 0.4) if _dark_ready else Color(0.75, 0.25, 0.25, 0.35)
+	wire_decoration.setup(left_rect, right_rect, left_color, right_color)
 
 
 func _notification(what: int) -> void:

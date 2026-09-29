@@ -329,6 +329,7 @@ alignment = 1
 [node name="LeaveBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]
 layout_mode = 2
 custom_minimum_size = Vector2(140, 42)
+theme_type_variation = &"DangerButton"
 text = "Leave table"
 
 [node name="ReadyBtn" type="Button" parent="Margin/VBox/ActionsBar/Actions"]

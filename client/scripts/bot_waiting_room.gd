@@ -6,6 +6,7 @@ extends Control
 const DECKS_PATH := "res://data/decks.json"
 const CUSTOM_DECKS_PATH := "user://decks.json"
 const RANDOM_ID := "random"
+const SeatStyle = preload("res://scripts/seat_style.gd")
 
 @onready var title_label: Label = $Margin/VBox/Title
 @onready var player_panel: PanelContainer = $Margin/VBox/Seats/PlayerSeat
@@ -16,7 +17,6 @@ const RANDOM_ID := "random"
 @onready var player_card_glow: PanelContainer = $Margin/VBox/Seats/PlayerSeat/VBox/CardGlow
 @onready var player_deck_select: OptionButton = %PlayerDeckSelect
 @onready var bot_panel: PanelContainer = $Margin/VBox/Seats/BotSeat
-@onready var bot_avatar: TextureRect = $Margin/VBox/Seats/BotSeat/VBox/BotAvatar
 @onready var bot_name_label: Label = $Margin/VBox/Seats/BotSeat/VBox/NameLabel
 @onready var bot_side_tag: Label = %BotSideTag
 @onready var bot_deck_select: OptionButton = %BotDeckSelect
@@ -212,7 +212,8 @@ func _refresh_ui() -> void:
 
 func _set_side_tag(tag: Label, is_light: bool) -> void:
 	tag.text = "LIGHT SIDE" if is_light else "DARK SIDE"
-	tag.add_theme_color_override("font_color", Color(0.55, 0.75, 1.0) if is_light else Color(1.0, 0.55, 0.52))
+	SeatStyle.chip(tag, SeatStyle.LIGHT if is_light else SeatStyle.DARK)
+	tag.add_theme_font_size_override("font_size", 13)
 
 
 func _populate_deck_dropdown(btn: OptionButton, decks: Array[Dictionary]) -> void:
@@ -344,6 +345,7 @@ func _on_leave_pressed() -> void:
 
 func _on_start_pressed() -> void:
 	if not Connection.get_client().is_connected_to_server():
+		status_label.add_theme_color_override("font_color", Color(0.95, 0.4, 0.35))
 		status_label.text = "Not connected"
 		return
 	var player_deck: Dictionary = _get_player_deck_selection()
@@ -374,6 +376,7 @@ func _on_start_pressed() -> void:
 	# send_message works with the itch launcher client; start_bot_game() there has no botStyle arg.
 	Connection.get_client().send_message(payload)
 	start_btn.disabled = true
+	status_label.add_theme_color_override("font_color", Color(0.65, 0.75, 0.9))
 	status_label.text = "Starting game..."
 
 
@@ -383,6 +386,7 @@ func _on_game_started(_payload: Dictionary) -> void:
 
 func _on_error(msg: String) -> void:
 	status_label.text = msg
+	status_label.add_theme_color_override("font_color", Color(0.95, 0.4, 0.35))
 	start_btn.disabled = false
 
 

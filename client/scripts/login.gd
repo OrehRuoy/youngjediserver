@@ -21,6 +21,8 @@ const STATUS_INFO := Color(0.6, 0.72, 0.9)
 const STATUS_OK := Color(0.4, 0.9, 0.5)
 const STATUS_WARN := Color(0.95, 0.82, 0.35)
 const STATUS_ERR := Color(0.95, 0.4, 0.35)
+const HEADING_FONT_PATH := "res://fonts/Orbitron.ttf"
+const LAUNCHER_VERSION_PATH := "user://version.txt"
 
 var pending_login_name: String = ""
 var _local_fallback_timer: float = -1.0  # when > 0, count down then try remote
@@ -78,30 +80,73 @@ func _ready() -> void:
 			_local_fallback_timer = 2.0
 
 
-## Version footer, wire frame around the card, fade-in, and initial focus.
+## Version footer and a short fade-in. The corner brackets stayed off this screen:
+## on a card this small they read as stray marks.
 func _setup_decor() -> void:
+	_style_login_button()
+	if wire_decoration != null:
+		wire_decoration.visible = false
 	if version_label != null:
-		var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
+		var version: String = _game_version()
 		version_label.text = "Young Jedi CCG  •  v%s" % version if not version.is_empty() else "Young Jedi CCG"
-	if form_card != null and wire_decoration != null:
-		form_card.item_rect_changed.connect(_update_wires)
-		_update_wires.call_deferred()
+	if form_card != null:
 		form_card.modulate.a = 0.0
-		wire_decoration.modulate.a = 0.0
 		var t := create_tween()
-		t.set_parallel(true)
 		t.set_ease(Tween.EASE_OUT)
 		t.set_trans(Tween.TRANS_QUAD)
-		t.tween_property(form_card, "modulate:a", 1.0, 0.4)
-		t.tween_property(wire_decoration, "modulate:a", 1.0, 0.7)
+		t.tween_property(form_card, "modulate:a", 1.0, 0.35)
 	name_edit.grab_focus.call_deferred()
 
 
-func _update_wires() -> void:
-	if form_card == null or wire_decoration == null:
+## Pack version. The launcher records the pack it downloaded in user://version.txt; its own
+## project version is whatever exe the tester installed, so prefer the recorded one.
+func _game_version() -> String:
+	if FileAccess.file_exists(LAUNCHER_VERSION_PATH):
+		var f := FileAccess.open(LAUNCHER_VERSION_PATH, FileAccess.READ)
+		if f != null:
+			var v := f.get_as_text().strip_edges()
+			f.close()
+			if not v.is_empty():
+				return v
+	return str(ProjectSettings.get_setting("application/config/version", ""))
+
+
+## Solid gold call-to-action, the same gold as the logo, with dark lettering.
+func _style_login_button() -> void:
+	if login_btn == null:
 		return
-	var r := Rect2(form_card.global_position - wire_decoration.global_position, form_card.size)
-	wire_decoration.call("setup", r, Rect2())
+	if ResourceLoader.exists(HEADING_FONT_PATH):
+		var fv := FontVariation.new()
+		fv.base_font = load(HEADING_FONT_PATH) as Font
+		fv.spacing_glyph = 4
+		login_btn.add_theme_font_override("font", fv)
+	var ink := Color(0.16, 0.11, 0.03, 1)
+	login_btn.add_theme_color_override("font_color", ink)
+	login_btn.add_theme_color_override("font_hover_color", Color(0.08, 0.05, 0.01, 1))
+	login_btn.add_theme_color_override("font_pressed_color", ink)
+	login_btn.add_theme_color_override("font_focus_color", ink)
+	login_btn.add_theme_color_override("font_disabled_color", Color(0.3, 0.24, 0.12, 0.7))
+	login_btn.add_theme_stylebox_override("normal", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(1, 0.9, 0.55, 1), 10))
+	login_btn.add_theme_stylebox_override("hover", _gold_button(Color(1, 0.86, 0.46, 1), Color(1, 0.95, 0.7, 1), 16))
+	login_btn.add_theme_stylebox_override("pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.85, 0.7, 0.32, 1), 4))
+	login_btn.add_theme_stylebox_override("hover_pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.85, 0.7, 0.32, 1), 4))
+	login_btn.add_theme_stylebox_override("focus", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(1, 0.95, 0.7, 1), 10))
+	login_btn.add_theme_stylebox_override("disabled", _gold_button(Color(0.35, 0.3, 0.16, 0.8), Color(0.5, 0.42, 0.22, 0.6), 0))
+
+
+func _gold_button(fill: Color, edge: Color, glow: int) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = fill
+	s.border_color = edge
+	s.set_border_width_all(2)
+	s.set_corner_radius_all(8)
+	s.content_margin_left = 18
+	s.content_margin_right = 18
+	s.content_margin_top = 10
+	s.content_margin_bottom = 10
+	s.shadow_color = Color(0.95, 0.75, 0.25, 0.45)
+	s.shadow_size = glow
+	return s
 
 
 func _set_status(text: String, color: Color = STATUS_INFO) -> void:

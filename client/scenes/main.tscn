@@ -210,17 +210,17 @@ text = "PLAY"
 layout_mode = 2
 theme_override_colors/font_color = Color(0.55, 0.62, 0.78, 1)
 theme_override_font_sizes/font_size = 12
-text = "NEW TABLE"
+text = "HOST A NEW TABLE"
 
 [node name="CreateLight" type="Button" parent="Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-text = "Create (Light)"
+text = "LIGHT SIDE"
 
 [node name="CreateDark" type="Button" parent="Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
-text = "Create (Dark)"
+text = "DARK SIDE"
 
 [node name="SeparatorPlay" type="HSeparator" parent="Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn"]
 layout_mode = 2

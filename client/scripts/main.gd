@@ -223,34 +223,91 @@ static func _make_bug_icon(tint: Color) -> ImageTexture:
 func _style_side_button(btn: Button, is_light: bool) -> void:
 	if not btn:
 		return
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.07, 0.14, 0.32, 0.9) if is_light else Color(0.18, 0.06, 0.28, 0.9)
-	style.border_width_left = 2
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = Color(0.4, 0.62, 1.0, 1) if is_light else Color(0.55, 0.3, 0.75, 1)
-	style.corner_radius_top_left = 6
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_right = 6
-	style.corner_radius_bottom_left = 6
-	style.content_margin_left = 14
-	style.content_margin_right = 14
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	style.shadow_color = Color(0.3, 0.5, 1.0, 0.18) if is_light else Color(0.4, 0.15, 0.6, 0.18)
-	style.shadow_size = 4
-	btn.add_theme_stylebox_override("normal", style)
-	var hover := style.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(0.1, 0.2, 0.42, 0.95) if is_light else Color(0.25, 0.1, 0.38, 0.95)
-	hover.border_color = Color(0.6, 0.78, 1.0, 1) if is_light else Color(0.7, 0.45, 0.9, 1)
-	hover.shadow_size = 6
+	# Same visual language as the table rows these buttons create: dark tinted card, thick
+	# side-coloured left edge, soft glow. Light = cool blue, Dark = purple.
+	var edge := Color(0.45, 0.7, 1.0, 1) if is_light else Color(0.72, 0.4, 0.95, 1)
+	var glow := Color(0.3, 0.55, 1.0, 0.32) if is_light else Color(0.55, 0.2, 0.85, 0.32)
+	var normal := _side_button_box(
+		Color(0.06, 0.12, 0.28, 0.94) if is_light else Color(0.15, 0.05, 0.26, 0.94),
+		edge.darkened(0.25), glow, 6)
+	var hover := _side_button_box(
+		Color(0.1, 0.19, 0.4, 0.98) if is_light else Color(0.24, 0.09, 0.38, 0.98),
+		edge.lightened(0.25), Color(glow.r, glow.g, glow.b, 0.6), 12)
+	var pressed := _side_button_box(
+		Color(0.05, 0.09, 0.22, 1.0) if is_light else Color(0.12, 0.04, 0.2, 1.0),
+		edge.darkened(0.1), Color(glow.r, glow.g, glow.b, 0.2), 3)
+	btn.add_theme_stylebox_override("normal", normal)
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("hover_pressed", hover)
-	btn.add_theme_stylebox_override("pressed", hover)
-	var tint := Color(0.7, 0.84, 1.0, 1) if is_light else Color(0.75, 0.5, 0.9, 1)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	var tint := Color(0.82, 0.92, 1.0, 1) if is_light else Color(0.9, 0.72, 1.0, 1)
 	btn.add_theme_color_override("font_color", tint)
-	btn.add_theme_color_override("font_hover_color", tint.lightened(0.25))
+	btn.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
+	btn.add_theme_color_override("font_pressed_color", tint.darkened(0.15))
+	btn.add_theme_color_override("font_hover_pressed_color", Color(1, 1, 1, 1))
+	# Orbitron lettering with a little tracking, like the section headers.
+	var font_res: Font = load("res://fonts/Orbitron.ttf") as Font
+	if font_res:
+		var fv := FontVariation.new()
+		fv.base_font = font_res
+		fv.spacing_glyph = 1
+		btn.add_theme_font_override("font", fv)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.icon = _make_saber_icon(Color(0.35, 0.7, 1.0) if is_light else Color(1.0, 0.25, 0.3))
+	btn.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.add_theme_constant_override("h_separation", 10)
+	btn.custom_minimum_size = Vector2(0, 48)
+
+
+static func _side_button_box(bg: Color, edge: Color, glow: Color, glow_size: int) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_width_left = 4
+	s.border_width_top = 1
+	s.border_width_right = 1
+	s.border_width_bottom = 1
+	s.border_color = edge
+	s.set_corner_radius_all(8)
+	s.content_margin_left = 14
+	s.content_margin_right = 14
+	s.content_margin_top = 8
+	s.content_margin_bottom = 8
+	s.shadow_color = glow
+	s.shadow_size = glow_size
+	return s
+
+
+## Small lightsaber (silver hilt, glowing blade) drawn diagonally; blade colour = side.
+static func _make_saber_icon(blade: Color) -> ImageTexture:
+	var sz := 28
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var a := Vector2(5.0, 23.0)   # pommel
+	var b := Vector2(23.0, 5.0)   # blade tip
+	var ab := b - a
+	var len_sq := ab.length_squared()
+	for y in sz:
+		for x in sz:
+			var p := Vector2(x + 0.5, y + 0.5)
+			var t := clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
+			var d := p.distance_to(a + ab * t)
+			var col := Color(0, 0, 0, 0)
+			if t < 0.3:
+				# Hilt: two-tone metal with a darker grip band.
+				if d <= 2.1:
+					var band: bool = int(t * 20.0) % 2 == 0
+					col = Color(0.62, 0.66, 0.74, 1) if band else Color(0.4, 0.43, 0.5, 1)
+			else:
+				# Blade: white-hot core, coloured body, soft outer glow.
+				if d <= 0.9:
+					col = Color(1, 1, 1, 1)
+				elif d <= 1.9:
+					col = Color(blade.r, blade.g, blade.b, 1)
+				elif d <= 3.6:
+					col = Color(blade.r, blade.g, blade.b, 0.45 * (1.0 - (d - 1.9) / 1.7))
+			if col.a > 0.0:
+				img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 
 func _process(delta: float) -> void:

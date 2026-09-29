@@ -6,6 +6,7 @@
 [ext_resource type="Texture2D" uid="uid://h3uhg65jrj1q" path="res://assets/check_white.svg" id="5_check"]
 [ext_resource type="Script" path="res://scripts/wire_decoration.gd" id="6_wires"]
 [ext_resource type="Shader" path="res://shaders/panel_stripes.gdshader" id="7_stripes"]
+[ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="8_theme"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxFlat_checkbox_panel"]
 
@@ -55,6 +56,9 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+; Set explicitly: the launcher runs this scene from a downloaded pack under its own project
+; theme, so relying on the project-wide theme leaves the buttons and fields unstyled.
+theme = ExtResource("8_theme")
 script = ExtResource("1_login")
 
 [node name="Background" type="TextureRect" parent="." unique_id=1524182169]
@@ -187,10 +191,10 @@ theme_override_icons/checked = ExtResource("5_check")
 text = "Stay logged in"
 
 [node name="LoginBtn" type="Button" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1586321534]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 17
 text = "LOGIN"
 
 [node name="StatusLabel" type="Label" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1879622421]
