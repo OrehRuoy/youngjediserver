@@ -103,7 +103,7 @@ func _blacken_clear_margin(img: Image) -> void:
 	var w := img.get_width()
 	var h := img.get_height()
 	var clear := Color(0, 0, 0, 0)
-	var band := 8
+	var band := 16
 	for y in h:
 		var x0 := 0
 		var x1 := w
