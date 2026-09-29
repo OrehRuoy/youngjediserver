@@ -224,7 +224,8 @@ func _apply_seat_state(status: Label, panel: PanelContainer, art: TextureRect, i
 		SeatStyle.chip(status, SeatStyle.WARN, false)
 	status.add_theme_font_size_override("font_size", 13)
 	panel.add_theme_stylebox_override("panel", SeatStyle.seat_panel(is_light, ready))
-	art.modulate = Color(1, 1, 1, 1) if seated else Color(1, 1, 1, 0.4)
+	# Both card backs stay fully opaque. Fading the empty seat made the dark back look see-through.
+	art.modulate = Color.WHITE
 
 
 func _update_ready_btn(is_ready: bool) -> void:

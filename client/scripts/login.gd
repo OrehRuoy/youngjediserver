@@ -126,15 +126,16 @@ func _style_login_button() -> void:
 	login_btn.add_theme_color_override("font_pressed_color", ink)
 	login_btn.add_theme_color_override("font_focus_color", ink)
 	login_btn.add_theme_color_override("font_disabled_color", Color(0.3, 0.24, 0.12, 0.7))
-	login_btn.add_theme_stylebox_override("normal", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(1, 0.9, 0.55, 1), 10))
-	login_btn.add_theme_stylebox_override("hover", _gold_button(Color(1, 0.86, 0.46, 1), Color(1, 0.95, 0.7, 1), 16))
-	login_btn.add_theme_stylebox_override("pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.85, 0.7, 0.32, 1), 4))
-	login_btn.add_theme_stylebox_override("hover_pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.85, 0.7, 0.32, 1), 4))
-	login_btn.add_theme_stylebox_override("focus", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(1, 0.95, 0.7, 1), 10))
-	login_btn.add_theme_stylebox_override("disabled", _gold_button(Color(0.35, 0.3, 0.16, 0.8), Color(0.5, 0.42, 0.22, 0.6), 0))
+	login_btn.add_theme_stylebox_override("normal", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(0.78, 0.62, 0.24, 1)))
+	login_btn.add_theme_stylebox_override("hover", _gold_button(Color(1, 0.86, 0.46, 1), Color(0.9, 0.74, 0.32, 1)))
+	login_btn.add_theme_stylebox_override("pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.62, 0.48, 0.16, 1)))
+	login_btn.add_theme_stylebox_override("hover_pressed", _gold_button(Color(0.72, 0.56, 0.18, 1), Color(0.62, 0.48, 0.16, 1)))
+	login_btn.add_theme_stylebox_override("focus", _gold_button(Color(0.9, 0.74, 0.32, 1), Color(0.78, 0.62, 0.24, 1)))
+	login_btn.add_theme_stylebox_override("disabled", _gold_button(Color(0.35, 0.3, 0.16, 0.8), Color(0.5, 0.42, 0.22, 0.6)))
+	_style_stay_logged_in()
 
 
-func _gold_button(fill: Color, edge: Color, glow: int) -> StyleBoxFlat:
+func _gold_button(fill: Color, edge: Color) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = fill
 	s.border_color = edge
@@ -144,9 +145,47 @@ func _gold_button(fill: Color, edge: Color, glow: int) -> StyleBoxFlat:
 	s.content_margin_right = 18
 	s.content_margin_top = 10
 	s.content_margin_bottom = 10
-	s.shadow_color = Color(0.95, 0.75, 0.25, 0.45)
-	s.shadow_size = glow
+	s.shadow_size = 0
 	return s
+
+
+## The default checkbox is a gray square that disappears on this panel.
+func _style_stay_logged_in() -> void:
+	if stay_logged_in_cb == null:
+		return
+	var ink := Color(0.9, 0.93, 1, 1)
+	stay_logged_in_cb.add_theme_color_override("font_color", ink)
+	stay_logged_in_cb.add_theme_color_override("font_hover_color", Color(1, 0.97, 0.88, 1))
+	stay_logged_in_cb.add_theme_color_override("font_pressed_color", ink)
+	stay_logged_in_cb.add_theme_color_override("font_hover_pressed_color", Color(1, 0.97, 0.88, 1))
+	stay_logged_in_cb.add_theme_icon_override("unchecked", _check_box_icon(false))
+	stay_logged_in_cb.add_theme_icon_override("checked", _check_box_icon(true))
+	stay_logged_in_cb.add_theme_icon_override("unchecked_disabled", _check_box_icon(false))
+	stay_logged_in_cb.add_theme_icon_override("checked_disabled", _check_box_icon(true))
+
+
+func _check_box_icon(checked: bool) -> ImageTexture:
+	var sz := 22
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var edge := Color(0.72, 0.84, 1, 1)
+	var fill := Color(0.18, 0.36, 0.68, 1) if checked else Color(0.06, 0.1, 0.2, 0.95)
+	for y in range(1, sz - 1):
+		for x in range(1, sz - 1):
+			var on_edge: bool = x <= 2 or y <= 2 or x >= sz - 3 or y >= sz - 3
+			img.set_pixel(x, y, edge if on_edge else fill)
+	if checked:
+		var mark := Color(0.96, 0.97, 1, 1)
+		var pts: Array[Vector2i] = [
+			Vector2i(5, 11), Vector2i(6, 12), Vector2i(7, 13), Vector2i(8, 14),
+			Vector2i(9, 15), Vector2i(10, 14), Vector2i(11, 13), Vector2i(12, 12),
+			Vector2i(13, 11), Vector2i(14, 10), Vector2i(15, 9), Vector2i(16, 8), Vector2i(17, 7),
+		]
+		for p in pts:
+			img.set_pixel(p.x, p.y, mark)
+			if p.y + 1 < sz:
+				img.set_pixel(p.x, p.y + 1, mark)
+	return ImageTexture.create_from_image(img)
 
 
 func _set_status(text: String, color: Color = STATUS_INFO) -> void:

@@ -38,14 +38,14 @@ static func seat_panel(is_light: bool, ready: bool = false) -> StyleBoxFlat:
 static func glow_panel(is_light: bool) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	if is_light:
-		s.bg_color = Color(0.15, 0.35, 0.75, 0.25)
-		s.shadow_color = Color(0.2, 0.4, 0.9, 0.45)
+		s.bg_color = Color(0.15, 0.35, 0.75, 0.08)
+		s.shadow_color = Color(0.2, 0.4, 0.9, 0.22)
 	else:
-		s.bg_color = Color(0.6, 0.15, 0.15, 0.25)
-		s.shadow_color = Color(0.85, 0.2, 0.2, 0.45)
+		s.bg_color = Color(0.6, 0.15, 0.15, 0.08)
+		s.shadow_color = Color(0.85, 0.2, 0.2, 0.22)
 	s.set_corner_radius_all(8)
 	s.set_content_margin_all(10)
-	s.shadow_size = 18
+	s.shadow_size = 6
 	return s
 
 

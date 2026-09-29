@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://waiting_room"]
+[gd_scene load_steps=16 format=3 uid="uid://waiting_room"]
 
 [ext_resource type="Script" path="res://scripts/waiting_room.gd" id="1_wr"]
 [ext_resource type="Texture2D" path="res://assets/space_background.png" id="2_bg"]
@@ -6,7 +6,7 @@
 [ext_resource type="Texture2D" path="res://assets/card_back_dark.png" id="4_dark"]
 [ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="5_theme"]
 [ext_resource type="Script" path="res://scripts/wire_decoration.gd" id="6_wires"]
-[ext_resource type="Shader" path="res://shaders/panel_stripes.gdshader" id="7_stripes"]
+[ext_resource type="Shader" path="res://shaders/panel_wash.gdshader" id="7_stripes"]
 [ext_resource type="FontFile" path="res://fonts/Orbitron.ttf" id="8_font"]
 
 ; ── Light seat panel: dark with blue tint + blue border ──
@@ -51,7 +51,7 @@ shadow_offset = Vector2(0, 2)
 
 ; ── Card glow behind card backs (light = blue glow) ──
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_glow_light"]
-bg_color = Color(0.15, 0.35, 0.75, 0.25)
+bg_color = Color(0.15, 0.35, 0.75, 0.08)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -60,13 +60,13 @@ content_margin_left = 10.0
 content_margin_top = 10.0
 content_margin_right = 10.0
 content_margin_bottom = 10.0
-shadow_color = Color(0.2, 0.4, 0.9, 0.45)
-shadow_size = 18
+shadow_color = Color(0.2, 0.4, 0.9, 0.22)
+shadow_size = 6
 shadow_offset = Vector2(0, 0)
 
 ; ── Card glow behind card backs (dark = red glow) ──
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_glow_dark"]
-bg_color = Color(0.6, 0.15, 0.15, 0.25)
+bg_color = Color(0.6, 0.15, 0.15, 0.08)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -75,8 +75,8 @@ content_margin_left = 10.0
 content_margin_top = 10.0
 content_margin_right = 10.0
 content_margin_bottom = 10.0
-shadow_color = Color(0.85, 0.2, 0.2, 0.45)
-shadow_size = 18
+shadow_color = Color(0.85, 0.2, 0.2, 0.22)
+shadow_size = 6
 shadow_offset = Vector2(0, 0)
 
 ; ── Deck dropdown styling (dark fill, blue border) ──
@@ -98,6 +98,13 @@ content_margin_bottom = 6.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_stripes"]
 shader = ExtResource("7_stripes")
+shader_parameter/tint = Color(0.62, 0.78, 1, 1)
+shader_parameter/top_strength = 0.2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wash_dark"]
+shader = ExtResource("7_stripes")
+shader_parameter/tint = Color(1, 0.62, 0.58, 1)
+shader_parameter/top_strength = 0.2
 
 ; ── Bottom actions bar panel ──
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_actions_bar"]
@@ -262,7 +269,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
 color = Color(1, 1, 1, 1)
-material = SubResource("ShaderMaterial_stripes")
+material = SubResource("ShaderMaterial_wash_dark")
 
 [node name="VBox" type="VBoxContainer" parent="Margin/VBox/Seats/DarkSeat"]
 layout_mode = 2

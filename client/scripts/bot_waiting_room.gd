@@ -80,14 +80,14 @@ func _make_panel_style(is_blue: bool) -> StyleBoxFlat:
 func _make_glow_style(is_blue: bool) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	if is_blue:
-		s.bg_color = Color(0.15, 0.35, 0.75, 0.25)
-		s.shadow_color = Color(0.2, 0.4, 0.9, 0.45)
+		s.bg_color = Color(0.15, 0.35, 0.75, 0.08)
+		s.shadow_color = Color(0.2, 0.4, 0.9, 0.22)
 	else:
-		s.bg_color = Color(0.6, 0.15, 0.15, 0.25)
-		s.shadow_color = Color(0.85, 0.2, 0.2, 0.45)
+		s.bg_color = Color(0.6, 0.15, 0.15, 0.08)
+		s.shadow_color = Color(0.85, 0.2, 0.2, 0.22)
 	s.set_corner_radius_all(8)
 	s.set_content_margin_all(10)
-	s.shadow_size = 18
+	s.shadow_size = 6
 	s.shadow_offset = Vector2(0, 0)
 	return s
 

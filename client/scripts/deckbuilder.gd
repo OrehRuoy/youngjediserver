@@ -22,6 +22,14 @@ const COLOR_VALUES: Dictionary = {
 }
 const CARD_TYPES: Array[String] = ["All", "Character", "Weapon", "Location", "Battle", "Effect", "Starship"]
 const REQUIRED_LOCATION_PLANETS: Array[String] = ["Tatooine", "Coruscant", "Naboo"]
+const SET_TITLES: Dictionary = {
+	"battleofnaboo": "Battle of Naboo",
+	"enhancedbattleofnaboo": "Enhanced Battle of Naboo",
+	"menaceofdarthmaul": "Menace of Darth Maul",
+	"enhancedmenaceofdarthmaul": "Enhanced Menace of Darth Maul",
+	"thejedicouncil": "The Jedi Council",
+	"duelofthefates": "Duel of the Fates",
+}
 const DECK_THEME: Theme = preload("res://theme/lobby_theme.tres")
 const GOLD := Color(0.95, 0.82, 0.35, 1)
 const FILTER_LABEL_COLOR := Color(0.62, 0.68, 0.82, 1)
@@ -388,7 +396,8 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 			sets_found.append(s)
 	sets_found.sort()
 	for s in sets_found:
-		_set_filter.add_item(s)
+		_set_filter.add_item(_set_display_name(s))
+		_set_filter.set_item_metadata(_set_filter.item_count - 1, s)
 	_set_filter.item_selected.connect(_on_filter_changed)
 	filter_row2_setdest.add_child(_set_filter)
 	_style_dropdown(_set_filter)
@@ -423,7 +432,7 @@ func _build_card_browser(parent: HBoxContainer) -> void:
 		traits_list.append(k)
 	traits_list.sort()
 	for tr in traits_list:
-		_trait_filter.add_item(tr)
+		_trait_filter.add_item(_trait_display_name(tr))
 	_trait_filter.item_selected.connect(_on_filter_changed)
 	filter_row2_setdest.add_child(_trait_filter)
 	_style_dropdown(_trait_filter)
@@ -476,6 +485,22 @@ func _fit_card_grid_columns() -> void:
 	cols = maxi(cols, 2)
 	if _card_grid.columns != cols:
 		_card_grid.columns = cols
+
+
+func _set_display_name(raw: String) -> String:
+	if SET_TITLES.has(raw):
+		return str(SET_TITLES[raw])
+	return _trait_display_name(raw)
+
+
+func _trait_display_name(raw: String) -> String:
+	var words: PackedStringArray = []
+	for part in raw.split(" ", false):
+		var word := str(part).strip_edges()
+		if word.is_empty():
+			continue
+		words.append(word.substr(0, 1).to_upper() + word.substr(1))
+	return " ".join(words)
 
 
 func _filter_label(text: String) -> Label:
@@ -1058,7 +1083,7 @@ func _apply_filters() -> void:
 
 	var set_filter: String = ""
 	if _set_filter.selected > 0 and _set_filter.selected <= _set_filter.item_count - 1:
-		set_filter = _set_filter.get_item_text(_set_filter.selected)
+		set_filter = str(_set_filter.get_item_metadata(_set_filter.selected))
 
 	var destiny_filter: int = -1
 	if _destiny_filter.selected > 0 and _destiny_filter.selected <= 7:

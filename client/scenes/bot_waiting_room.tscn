@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://bot_waiting_room"]
+[gd_scene load_steps=17 format=3 uid="uid://bot_waiting_room"]
 
 [ext_resource type="Script" path="res://scripts/bot_waiting_room.gd" id="1_bwr"]
 [ext_resource type="Texture2D" path="res://assets/space_background.png" id="2_bg"]
@@ -7,7 +7,7 @@
 [ext_resource type="Texture2D" path="res://assets/bot_avatar.png" id="5_bot"]
 [ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="6_theme"]
 [ext_resource type="Script" path="res://scripts/wire_decoration.gd" id="7_wires"]
-[ext_resource type="Shader" path="res://shaders/panel_stripes.gdshader" id="8_stripes"]
+[ext_resource type="Shader" path="res://shaders/panel_wash.gdshader" id="8_stripes"]
 [ext_resource type="FontFile" path="res://fonts/Orbitron.ttf" id="9_font"]
 
 ; ── Player panel: blue (default — swapped dynamically in script) ──
@@ -52,7 +52,7 @@ shadow_offset = Vector2(0, 2)
 
 ; ── Card glow (blue) ──
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card_glow_light"]
-bg_color = Color(0.15, 0.35, 0.75, 0.25)
+bg_color = Color(0.15, 0.35, 0.75, 0.08)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -61,8 +61,8 @@ content_margin_left = 10.0
 content_margin_top = 10.0
 content_margin_right = 10.0
 content_margin_bottom = 10.0
-shadow_color = Color(0.2, 0.4, 0.9, 0.45)
-shadow_size = 18
+shadow_color = Color(0.2, 0.4, 0.9, 0.22)
+shadow_size = 6
 shadow_offset = Vector2(0, 0)
 
 ; ── Dropdown style ──
@@ -84,6 +84,13 @@ content_margin_bottom = 6.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_stripes"]
 shader = ExtResource("8_stripes")
+shader_parameter/tint = Color(0.62, 0.78, 1, 1)
+shader_parameter/top_strength = 0.2
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wash_dark"]
+shader = ExtResource("8_stripes")
+shader_parameter/tint = Color(1, 0.62, 0.58, 1)
+shader_parameter/top_strength = 0.2
 
 ; ── Actions bar ──
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_actions_bar"]
@@ -273,7 +280,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
 color = Color(1, 1, 1, 1)
-material = SubResource("ShaderMaterial_stripes")
+material = SubResource("ShaderMaterial_wash_dark")
 
 [node name="VBox" type="VBoxContainer" parent="Margin/VBox/Seats/BotSeat"]
 layout_mode = 2

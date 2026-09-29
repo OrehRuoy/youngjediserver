@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://bu2mdbihp8rla" path="res://assets/title_logo.png" id="3_logo"]
 [ext_resource type="Texture2D" uid="uid://h3uhg65jrj1q" path="res://assets/check_white.svg" id="5_check"]
 [ext_resource type="Script" path="res://scripts/wire_decoration.gd" id="6_wires"]
-[ext_resource type="Shader" path="res://shaders/panel_stripes.gdshader" id="7_stripes"]
+[ext_resource type="Shader" path="res://shaders/panel_wash.gdshader" id="7_stripes"]
 [ext_resource type="Theme" path="res://theme/lobby_theme.tres" id="8_theme"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxFlat_checkbox_panel"]
@@ -48,6 +48,8 @@ content_margin_bottom = 6.0
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_stripes"]
 shader = ExtResource("7_stripes")
+shader_parameter/tint = Color(0.72, 0.84, 1, 1)
+shader_parameter/top_strength = 0.18
 
 [node name="Login" type="Control" unique_id=2107371945]
 layout_mode = 3
@@ -186,8 +188,10 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_checkbox_panel")
 
 [node name="StayLoggedIn" type="CheckBox" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox/CheckBoxPanel" unique_name_in_owner=true unique_id=1010811074]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.93, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 0.97, 0.88, 1)
+theme_override_colors/font_pressed_color = Color(0.9, 0.93, 1, 1)
 theme_override_font_sizes/font_size = 15
-theme_override_icons/checked = ExtResource("5_check")
 text = "Stay logged in"
 
 [node name="LoginBtn" type="Button" parent="Margin/CenterContainer/OuterVBox/FormCard/VBox" unique_name_in_owner=true unique_id=1586321534]
