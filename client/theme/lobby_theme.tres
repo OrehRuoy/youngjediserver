@@ -350,6 +350,10 @@ shadow_color = Color(0, 0, 0, 0.55)
 shadow_size = 16
 shadow_offset = Vector2(0, 4)
 
+[sub_resource type="StyleBoxLine" id="StyleBoxLine_separator"]
+color = Color(0.2, 0.4, 0.68, 0.55)
+thickness = 1
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dialog_panel"]
 bg_color = Color(0.03, 0.05, 0.12, 1)
 content_margin_left = 16.0
@@ -422,6 +426,8 @@ CheckBox/colors/font_pressed_color = Color(0.88, 0.9, 0.98, 1)
 CheckBox/colors/font_hover_pressed_color = Color(0.95, 0.97, 1, 1)
 CheckBox/colors/font_focus_color = Color(0.88, 0.9, 0.98, 1)
 CheckBox/font_sizes/font_size = 15
+HSeparator/styles/separator = SubResource("StyleBoxLine_separator")
+HSeparator/constants/separation = 10
 ScrollContainer/styles/panel = SubResource("StyleBoxFlat_lobby_scroll")
 VScrollBar/styles/scroll = SubResource("StyleBoxFlat_scroll_track")
 VScrollBar/styles/scroll_focus = SubResource("StyleBoxFlat_scroll_track")

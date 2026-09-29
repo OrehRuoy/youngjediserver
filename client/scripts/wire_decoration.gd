@@ -28,9 +28,12 @@ func setup(left_rect: Rect2, right_rect: Rect2, left_color: Color = Color(), rig
 
 
 func _draw() -> void:
-	if _left_rect.size.x < 1 or _right_rect.size.x < 1:
+	if _left_rect.size.x < 1:
 		return
 	_draw_panel_wires(_left_rect, _left_color)
+	# A single framed panel (e.g. the login card) leaves the right rect empty.
+	if _right_rect.size.x < 1:
+		return
 	_draw_panel_wires(_right_rect, _right_color)
 	_draw_connection_wires()
 

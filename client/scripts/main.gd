@@ -13,13 +13,13 @@ extends Control
 # --- Row 2: Live tables + News + Buttons ---
 @onready var tables_container: VBoxContainer = $Margin/Rows/MiddleRow/LiveTablesPanel/LiveVBox/LiveScroll/TablesList
 @onready var news_content: RichTextLabel = $Margin/Rows/MiddleRow/NewsPanel/NewsMargin/NewsVBox/NewsContent
-@onready var buttons_column: VBoxContainer = $Margin/Rows/MiddleRow/ButtonsColumn
-@onready var create_light_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/CreateLight
-@onready var create_dark_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/CreateDark
-@onready var bot_game_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/BotGameBtn
-@onready var deckbuilder_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/DeckbuilderBtn
-@onready var rules_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/RulesBtn
-@onready var report_bug_btn: Button = $Margin/Rows/MiddleRow/ButtonsColumn/ReportBugBtn
+@onready var buttons_column: VBoxContainer = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn
+@onready var create_light_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/CreateLight
+@onready var create_dark_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/CreateDark
+@onready var bot_game_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/BotGameBtn
+@onready var deckbuilder_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/DeckbuilderBtn
+@onready var rules_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/RulesBtn
+@onready var report_bug_btn: Button = $Margin/Rows/MiddleRow/ActionsPanel/ButtonsColumn/ReportBugBtn
 
 # --- Row 3: Playing tables + Comms ---
 @onready var playing_tables_container: VBoxContainer = $Margin/Rows/BottomRow/PlayingPanel/PlayingVBox/PlayingScroll/PlayingTablesList
@@ -27,7 +27,20 @@ extends Control
 @onready var chat_edit: LineEdit = $Margin/Rows/BottomRow/CommsPanel/CommsVBox/ChatRow/ChatEdit
 @onready var chat_btn: Button = $Margin/Rows/BottomRow/CommsPanel/CommsVBox/ChatRow/SendBtn
 
+@onready var actions_panel: PanelContainer = $Margin/Rows/MiddleRow/ActionsPanel
+@onready var online_title: Label = $Margin/Rows/TopRow/OnlinePanel/OnlineMargin/OnlineVBox/TitleRow/OnlineTitle
+@onready var live_title: Label = $Margin/Rows/MiddleRow/LiveTablesPanel/LiveVBox/LiveTitle
+@onready var playing_title: Label = $Margin/Rows/BottomRow/PlayingPanel/PlayingVBox/PlayingTitle
+
 const LOGIN_SAVE_PATH := "user://young_jedi_login.cfg"
+
+# Status / chat colours shared with the rest of the UI theme.
+const COLOR_OK := Color(0.3, 0.85, 0.3, 1)
+const COLOR_WARN := Color(0.95, 0.75, 0.3, 1)
+const COLOR_ERR := Color(0.8, 0.3, 0.3, 1)
+const CHAT_TIME_COLOR := "#6f7d9c"
+const CHAT_NAME_COLOR := "#f2d15a"  # gold, matches HeaderLabel
+const CHAT_SELF_COLOR := "#7fb8ff"  # light blue
 
 var _table_row_scene: PackedScene
 var _reconnecting: bool = false
@@ -51,7 +64,7 @@ func _ready() -> void:
 	if state.player_name and not client.is_connected_to_server():
 		_reconnecting = true
 		client.connect_to_server(Connection.get_server_url())
-		online_label.text = "• Reconnecting..."
+		_set_online_status("• Reconnecting...", COLOR_WARN)
 	client.message_received.connect(_on_message)
 	client.connected.connect(_on_connected)
 	client.disconnected.connect(_on_disconnected)
@@ -234,6 +247,7 @@ func _style_side_button(btn: Button, is_light: bool) -> void:
 	hover.shadow_size = 6
 	btn.add_theme_stylebox_override("hover", hover)
 	btn.add_theme_stylebox_override("hover_pressed", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
 	var tint := Color(0.7, 0.84, 1.0, 1) if is_light else Color(0.75, 0.5, 0.9, 1)
 	btn.add_theme_color_override("font_color", tint)
 	btn.add_theme_color_override("font_hover_color", tint.lightened(0.25))
@@ -245,10 +259,15 @@ func _process(delta: float) -> void:
 		_logout_cooldown -= delta
 
 
+func _set_online_status(text: String, color: Color) -> void:
+	online_label.text = text
+	online_label.add_theme_color_override("font_color", color)
+
+
 func _connect_if_needed() -> void:
 	if not Connection.get_client().is_connected_to_server():
 		Connection.get_client().connect_to_server(Connection.get_server_url())
-		online_label.text = "• Connecting..."
+		_set_online_status("• Connecting...", COLOR_WARN)
 
 
 func _on_logout_pressed() -> void:
@@ -276,14 +295,13 @@ func _on_connected() -> void:
 	if _reconnecting:
 		_reconnecting = false
 		Connection.get_client().login(Connection.get_state().player_name)
-		online_label.text = "• Reconnecting..."
+		_set_online_status("• Reconnecting...", COLOR_WARN)
 	else:
-		online_label.text = "• ONLINE"
+		_set_online_status("• ONLINE", COLOR_OK)
 
 
 func _on_disconnected() -> void:
-	online_label.text = "• Disconnected"
-	online_label.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3, 1))
+	_set_online_status("• Disconnected", COLOR_ERR)
 	Connection.get_state().logged_in = false
 	_update_ui()
 
@@ -318,13 +336,25 @@ func _send_lobby_chat(raw: String) -> void:
 	chat_edit.grab_focus()
 
 
+## Player-supplied text must not be able to inject BBCode tags into the chat log.
+static func _bbcode_escape(s: String) -> String:
+	return s.replace("[", "[lb]")
+
+
 func _on_chat(from: String, text: String, _at: int) -> void:
-	chat_log.append_text("[color=gray][%s][/color] %s: %s\n" % [Time.get_time_string_from_system(), from, text])
+	var stamp: String = Time.get_time_string_from_system().substr(0, 5)
+	var is_self: bool = from == Connection.get_state().player_name
+	chat_log.append_text("[color=%s]%s[/color]  [color=%s]%s[/color]: %s\n" % [
+		CHAT_TIME_COLOR,
+		stamp,
+		CHAT_SELF_COLOR if is_self else CHAT_NAME_COLOR,
+		_bbcode_escape(from),
+		_bbcode_escape(text),
+	])
 
 
 func _on_error(msg: String) -> void:
-	online_label.text = "• Error"
-	online_label.add_theme_color_override("font_color", Color(0.9, 0.4, 0.3, 1))
+	_set_online_status("• Error", Color(0.9, 0.4, 0.3, 1))
 
 
 func _player_name(pid: String) -> String:
@@ -348,12 +378,16 @@ func _build_players_list() -> void:
 		c.queue_free()
 	var state: RefCounted = Connection.get_state()
 	var show_self: bool = state.logged_in
+	var count: int = 0
 	for p in state.players:
 		if p.get("id", "") == state.player_id:
 			show_self = false
 		_add_player_entry(p.get("name", "?"), p.get("tableId", "") != "")
+		count += 1
 	if show_self:
 		_add_player_entry(state.player_name, false)
+		count += 1
+	online_title.text = "ONLINE (%d)" % count if count > 0 else "ONLINE"
 
 
 func _add_player_entry(pname: String, in_game: bool) -> void:
@@ -399,6 +433,10 @@ func _build_tables_list() -> void:
 			row.join_light_pressed.connect(_on_join_light.bind(t))
 			row.join_dark_pressed.connect(_on_join_dark.bind(t))
 		row.set_table(t, state, started)
+	var open_count: int = tables_container.get_child_count()
+	var playing_count: int = playing_tables_container.get_child_count()
+	live_title.text = "LIVE TABLES (%d)" % open_count if open_count > 0 else "LIVE TABLES"
+	playing_title.text = "PLAYING TABLES (%d)" % playing_count if playing_count > 0 else "PLAYING TABLES"
 	if tables_container.get_child_count() == 0:
 		tables_container.add_child(_make_empty_note("No open tables yet. Create one to start a game."))
 	if playing_tables_container.get_child_count() == 0:
@@ -467,19 +505,20 @@ func _on_join_dark(table: Dictionary) -> void:
 
 func _update_ui() -> void:
 	var state: GameState = Connection.get_state()
-	buttons_column.visible = state.logged_in
+	actions_panel.visible = state.logged_in
 	if news_content:
 		news_content.bbcode_enabled = true
 		news_content.text = state.news_text
 	if state.logged_in and state.current_table_id == "":
 		player_name_label.text = state.player_name
 		if Connection.get_client().is_connected_to_server():
-			online_label.text = "• ONLINE"
-			online_label.add_theme_color_override("font_color", Color(0.3, 0.85, 0.3, 1))
+			_set_online_status("• ONLINE", COLOR_OK)
 		else:
-			online_label.text = "• Disconnected"
-			online_label.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3, 1))
+			_set_online_status("• Disconnected", COLOR_ERR)
 	elif not state.logged_in:
-		player_name_label.text = ""
-		online_label.text = "• Disconnected"
-		online_label.add_theme_color_override("font_color", Color(0.8, 0.3, 0.3, 1))
+		if _reconnecting:
+			player_name_label.text = state.player_name
+			_set_online_status("• Reconnecting...", COLOR_WARN)
+		else:
+			player_name_label.text = ""
+			_set_online_status("• Disconnected", COLOR_ERR)

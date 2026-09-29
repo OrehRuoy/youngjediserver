@@ -13,6 +13,14 @@ var login_btn: Button
 var status_label: Label
 var server_status_label: Label
 var server_status_pill: PanelContainer
+var form_card: PanelContainer
+var wire_decoration: Control
+var version_label: Label
+
+const STATUS_INFO := Color(0.6, 0.72, 0.9)
+const STATUS_OK := Color(0.4, 0.9, 0.5)
+const STATUS_WARN := Color(0.95, 0.82, 0.35)
+const STATUS_ERR := Color(0.95, 0.4, 0.35)
 
 var pending_login_name: String = ""
 var _local_fallback_timer: float = -1.0  # when > 0, count down then try remote
@@ -28,6 +36,9 @@ func _ready() -> void:
 	status_label = find_child("StatusLabel", true, false) as Label
 	server_status_pill = find_child("ServerStatusPill", true, false) as PanelContainer
 	server_status_label = find_child("ServerStatus", true, false) as Label
+	form_card = find_child("FormCard", true, false) as PanelContainer
+	wire_decoration = find_child("WireDecoration", true, false) as Control
+	version_label = find_child("VersionLabel", true, false) as Label
 	if login_btn == null or name_edit == null or status_label == null:
 		push_error("Login scene missing LoginBtn, NameEdit, or StatusLabel.")
 		return
@@ -42,17 +53,22 @@ func _ready() -> void:
 	login_btn.button_up.connect(_on_login_btn_up)
 	login_btn.mouse_entered.connect(_on_login_btn_hover)
 	login_btn.mouse_exited.connect(_on_login_btn_unhover)
+	# Scale tweens should grow from the button's centre, not its top-left corner.
+	login_btn.resized.connect(func() -> void: login_btn.pivot_offset = login_btn.size * 0.5)
+	# Enter in the name field submits, like pressing LOGIN.
+	name_edit.text_submitted.connect(func(_t: String) -> void: _on_login_pressed())
 	_load_saved()
 	_update_server_status()
+	_setup_decor()
 	# If we have stay-logged-in + name, we'll auto-login once connected
 	if stay_logged_in_cb != null and stay_logged_in_cb.button_pressed and not name_edit.text.strip_edges().is_empty():
 		pending_login_name = name_edit.text.strip_edges()
-		status_label.text = "Connecting..."
+		_set_status("Connecting...")
 	else:
-		status_label.text = "Enter your name to join"
+		_set_status("Enter your name to join")
 	var server_url := _get_server_url()
 	if OS.has_feature("web"):
-		status_label.text = "Web: connecting to %s …" % server_url
+		_set_status("Web: connecting to %s …" % server_url)
 	if not Connection.get_client().is_connected_to_server():
 		Connection.get_client().connect_to_server(server_url)
 		_begin_wake_if_remote(server_url)
@@ -60,6 +76,51 @@ func _ready() -> void:
 		# Start remote fallback on a timer instead of waiting for a disconnect.
 		if not _is_remote_url(server_url) and _local_fallback_timer < 0:
 			_local_fallback_timer = 2.0
+
+
+## Version footer, wire frame around the card, fade-in, and initial focus.
+func _setup_decor() -> void:
+	if version_label != null:
+		var version: String = str(ProjectSettings.get_setting("application/config/version", ""))
+		version_label.text = "Young Jedi CCG  •  v%s" % version if not version.is_empty() else "Young Jedi CCG"
+	if form_card != null and wire_decoration != null:
+		form_card.item_rect_changed.connect(_update_wires)
+		_update_wires.call_deferred()
+		form_card.modulate.a = 0.0
+		wire_decoration.modulate.a = 0.0
+		var t := create_tween()
+		t.set_parallel(true)
+		t.set_ease(Tween.EASE_OUT)
+		t.set_trans(Tween.TRANS_QUAD)
+		t.tween_property(form_card, "modulate:a", 1.0, 0.4)
+		t.tween_property(wire_decoration, "modulate:a", 1.0, 0.7)
+	name_edit.grab_focus.call_deferred()
+
+
+func _update_wires() -> void:
+	if form_card == null or wire_decoration == null:
+		return
+	var r := Rect2(form_card.global_position - wire_decoration.global_position, form_card.size)
+	wire_decoration.call("setup", r, Rect2())
+
+
+func _set_status(text: String, color: Color = STATUS_INFO) -> void:
+	if status_label == null:
+		return
+	status_label.text = text
+	status_label.add_theme_color_override("font_color", color)
+
+
+## Locks the button while a login is in flight so it can't be double-submitted.
+func _set_busy(busy: bool) -> void:
+	if login_btn == null:
+		return
+	login_btn.disabled = busy
+	login_btn.text = "LOGGING IN…" if busy else "LOGIN"
+	if busy:
+		_tween_btn_scale_mod(BTN_SCALE_NORMAL, BTN_MOD_NORMAL)
+	elif login_btn.is_hovered():
+		_tween_btn_scale_mod(BTN_SCALE_HOVER, BTN_MOD_HOVER)
 
 
 var _web_debug_label: Label = null
@@ -87,7 +148,7 @@ func _process(delta: float) -> void:
 			var remote_url := Connection.get_server_url()
 			Connection.get_client().connect_to_server(remote_url)
 			_begin_wake_if_remote(remote_url)
-			status_label.text = "Trying remote server..."
+			_set_status("Trying remote server...")
 	_tick_wake_retry(delta)
 
 
@@ -119,13 +180,12 @@ func _tick_wake_retry(delta: float) -> void:
 		return
 	_wake_remaining -= delta
 	_wake_cooldown -= delta
-	if status_label != null:
-		var secs: int = maxi(ceili(_wake_remaining), 0)
-		status_label.text = "Waking server… about %d seconds left" % secs
+	var secs: int = maxi(ceili(_wake_remaining), 0)
+	_set_status("Waking server… about %d seconds left" % secs, STATUS_WARN)
 	if _wake_remaining <= 0:
 		_wake_remaining = -1.0
-		if status_label != null:
-			status_label.text = "Server did not wake. Wait a minute and try Login again."
+		_set_status("Server did not wake. Wait a minute and try Login again.", STATUS_ERR)
+		_set_busy(false)
 		_update_server_status()
 		return
 	if _wake_cooldown <= 0 and not client.is_connecting():
@@ -164,7 +224,7 @@ func _clear_saved() -> void:
 
 
 const BTN_SCALE_NORMAL := Vector2(1.0, 1.0)
-const BTN_SCALE_HOVER := Vector2(1.05, 1.05)
+const BTN_SCALE_HOVER := Vector2(1.03, 1.03)
 const BTN_SCALE_PRESSED := Vector2(0.96, 0.96)
 const BTN_MOD_NORMAL := Color(1.0, 1.0, 1.0)
 const BTN_MOD_HOVER := Color(1.08, 1.1, 1.22)   # slight brightening + blue glow
@@ -197,7 +257,7 @@ func _on_login_btn_up() -> void:
 func _on_login_btn_hover() -> void:
 	if login_btn == null:
 		return
-	if login_btn.button_pressed:
+	if login_btn.button_pressed or login_btn.disabled:
 		return
 	_tween_btn_scale_mod(BTN_SCALE_HOVER, BTN_MOD_HOVER)
 
@@ -209,9 +269,11 @@ func _on_login_btn_unhover() -> void:
 func _on_login_pressed() -> void:
 	var name_text: String = name_edit.text.strip_edges()
 	if name_text.is_empty():
-		status_label.text = "Enter a name"
+		_set_status("Enter a name to continue", STATUS_WARN)
+		name_edit.grab_focus()
 		return
 	_save_if_stay_logged_in(name_text)
+	_set_busy(true)
 	if not Connection.get_client().is_connected_to_server():
 		pending_login_name = name_text
 		var url := _get_server_url()
@@ -220,36 +282,43 @@ func _on_login_pressed() -> void:
 			url = Connection.get_server_url()
 		Connection.get_client().connect_to_server(url)
 		_begin_wake_if_remote(url)
-		status_label.text = "Connecting..."
+		_set_status("Connecting...")
 		return
 	Connection.get_client().login(name_text)
-	status_label.text = "Logging in..."
+	_set_status("Logging in...")
 
 
 func _on_message(msg: Dictionary) -> void:
 	Connection.get_state().apply_message(msg)
 	if msg.get("type", "") == "login_result":
 		if msg.get("ok", false):
-			status_label.text = "Online as %s" % msg.get("name", "")
+			_set_status("Online as %s" % msg.get("name", ""), STATUS_OK)
 			get_tree().change_scene_to_file("res://scenes/main.tscn")
 		else:
-			status_label.text = msg.get("error", "Login failed")
+			_set_busy(false)
+			_set_status(msg.get("error", "Login failed"), STATUS_ERR)
+			name_edit.grab_focus()
+			name_edit.select_all()
 
 
 func _on_connected() -> void:
 	_local_fallback_timer = -1.0  # cancel fallback to remote
 	_wake_remaining = -1.0
 	_update_server_status()
-	status_label.text = "Connected"
+	_set_status("Connected", STATUS_OK)
 	if not pending_login_name.is_empty():
 		Connection.get_client().login(pending_login_name)
-		status_label.text = "Logging in..."
+		_set_busy(true)
+		_set_status("Logging in...")
 		pending_login_name = ""
 
 
 func _on_disconnected() -> void:
 	_update_server_status()
-	status_label.text = "Disconnected"
+	_set_status("Disconnected", STATUS_ERR)
+	# Keep the button locked while a queued login is still waiting for the server.
+	if pending_login_name.is_empty():
+		_set_busy(false)
 	Connection.get_state().logged_in = false
 	# When launcher set use_local_server, try remote after a short delay (for testers without local server)
 	if ProjectSettings.get_setting("application/config/use_local_server", false) and _local_fallback_timer < 0:
@@ -268,12 +337,13 @@ func _update_server_status() -> void:
 	pill_style.set_border_width_all(1)
 	server_status_pill.add_theme_stylebox_override("panel", pill_style)
 	if online:
-		server_status_label.text = "Server Online"
+		server_status_label.text = "●  Server Online"
 		server_status_label.add_theme_color_override("font_color", Color(0.4, 0.95, 0.5))
 	else:
-		server_status_label.text = "Server Offline"
+		server_status_label.text = "●  Server Offline"
 		server_status_label.add_theme_color_override("font_color", Color(0.95, 0.35, 0.3))
 
 
 func _on_error(msg: String) -> void:
-	status_label.text = "Error: %s" % msg
+	_set_busy(false)
+	_set_status("Error: %s" % msg, STATUS_ERR)
