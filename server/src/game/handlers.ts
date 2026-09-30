@@ -63,6 +63,7 @@ export function handleGameAction(
     }
     if (!def) return { applied: false, error: "Unknown card" };
     const cardType = (def as { type?: string }).type;
+    const playsAsEffect = (def as { doubleImpact?: string }).doubleImpact === "battle-effect";
     const interceptWindow =
       usesHyperspace(g) &&
       !!g.evacuationState?.awaitingInterception &&
@@ -100,14 +101,19 @@ export function handleGameAction(
       if (sideSuffixed && sideSuffixed.side === side) def = sideSuffixed;
       else return { applied: false, error: "Wrong side" };
     }
+    if (cardType === "battle" && !playsAsEffect) {
+      return { applied: false, error: "Battle cards can only be used during battle" };
+    }
     const cost = cardType === "character"
       ? state.getDeployCostWithGametextBonus(g, side, card.cardId, card.cardSet)
       : cardType === "weapon"
         ? state.getWeaponDeployCost(g, side, card.cardId, card.cardSet)
-        : (Math.floor(Number((def as { cost?: number }).cost)) || 0);
+        : playsAsEffect
+          ? (Math.floor(Number((def as { effectHalf?: { cost?: number } }).effectHalf?.cost)) || 0)
+          : (Math.floor(Number((def as { cost?: number }).cost)) || 0);
     const force = Math.floor(Number(state.getForce(g, side)));
     if (force < cost) return { applied: false, error: "Not enough counters to play this card" };
-    if (cardType === "effect") {
+    if (cardType === "effect" || playsAsEffect) {
       if (!g.startingLocationInstanceId) return { applied: false, error: "No location to deploy effect to" };
       if (state.hasEffectAtLocation(g, side)) return { applied: false, error: "Only 1 effect per player at this location" };
     }
@@ -148,8 +154,12 @@ export function handleGameAction(
     }
     if (played && !played.faceDown && cardType === "character" && !startedSearch) {
       const drew = deployDraw.maybeBeginDeployDraw(g, side, card.cardId, card.cardSet, played.faceDown);
-      if (!drew) jediTraining.maybeBeginJediTraining(g, side, played);
+      if (!drew && !jediTraining.maybeBeginJediTraining(g, side, played)) {
+        deployDraw.maybeBeginAllyDeployHere(g, side, played);
+      }
     }
+    const allyDrawWinner = state.getDeckEmptyWinner(g);
+    if (allyDrawWinner) return { applied: true, gameOver: { winner: allyDrawWinner, reason: "deck_empty" } };
     return { applied: true };
   }
 
@@ -273,6 +283,27 @@ export function handleGameAction(
           ? "Battle plan must include all of your Hyperspace ships"
           : "Battle plan must include all your face-up characters/weapons at the location",
       };
+    }
+
+    const owner = side === "light" ? g.light : g.dark;
+    const pool = [...owner.hand, ...owner.inPlay, ...(owner.hyperspace ?? [])];
+    const rawChoices = action.doubleImpactChoices;
+    const choices: Record<string, "primary" | "second"> = {};
+    if (rawChoices && typeof rawChoices === "object") {
+      for (const [id, value] of Object.entries(rawChoices as Record<string, unknown>)) {
+        if (value === "primary" || value === "second") choices[id] = value;
+      }
+    }
+    for (const id of instanceIds) {
+      const card = pool.find((c) => c.instanceId === id);
+      if (!card) continue;
+      const def = getCard(card.cardId, card.cardSet) as { doubleImpact?: string } | undefined;
+      if (def?.doubleImpact !== "battle-battle") continue;
+      const choice = choices[id];
+      if (choice !== "primary" && choice !== "second") {
+        return { applied: false, error: "Choose a side of the split Battle card" };
+      }
+      card.doubleImpactChoice = choice;
     }
 
     if (side === "light") {
@@ -489,6 +520,7 @@ export function handleGameAction(
   if (action.kind === "effect_decline") {
     if (!g.effectActivationPending || g.effectActivationPending.side !== side) return { applied: false, error: "No effect activation to decline" };
     if (g.effectActivationPending.kind === "peek_opp_deck") return { applied: false, error: "Choose to leave that card on top or put it under the deck" };
+    if (g.effectActivationPending.kind === "bottom_or_draw") return { applied: false, error: "Choose to put a card under your deck or draw a card" };
     state.clearEffectActivation(g);
     return { applied: true };
   }
@@ -507,19 +539,33 @@ export function handleGameAction(
     return result.ok ? { applied: true } : { applied: false, error: result.error };
   }
 
+  if (action.kind === "deploy_here_draw") {
+    const result = deployDraw.drawForAllyDeployHere(g, side);
+    if (!result.ok) return { applied: false, error: "No draw to take" };
+    if (result.gameOverWinner) return { applied: true, gameOver: { winner: result.gameOverWinner, reason: "deck_empty" } };
+    return { applied: true };
+  }
+
   if (action.kind === "confirm_jedi_training") {
+    const jediId = g.jediTrainingPending?.jediInstanceId;
     const instanceId = action.instanceId as string | undefined;
     if (!instanceId) return { applied: false, error: "Missing instanceId" };
     const result = jediTraining.confirmJediTraining(g, side, instanceId);
     if (!result.ok) return { applied: false, error: result.error };
+    const jedi = jediId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === jediId) : undefined;
+    deployDraw.maybeBeginAllyDeployHere(g, side, jedi);
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
   }
 
   if (action.kind === "decline_jedi_training") {
+    const jediId = g.jediTrainingPending?.jediInstanceId;
     const ok = jediTraining.declineJediTraining(g, side);
-    return ok ? { applied: true } : { applied: false, error: "No lightsaber choice to skip" };
+    if (!ok) return { applied: false, error: "No lightsaber choice to skip" };
+    const jedi = jediId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === jediId) : undefined;
+    deployDraw.maybeBeginAllyDeployHere(g, side, jedi);
+    return { applied: true };
   }
 
   if (action.kind === "confirm_pounded") {
@@ -576,11 +622,20 @@ export function handleGameAction(
 
   if (action.kind === "confirm_deploy_from_deck") {
     if (!usesDeployFromDeck(g)) return { applied: false, error: "Deploy from deck is not used in this game" };
-    const searcherId = g.deployFromDeckPending?.searcherInstanceId;
+    const pending = g.deployFromDeckPending;
+    const searcherId = pending?.searcherInstanceId;
+    const foundId = pending?.foundInstanceId;
+    const toHand = !!pending?.toHand;
     const ok = deployFromDeck.confirmDeployFromDeck(g, side);
     if (!ok) return { applied: false, error: "Could not deploy the searched card (check Force cost)" };
-    const searcher = searcherId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === searcherId) : undefined;
-    jediTraining.maybeBeginJediTraining(g, side, searcher);
+    const owner = side === "light" ? g.light : g.dark;
+    const searcher = searcherId ? owner.inPlay.find((c) => c.instanceId === searcherId) : undefined;
+    if (!jediTraining.maybeBeginJediTraining(g, side, searcher)) {
+      const placed = !toHand && foundId ? owner.inPlay.find((c) => c.instanceId === foundId) : undefined;
+      if (!deployDraw.maybeBeginAllyDeployHere(g, side, placed)) {
+        deployDraw.maybeBeginAllyDeployHere(g, side, searcher);
+      }
+    }
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
@@ -592,7 +647,9 @@ export function handleGameAction(
     const ok = deployFromDeck.declineDeployFromDeck(g, side);
     if (!ok) return { applied: false, error: "No deploy-from-deck search to decline" };
     const searcher = searcherId ? (side === "light" ? g.light : g.dark).inPlay.find((c) => c.instanceId === searcherId) : undefined;
-    jediTraining.maybeBeginJediTraining(g, side, searcher);
+    if (!jediTraining.maybeBeginJediTraining(g, side, searcher)) {
+      deployDraw.maybeBeginAllyDeployHere(g, side, searcher);
+    }
     const deckWinner = state.getDeckEmptyWinner(g);
     if (deckWinner) return { applied: true, gameOver: { winner: deckWinner, reason: "deck_empty" } };
     return { applied: true };
@@ -651,6 +708,8 @@ export function handleGameAction(
     if (!instanceId) return { applied: false, error: "Missing instanceId" };
     const ok = duel.playDuelCard(g, side, instanceId, {
       discardForExtraHits: action.discardForExtraHits === true,
+      destinyPick: typeof action.destinyPick === "number" ? action.destinyPick : undefined,
+      doubleImpactHalf: action.doubleImpactHalf === "second" ? "second" : action.doubleImpactHalf === "primary" ? "primary" : undefined,
     });
     if (!ok) return { applied: false, error: "Cannot play that duel card" };
     const deckWinner = state.getDeckEmptyWinner(g);

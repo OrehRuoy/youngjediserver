@@ -18,6 +18,20 @@ function opponentTargets(state: GameStateData, side: Side): CardInstance[] {
   return p.inPlay.filter((c) => c.instanceId !== locId && !c.faceDown && isNonUniqueCard(c));
 }
 
+/** Pounded Unto Death and Blockade, including a Double Impact Effect half. */
+export function cardDiscardsOpponentNonUnique(cardId: string, set?: string): boolean {
+  const def = getCard(cardId, set) as {
+    type?: string;
+    effects?: string;
+    doubleImpact?: string;
+    effectHalf?: { effects?: string };
+  } | undefined;
+  if (!def) return false;
+  const effects = (def.doubleImpact === "battle-effect" ? def.effectHalf?.effects : def.effects) ?? "";
+  const isEffect = def.type === "effect" || def.doubleImpact === "battle-effect";
+  return isEffect && effects.toLowerCase().includes("discardopp:nonunique");
+}
+
 export function beginPoundedUntoDeath(state: GameStateData, side: Side, effectInstanceId: string): { ok: boolean; error?: string } {
   if (state.phase !== "even_up") return { ok: false, error: "Can only use this during Even Up" };
   if (state.turnSide !== side) return { ok: false, error: "Not your turn" };
@@ -25,8 +39,7 @@ export function beginPoundedUntoDeath(state: GameStateData, side: Side, effectIn
   const p = side === "light" ? state.light : state.dark;
   const effect = p.inPlay.find((c) => c.instanceId === effectInstanceId);
   if (!effect || effect.faceDown) return { ok: false, error: "Effect must be face up" };
-  const def = getCard(effect.cardId, effect.cardSet) as { type?: string; effects?: string } | undefined;
-  if (!def || def.type !== "effect" || !(def.effects ?? "").toLowerCase().includes("discardopp:nonunique")) {
+  if (!cardDiscardsOpponentNonUnique(effect.cardId, effect.cardSet)) {
     return { ok: false, error: "That effect cannot discard an opponent's card" };
   }
   const targets = opponentTargets(state, side);

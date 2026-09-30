@@ -29,6 +29,54 @@ export interface CardDefinitionBase {
   image?: string;
   /** Set identifier (e.g. "menaceofdarthmaul") */
   set?: string;
+  /** Second printed destiny number. When this card is drawn for destiny, the player chooses one number. */
+  destiny2?: number;
+  /** Armed & Dangerous character: the weapon is built in and a regular Weapon card cannot be used with it. */
+  armedDangerous?: boolean;
+  /** Printed cost of the character half. Deploy charges this plus the built-in weapon cost. */
+  characterCost?: number;
+  builtInWeapon?: {
+    cost?: number;
+    powerAdd?: number | "?";
+    destinyAdd?: number;
+    lightsaber?: boolean;
+  };
+  /** Combo Battle: one card. The fields below are the single printed ability. */
+  comboBattle?: boolean;
+  comboHalf?: {
+    name?: string;
+    powerAdd?: number;
+    destinyAdd?: number;
+    canUse?: string;
+    condition?: string;
+    gametext?: string;
+    destiny?: number;
+  };
+  /** Double Impact: battle-effect is forced by where it is played; battle-battle uses only one half. */
+  doubleImpact?: "battle-effect" | "battle-battle";
+  doubleImpactHalf?: {
+    name?: string;
+    powerAdd?: number;
+    destinyAdd?: number;
+    canUse?: string;
+    condition?: string;
+    gametext?: string;
+    gametextbonus?: string;
+    graybox?: string;
+    grayboxbonus?: string;
+    lore?: string;
+    destiny?: number;
+  };
+  effectHalf?: {
+    name?: string;
+    type?: string;
+    cost?: number;
+    powerAdd?: number;
+    canUse?: string;
+    effects?: string;
+    gametext?: string;
+    destiny?: number;
+  };
   /**
    * Allowed deckbuilding colors. If two or more, this is a wild card (Enhanced Menace of Darth Maul):
    * it may go in any listed color, but only one wild card per color in a deck.
@@ -179,4 +227,6 @@ export interface CardInstance {
   position?: number;  // order in zone
   /** True when deployed face down (turn 1); flipped face up at start of turn 2. */
   faceDown?: boolean;
+  /** Battle-battle Double Impact: which printed side is being used. */
+  doubleImpactChoice?: "primary" | "second";
 }

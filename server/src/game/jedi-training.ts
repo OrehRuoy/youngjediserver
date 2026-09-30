@@ -46,13 +46,24 @@ function matchesOnDeployWho(cardId: string, set: string | undefined, who: string
     .some((token) => persona === token || id.includes(token));
 }
 
+function deployedEffectText(cardId: string, set?: string): string {
+  const def = getCard(cardId, set) as {
+    type?: string;
+    effects?: string;
+    doubleImpact?: string;
+    effectHalf?: { effects?: string };
+  } | undefined;
+  if (!def) return "";
+  if (def.doubleImpact === "battle-effect") return def.effectHalf?.effects ?? "";
+  if (def.type === "effect") return def.effects ?? "";
+  return "";
+}
+
 function trainingEffect(state: GameStateData, side: Side, deployed: CardInstance): CardInstance | undefined {
   const p = side === "light" ? state.light : state.dark;
   return p.inPlay.find((c) => {
     if (c.faceDown) return false;
-    const def = getCard(c.cardId, c.cardSet) as { type?: string; effects?: string } | undefined;
-    if (def?.type !== "effect") return false;
-    const who = onDeployWho(def.effects ?? "");
+    const who = onDeployWho(deployedEffectText(c.cardId, c.cardSet));
     return !!who && matchesOnDeployWho(deployed.cardId, deployed.cardSet, who);
   });
 }
@@ -60,6 +71,7 @@ function trainingEffect(state: GameStateData, side: Side, deployed: CardInstance
 /** Offer a lightsaber deploy after a face-up matching character deploys. Face-down deploys do not trigger it. */
 export function maybeBeginJediTraining(state: GameStateData, side: Side, jedi: CardInstance | undefined): boolean {
   if (!jedi || jedi.faceDown) return false;
+  if ((getCard(jedi.cardId, jedi.cardSet) as { armedDangerous?: boolean } | undefined)?.armedDangerous) return false;
   if (state.jediTrainingPending || state.deployFromDeckPending || state.effectActivationPending) return false;
   const effect = trainingEffect(state, side, jedi);
   if (!effect) return false;

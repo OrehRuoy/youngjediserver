@@ -5,8 +5,8 @@ import { shuffleDeck } from "./state";
 import { usesPlanetEffectFetch } from "./ruleset";
 
 function isEffect(cardId: string, set?: string): boolean {
-  const def = getCard(cardId, set);
-  return !!def && (def as { type?: string }).type === "effect";
+  const def = getCard(cardId, set) as { type?: string; doubleImpact?: string } | undefined;
+  return !!def && (def.type === "effect" || def.doubleImpact === "battle-effect");
 }
 
 function cardName(cardId: string, set?: string): string {

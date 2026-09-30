@@ -8,6 +8,8 @@ import { getCard } from "../cards/loader";
 import type { GameStateData } from "./state";
 import {
   getCharactersAtLocation,
+  splitBattleBonusText,
+  duelOtherPowerBonus,
   getCurrentLocationCard,
   getGametextBonusForCharacter,
   getLocationBonusForCharacter,
@@ -49,6 +51,22 @@ function destValue(cardId: string, set?: string): number {
   const def = getCard(cardId, set);
   if (!def || typeof (def as { destiny?: number }).destiny !== "number") return 0;
   return (def as { destiny: number }).destiny;
+}
+
+function printedDestinyNumbers(cardId: string, set?: string): number[] {
+  const def = getCard(cardId, set) as { destiny?: number; destiny2?: number } | undefined;
+  if (!def || typeof def.destiny !== "number") return [];
+  if (typeof def.destiny2 === "number" && def.destiny2 !== def.destiny) return [def.destiny, def.destiny2];
+  return [def.destiny];
+}
+
+function chosenDuelDestiny(state: GameStateData, cardId: string, set: string | undefined, pick?: number): number {
+  const nums = printedDestinyNumbers(cardId, set);
+  if (nums.length === 0) return 0;
+  if (typeof pick === "number" && nums.includes(pick)) return pick;
+  const pending = state.duelState?.pendingAttack?.destiny;
+  if (typeof pending === "number" && nums.includes(pending)) return pending;
+  return nums[0];
 }
 
 function duelCardText(cardId: string, set?: string): string {
@@ -104,6 +122,10 @@ function isWeapon(cardId: string, set?: string): boolean {
   return !!def && (def as { type?: string }).type === "weapon";
 }
 
+function isArmedDangerous(cardId: string, set?: string): boolean {
+  return !!(getCard(cardId, set) as { armedDangerous?: boolean } | undefined)?.armedDangerous;
+}
+
 function isLightsaber(cardId: string, set?: string): boolean {
   if (!isWeapon(cardId, set)) return false;
   const def = getCard(cardId, set);
@@ -155,7 +177,15 @@ export function isLightDuelist(cardId: string, set?: string): boolean {
 export function isDarkDuelist(cardId: string, set?: string): boolean {
   if (!isCharacter(cardId, set)) return false;
   const id = cardId.toLowerCase();
-  return id.startsWith("darthmaul") || id.startsWith("darthsidious") || id.startsWith("aurrasing");
+  const persona = ((getCard(cardId, set) as { persona?: string } | undefined)?.persona ?? "").toLowerCase();
+  return (
+    id.startsWith("darthmaul") ||
+    id.startsWith("darthsidious") ||
+    id.startsWith("aurrasing") ||
+    persona === "darthmaul" ||
+    persona === "darthsidious" ||
+    persona === "aurrasing"
+  );
 }
 
 export function isDuelist(cardId: string, side: Side, set?: string): boolean {
@@ -178,7 +208,12 @@ function duelPower(
   let power = printed === "?" ? (anakinPower ?? 0) : printed;
   const loc = getCurrentLocationCard(state);
   if (loc) power += getLocationBonusForCharacter(char.cardId, loc.card.cardId);
-  if (weapon) power += getWeaponPowerAddForCharacter(weapon.cardId, char.cardId, weapon.cardSet, opponent?.cardId);
+  if (isArmedDangerous(char.cardId, char.cardSet)) {
+    const builtIn = (getCard(char.cardId, char.cardSet) as { builtInWeapon?: { powerAdd?: number | "?" } } | undefined)?.builtInWeapon;
+    if (typeof builtIn?.powerAdd === "number") power += builtIn.powerAdd;
+  } else if (weapon) {
+    power += getWeaponPowerAddForCharacter(weapon.cardId, char.cardId, weapon.cardSet, opponent?.cardId);
+  }
   power += getGametextBonusForCharacter(
     char.cardId,
     char.cardSet,
@@ -190,6 +225,7 @@ function duelPower(
     state,
     true
   ).bonus;
+  power += duelOtherPowerBonus(state, char);
   return Math.max(0, power);
 }
 
@@ -361,7 +397,7 @@ export function canInitiateDuel(state: GameStateData, side: Side): boolean {
   const opp: Side = side === "light" ? "dark" : "light";
   const theirs = getCharactersAtLocation(state, opp, true);
   if (theirs.filter((c) => isCharacter(c.cardId, c.cardSet)).length === 0) return false;
-  const duelists = mine.filter((c) => isDuelist(c.cardId, side, c.cardSet));
+  const duelists = mine.filter((c) => isDuelist(c.cardId, side, c.cardSet) && !isArmedDangerous(c.cardId, c.cardSet));
   const sabers = mine.filter((c) => isLightsaber(c.cardId, c.cardSet));
   return duelists.some((ch) => sabers.some((w) => weaponUsableBy(w.cardId, ch.cardId, w.cardSet)));
 }
@@ -579,7 +615,7 @@ export function playDuelCard(
   state: GameStateData,
   side: Side,
   instanceId: string,
-  opts?: { discardForExtraHits?: boolean }
+  opts?: { discardForExtraHits?: boolean; destinyPick?: number; doubleImpactHalf?: "primary" | "second" }
 ): boolean {
   const d = state.duelState;
   if (!d || d.step !== "play") return false;
@@ -588,11 +624,14 @@ export function playDuelCard(
   const idx = hand.findIndex((c) => c.instanceId === instanceId);
   if (idx < 0) return false;
   const card = hand[idx];
-  const destiny = destValue(card.cardId, card.cardSet);
+  const half = opts?.doubleImpactHalf === "second" ? "second" : "primary";
+  card.doubleImpactChoice = half;
+  const destiny = chosenDuelDestiny(state, card.cardId, card.cardSet, opts?.destinyPick);
+  const allowsExtra = splitBattleBonusText(card.cardId, card.cardSet, half).includes("duel:discard:extrahit2");
 
   if (!d.pendingAttack) {
     if (d.currentAttacker !== side) return false;
-    const useExtra = !!opts?.discardForExtraHits && cardAllowsDiscardExtraHits(card.cardId, card.cardSet);
+    const useExtra = !!opts?.discardForExtraHits && allowsExtra;
     if (useExtra) {
       hand.splice(idx, 1);
       const p = side === "light" ? state.light : state.dark;
@@ -620,7 +659,7 @@ export function playDuelCard(
     const atkPlayed = atkSide === "light" ? d.lightPlayed : d.darkPlayed;
     const atkIdx = atkHand.findIndex((c) => c.instanceId === d.pendingAttack!.instanceId);
     if (atkIdx >= 0) atkPlayed.push(atkHand.splice(atkIdx, 1)[0]);
-    const useExtra = !!opts?.discardForExtraHits && cardAllowsDiscardExtraHits(card.cardId, card.cardSet);
+    const useExtra = !!opts?.discardForExtraHits && allowsExtra;
     if (useExtra) {
       hand.splice(idx, 1);
       const p = side === "light" ? state.light : state.dark;

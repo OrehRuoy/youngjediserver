@@ -10,7 +10,7 @@ import type { ClientMessage, Side } from "../types";
 import * as lobby from "./lobby";
 import { getTableSummaries, getLobbyPlayers, getLobbyChat, addLobbyChat } from "./lobby";
 import { createTable, joinTable, leaveTable, setReady, setDeck, setCustomDeck, getTableForBroadcast, getPlayersInTable, getTableSummary, createBotTable, parseCoverCard } from "./lobby";
-import { getDecksForSide, getDeck } from "../cards/loader";
+import { getDecksForSide, getDeck, customDeckCopyError } from "../cards/loader";
 
 const PLAYER_ID_PREFIX = "p_";
 let playerIdCounter = 0;
@@ -103,6 +103,8 @@ export function handleTableDeckSelectCustom(
   const player = lobby.getPlayer(playerId);
   if (!player || !player.tableId) return null;
   if (!cards || !Array.isArray(cards) || cards.length === 0) return { type: "error", error: "No cards in custom deck" };
+  const copyError = customDeckCopyError(cards);
+  if (copyError) return { type: "error", error: copyError };
   const t = setCustomDeck(playerId, cards, parseCoverCard(coverCardRaw));
   if (!t) return null;
   return { type: "table_update", table: getTableSummary(t.id)! };
@@ -139,6 +141,10 @@ export function handleStartBotGame(
     return { deckId };
   }
 
+  if (playerDeckCustom && playerDeckCustom.length > 0) {
+    const copyError = customDeckCopyError(playerDeckCustom);
+    if (copyError) return { error: copyError };
+  }
   const playerRes = resolveDeck(playerSide, playerDeckId || "starter_deck", playerDeckCustom);
   const botRes = resolveDeck(botSide, botDeckId || (botSide === "light" ? "starter_deck" : "starter_dark_deck"), botDeckCustom);
 

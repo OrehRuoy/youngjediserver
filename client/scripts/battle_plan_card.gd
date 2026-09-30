@@ -30,7 +30,7 @@ func _ready() -> void:
 	_texture_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_texture_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_texture_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	add_child(_texture_rect)
 	mouse_entered.connect(_on_battle_plan_card_mouse_entered)
 	mouse_exited.connect(_on_battle_plan_card_mouse_exited)
@@ -65,8 +65,18 @@ func set_card(card_id: String, instance_id: String, side: String) -> void:
 		if tex and CardCatalog:
 			tex = CardCatalog.smooth_texture(tex)
 	_current_texture = tex
+	var slot := CardArt.fitted_size(Vector2(96, 136), tex)
+	custom_minimum_size = slot
 	if _texture_rect:
 		_texture_rect.texture = tex
+		_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
+
+func set_board_size(size: Vector2) -> void:
+	var fitted := CardArt.fitted_size(size, _current_texture)
+	custom_minimum_size = fitted
+	if _texture_rect:
+		_texture_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -155,8 +165,9 @@ func _show_hover_popup() -> void:
 	var tex_rect: TextureRect = TextureRect.new()
 	tex_rect.texture = _current_texture
 	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	tex_rect.custom_minimum_size = POPUP_SIZE
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var popup_slot := CardArt.fitted_size(POPUP_SIZE, _current_texture)
+	tex_rect.custom_minimum_size = popup_slot
 	margin.add_child(tex_rect)
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0.08, 0.1, 0.18, 0.98)
@@ -165,7 +176,7 @@ func _show_hover_popup() -> void:
 	style.set_corner_radius_all(8)
 	popup.add_theme_stylebox_override("panel", style)
 	var card_rect: Rect2 = get_global_rect()
-	var popup_size: Vector2 = Vector2(POPUP_SIZE.x + 24, POPUP_SIZE.y + 24)
+	var popup_size: Vector2 = Vector2(tex_rect.custom_minimum_size.x + 24, tex_rect.custom_minimum_size.y + 24)
 	var above_y: float = card_rect.position.y - popup_size.y - 8
 	popup.position = Vector2(card_rect.position.x, above_y)
 	var vp: Rect2 = get_viewport().get_visible_rect()
@@ -173,14 +184,21 @@ func _show_hover_popup() -> void:
 		popup.position.y = 8
 	popup.position.x = clampf(popup.position.x, 0, vp.size.x - popup_size.x)
 	popup.size = popup_size
-	root.add_child(popup)
+	var layer := CanvasLayer.new()
+	layer.name = "CardHoverLayer"
+	layer.layer = 250
+	root.add_child(layer)
+	layer.add_child(popup)
 	_hover_popup = popup
 
 
 func _hide_hover_popup() -> void:
 	if _hover_popup and is_instance_valid(_hover_popup):
+		var parent := _hover_popup.get_parent()
 		_hover_popup.queue_free()
 		_hover_popup = null
+		if parent is CanvasLayer and str(parent.name) == "CardHoverLayer":
+			parent.queue_free()
 
 
 func get_card_instance_id() -> String:

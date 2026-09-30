@@ -144,6 +144,33 @@ export function initCards(): void {
  * Get card definition by id. When set is provided, returns the card from that set (for locations etc. that share an id across sets, e.g. light vs dark).
  * When set is not provided, returns the first-loaded card with that id (backward compatible).
  */
+/** Same printed card across sets: ignore punctuation, spaces, and accents. */
+export function deckTitleKey(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/** Reprints share one 5-copy limit, matched by title rather than set or card id. */
+export function customDeckCopyError(cards: { id: string; set?: string; count: number }[]): string | null {
+  const totals = new Map<string, { n: number; name: string }>();
+  for (const entry of cards) {
+    const count = Math.max(0, Math.floor(Number(entry.count) || 0));
+    if (count <= 0) continue;
+    const def = getCard(entry.id, entry.set);
+    const name = def?.name ?? entry.id;
+    const key = deckTitleKey(name);
+    const prev = totals.get(key);
+    totals.set(key, { n: (prev?.n ?? 0) + count, name: prev?.name ?? name });
+  }
+  for (const { n, name } of totals.values()) {
+    if (n > 5) return `Only 5 copies of ${name} are allowed in a deck. Reprints count toward that 5.`;
+  }
+  return null;
+}
+
 export function getCard(id: string, set?: string): CardDefinition | undefined {
   if (set) {
     const fromSet = cardsBySetId.get(set + ":" + id);

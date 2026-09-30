@@ -29,6 +29,7 @@ const SET_TITLES: Dictionary = {
 	"enhancedmenaceofdarthmaul": "Enhanced Menace of Darth Maul",
 	"thejedicouncil": "The Jedi Council",
 	"duelofthefates": "Duel of the Fates",
+	"reflections": "Reflections",
 }
 const DECK_THEME: Theme = preload("res://theme/lobby_theme.tres")
 const GOLD := Color(0.95, 0.82, 0.35, 1)
@@ -595,14 +596,15 @@ func _create_draggable_card(card: Dictionary, tex: Texture2D) -> Control:
 	style.corner_radius_bottom_left = 2
 	style.corner_radius_bottom_right = 2
 	container.add_theme_stylebox_override("panel", style)
-	container.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT + 6)
+	var display := CardArt.fitted_size(Vector2(CARD_WIDTH, CARD_HEIGHT), tex)
+	container.custom_minimum_size = Vector2(display.x, display.y + 6)
 	container.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var tex_rect := TextureRect.new()
 	tex_rect.texture = tex
-	tex_rect.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
+	tex_rect.custom_minimum_size = display
 	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(tex_rect)
 
@@ -659,15 +661,16 @@ func _show_hover_preview_for_card(card: Dictionary) -> void:
 	popup_style.set_content_margin_all(6)
 	popup.add_theme_stylebox_override("panel", popup_style)
 
+	var preview := CardArt.fitted_size(Vector2(PREVIEW_WIDTH, PREVIEW_HEIGHT), tex)
 	var tex_rect := TextureRect.new()
 	tex_rect.texture = tex
-	tex_rect.custom_minimum_size = Vector2(PREVIEW_WIDTH, PREVIEW_HEIGHT)
+	tex_rect.custom_minimum_size = preview
 	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	popup.add_child(tex_rect)
 
-	var popup_size := Vector2(PREVIEW_WIDTH + 12, PREVIEW_HEIGHT + 12)
+	var popup_size := Vector2(preview.x + 12, preview.y + 12)
 	var vp := get_viewport().get_visible_rect().size
 	var mpos := get_viewport().get_mouse_position()
 	var px := mpos.x + 20
@@ -730,22 +733,23 @@ func _start_drag(card_panel: Control, gpos: Vector2) -> void:
 	_drag_preview_card = card
 	_hide_hover_preview()
 
+	var drag_size := CardArt.fitted_size(Vector2(CARD_WIDTH, CARD_HEIGHT), tex)
 	_drag_overlay = TextureRect.new()
 	_drag_overlay.texture = tex
-	_drag_overlay.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	_drag_overlay.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
+	_drag_overlay.custom_minimum_size = drag_size
+	_drag_overlay.size = drag_size
 	_drag_overlay.size_flags_horizontal = 0
 	_drag_overlay.size_flags_vertical = 0
 	_drag_overlay.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_drag_overlay.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_drag_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_drag_overlay.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_drag_overlay.modulate = Color(1, 1, 1, 0.85)
 	_drag_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_drag_overlay.z_index = 100
 	_drag_overlay.set_as_top_level(true)
 	add_child(_drag_overlay)
-	_drag_overlay.size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	_drag_offset = Vector2(CARD_WIDTH / 2.0, CARD_HEIGHT / 2.0)
+	_drag_overlay.size = drag_size
+	_drag_offset = drag_size / 2.0
 	_drag_overlay.global_position = gpos - _drag_offset
 
 func _end_drag(gpos: Vector2) -> void:
@@ -857,7 +861,7 @@ func _try_add_card_to_slot(card: Dictionary, color_name: String) -> void:
 	var card_name: String = card.get("name", "")
 	var title_count := _count_title_in_deck(card_name)
 	if title_count >= MAX_SAME_TITLE:
-		_show_toast("Already have %d copies of '%s' (max %d)." % [title_count, card_name, MAX_SAME_TITLE])
+		_show_toast("Already have %d copies of this card (max %d). Reprints from other sets count toward that." % [title_count, MAX_SAME_TITLE])
 		return
 
 	_deck_slots[color_name].append(card)
@@ -910,11 +914,28 @@ func _on_cover_card_input(event: InputEvent) -> void:
 			_show_toast("Removed cover card (%s)." % name_str)
 
 
+func _title_key(card_name: String) -> String:
+	var s := card_name.to_lower()
+	s = s.replace("é", "e").replace("è", "e").replace("ê", "e").replace("ë", "e")
+	s = s.replace("á", "a").replace("à", "a").replace("â", "a").replace("ä", "a")
+	s = s.replace("í", "i").replace("ì", "i").replace("î", "i").replace("ï", "i")
+	s = s.replace("ó", "o").replace("ò", "o").replace("ô", "o").replace("ö", "o")
+	s = s.replace("ú", "u").replace("ù", "u").replace("û", "u").replace("ü", "u")
+	s = s.replace("ñ", "n").replace("ç", "c")
+	var out := ""
+	for i in s.length():
+		var code := s.unicode_at(i)
+		if (code >= 48 and code <= 57) or (code >= 97 and code <= 122):
+			out += s[i]
+	return out
+
+
 func _count_title_in_deck(card_name: String) -> int:
+	var key := _title_key(card_name)
 	var count := 0
 	for color_name in COLOR_NAMES:
 		for c in _deck_slots[color_name]:
-			if c.get("name", "") == card_name:
+			if _title_key(str(c.get("name", ""))) == key:
 				count += 1
 	return count
 
@@ -1028,11 +1049,12 @@ func _refresh_slot_display(color_name: String) -> void:
 		if tex == null:
 			continue
 
+		var thumb := CardArt.fitted_size(Vector2(42, 60), tex)
 		var card_tex := TextureRect.new()
 		card_tex.texture = tex
-		card_tex.custom_minimum_size = Vector2(42, 60)
+		card_tex.custom_minimum_size = thumb
 		card_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		card_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		card_tex.tooltip_text = ""
 		card_tex.mouse_filter = Control.MOUSE_FILTER_STOP
 		card_tex.gui_input.connect(_on_deck_card_input.bind(color_name, i))

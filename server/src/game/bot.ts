@@ -15,6 +15,7 @@ import * as hyperspace from "./hyperspace";
 import * as duel from "./duel";
 import * as winControl from "./win-control";
 import * as deployFromDeck from "./deploy-from-deck";
+import * as pounded from "./pounded";
 
 export type BotStyle = "balanced" | "aggressive" | "passive";
 
@@ -106,6 +107,27 @@ export function applyBotStyle(base: BotConfig, style: BotStyle): BotConfig {
     cfg.discardHandUnplayableThreshold = Math.max(3, cfg.discardHandUnplayableThreshold - 1);
   }
   return cfg;
+}
+
+function doubleImpactChoicesFor(
+  ids: string[],
+  pool: { instanceId: string; cardId: string; cardSet?: string }[]
+): Record<string, "primary" | "second"> {
+  const choices: Record<string, "primary" | "second"> = {};
+  for (const id of ids) {
+    const card = pool.find((c) => c.instanceId === id);
+    if (!card) continue;
+    const def = getCard(card.cardId, card.cardSet) as {
+      doubleImpact?: string;
+      powerAdd?: number;
+      doubleImpactHalf?: { powerAdd?: number };
+    } | undefined;
+    if (def?.doubleImpact !== "battle-battle") continue;
+    const primary = typeof def.powerAdd === "number" ? def.powerAdd : 0;
+    const second = typeof def.doubleImpactHalf?.powerAdd === "number" ? def.doubleImpactHalf.powerAdd : 0;
+    choices[id] = second > primary ? "second" : "primary";
+  }
+  return choices;
 }
 
 function getCardType(cardId: string): string {
@@ -436,6 +458,13 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     return { kind: "peek_deck_choice", place: bury ? "bottom" : "top" };
   }
 
+  if (g.effectActivationPending?.side === botSide && g.effectActivationPending.kind === "bottom_or_draw") {
+    if (p.deck.length > 0) return { kind: "deploy_here_draw" };
+    const ranked = [...p.hand].sort((a, b) => getDestiny(a.cardId) - getDestiny(b.cardId));
+    if (ranked.length > 0) return { kind: "bottom_hand_card", instanceId: ranked[0].instanceId };
+    return { kind: "deploy_here_draw" };
+  }
+
   if (g.effectActivationPending?.side === botSide && g.effectActivationPending.kind === "bottom_hand") {
     const ranked = [...p.hand].sort((a, b) => {
       const aChar = getCardType(a.cardId) === "character" ? 1 : 0;
@@ -449,7 +478,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
 
   if (g.deployDrawPending?.side === botSide) {
     const deck = (botSide === "light" ? g.light : g.dark).deck;
-    return deck.length > 0 ? { kind: "confirm_deploy_draw" } : { kind: "decline_deploy_draw" };
+    return deck.length > g.deployDrawPending.count ? { kind: "confirm_deploy_draw" } : { kind: "decline_deploy_draw" };
   }
 
   if (g.jediTrainingPending?.side === botSide) {
@@ -543,10 +572,10 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         return text.includes("duel:removehit");
       });
       if (hitsOnBot > 0 && remover) return { kind: "duel_remove_hit", instanceId: remover.instanceId };
-      const extraHits = (c: { cardId: string; cardSet?: string }) => {
-        const def = getCard(c.cardId, c.cardSet) as { grayboxbonus?: string; gametextbonus?: string } | undefined;
-        const text = `${def?.gametextbonus ?? ""};${def?.grayboxbonus ?? ""}`.toLowerCase();
-        return text.includes("duel:discard:extrahit2");
+      const extraHalf = (c: { cardId: string; cardSet?: string }): "primary" | "second" | null => {
+        if (state.splitBattleBonusText(c.cardId, c.cardSet, "second").includes("duel:discard:extrahit2")) return "second";
+        if (state.splitBattleBonusText(c.cardId, c.cardSet, "primary").includes("duel:discard:extrahit2")) return "primary";
+        return null;
       };
       if (d.pendingAttack && d.pendingAttack.side !== botSide) {
         const match = hand.find((c) => {
@@ -554,7 +583,8 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
           return typeof def?.destiny === "number" && def.destiny === d.pendingAttack!.destiny;
         });
         const play = match ?? hand[0];
-        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: !!match && extraHits(play) };
+        const half = extraHalf(play);
+        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: !!match && !!half, doubleImpactHalf: half ?? "primary" };
       }
       if (!d.pendingAttack && d.currentAttacker === botSide) {
         const drawers = hand.filter((c) => {
@@ -567,7 +597,8 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
           drawers.find((c) => getDestiny(c.cardId) < bestDestiny) ?? (hand.length <= 2 ? drawers[0] : undefined);
         if (sacrifice) return { kind: "duel_discard_draw", instanceId: sacrifice.instanceId };
         const play = hand[0];
-        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: extraHits(play) };
+        const half = extraHalf(play);
+        return { kind: "duel_play_card", instanceId: play.instanceId, discardForExtraHits: !!half, doubleImpactHalf: half ?? "primary" };
       }
     }
     return null;
@@ -581,7 +612,8 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
   if (g.starshipBattlePhase && g.battlePlanPhase && (botSide === "light" ? !g.lightBattlePlanReady : !g.darkBattlePlanReady)) {
     const ships = hyperspace.getHyperspace(g, botSide);
     const declared = (botSide === "light" ? g.lightDeclaredBattleCards : g.darkDeclaredBattleCards) ?? [];
-    return { kind: "battle_plan_ready", instanceIds: [...declared, ...ships.map((c) => c.instanceId)] };
+        const shipOrder = [...declared, ...ships.map((c) => c.instanceId)];
+        return { kind: "battle_plan_ready", instanceIds: shipOrder, doubleImpactChoices: doubleImpactChoicesFor(shipOrder, p.hand) };
   }
 
   if (phase === "choose_starting_location") {
@@ -686,7 +718,16 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         playable.push({ instanceId: c.instanceId, cardId: c.cardId, cost: 0, type, score });
         continue;
       }
-      if (type === "battle") continue;
+      const raw = getCard(c.cardId, c.cardSet) as { doubleImpact?: string; effectHalf?: { cost?: number } } | undefined;
+      if (type === "battle" && raw?.doubleImpact !== "battle-effect") continue;
+      if (type === "battle" && raw?.doubleImpact === "battle-effect") {
+        if (won || lost || myCharCount === 0) continue;
+        if (state.hasEffectAtLocation(g, botSide)) continue;
+        const effectCost = Math.floor(Number(raw.effectHalf?.cost)) || 0;
+        if (effectCost > force) continue;
+        playable.push({ instanceId: c.instanceId, cardId: c.cardId, cost: effectCost, type: "effect", score: 1.6 });
+        continue;
+      }
 
       if (type === "location") {
         if (won || !loc || loc.card.cardId === c.cardId) continue;
@@ -871,7 +912,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
         for (const c of inPlay) {
           if (!orderSet.has(c.instanceId)) order.push(c.instanceId);
         }
-        return { kind: "battle_plan_ready", instanceIds: order };
+        return { kind: "battle_plan_ready", instanceIds: order, doubleImpactChoices: doubleImpactChoicesFor(order, p.hand) };
       }
       return null;
     }
@@ -927,8 +968,7 @@ export function getNextAction(g: GameStateData, botSide: Side, config?: BotConfi
     }
     const poundedEffect = p.inPlay.find((c) => {
       if (c.faceDown) return false;
-      const def = getCard(c.cardId, c.cardSet) as { type?: string; effects?: string } | undefined;
-      return def?.type === "effect" && (def.effects ?? "").toLowerCase().includes("discardopp:nonunique");
+      return pounded.cardDiscardsOpponentNonUnique(c.cardId, c.cardSet);
     });
     if (poundedEffect) {
       const oppPlay = (botSide === "light" ? g.dark : g.light).inPlay;

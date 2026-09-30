@@ -2474,7 +2474,7 @@
       "dotColor": "orange",
       "type": "weapon",
       "uniqueness": false,
-      "cost": 0,
+      "cost": 1,
       "powerAdd": 1,
       "powerAdd2": 0,
       "destinyAdd": 1,

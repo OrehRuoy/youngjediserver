@@ -13,6 +13,29 @@ function getDestinyValue(cardId: string, set?: string): number {
   return (def as { destiny: number }).destiny;
 }
 
+/** Printed destiny numbers on a Reflections card that shows two. One number when they match. */
+function printedDestinyNumbers(cardId: string, set?: string): number[] {
+  const def = getCard(cardId, set) as { destiny?: number; destiny2?: number } | undefined;
+  if (!def || typeof def.destiny !== "number") return [];
+  if (typeof def.destiny2 === "number" && def.destiny2 !== def.destiny) return [def.destiny, def.destiny2];
+  return [def.destiny];
+}
+
+function cardHasTwoDestinyNumbers(cardId: string, set?: string): boolean {
+  return printedDestinyNumbers(cardId, set).length >= 2;
+}
+
+/** Opening-hand compare uses the higher printed number when a card shows two and only one player drew one. */
+function destinyForCompare(cardId: string, set?: string): number {
+  const nums = printedDestinyNumbers(cardId, set);
+  if (nums.length === 0) return 0;
+  return Math.max(...nums);
+}
+
+function isArmedDangerous(cardId: string, set?: string): boolean {
+  return !!(getCard(cardId, set) as { armedDangerous?: boolean } | undefined)?.armedDangerous;
+}
+
 function isLocationCard(cardId: string, set?: string): boolean {
   const def = getCard(cardId, set);
   return def != null && (def as { type?: string }).type === "location";
@@ -38,9 +61,36 @@ function isWeaponOnly(cardId: string, set?: string): boolean {
 }
 
 function isEffectCard(cardId: string, set?: string): boolean {
-  const def = getCard(cardId, set);
+  const def = getCard(cardId, set) as { type?: string; doubleImpact?: string } | undefined;
   if (!def) return false;
-  return (def as { type?: string }).type === "effect";
+  return def.type === "effect" || def.doubleImpact === "battle-effect";
+}
+
+/** Effect text used while a card is deployed. A Battle+Effect Double Impact uses its Effect half. */
+function deployedEffectFace(cardId: string, set?: string): { effects: string; powerAdd: number; canUse: string } | null {
+  const def = getCard(cardId, set) as {
+    type?: string;
+    effects?: string;
+    powerAdd?: number;
+    canUse?: string;
+    doubleImpact?: string;
+    effectHalf?: { effects?: string; powerAdd?: number; canUse?: string };
+  } | undefined;
+  if (!def) return null;
+  if (def.doubleImpact === "battle-effect") {
+    const half = def.effectHalf;
+    return {
+      effects: half?.effects ?? "",
+      powerAdd: typeof half?.powerAdd === "number" ? half.powerAdd : 0,
+      canUse: half?.canUse ?? "",
+    };
+  }
+  if (def.type !== "effect") return null;
+  return {
+    effects: def.effects ?? "",
+    powerAdd: typeof def.powerAdd === "number" ? def.powerAdd : 0,
+    canUse: def.canUse ?? "",
+  };
 }
 
 function getCardType(cardId: string, set?: string): string {
@@ -287,16 +337,83 @@ function characterMatchesBattleCanUseSegment(characterCardId: string, segment: s
  * canUse format: "◆battledroid" or "jabba,bibfortuna" (comma-separated: check each, first match wins).
  * "any" means any character.
  */
-function canBattleCardBeUsedBy(battleCardId: string, characterCardId: string): boolean {
-  const bDef = getCard(battleCardId);
-  if (!bDef || (bDef as { type?: string }).type !== "battle") return false;
-  const canUse = (bDef as { canUse?: string }).canUse;
-  if (!canUse || canUse.trim().toLowerCase() === "any") return true;
-  const segments = canUse.split(",").map((s) => s.trim()).filter(Boolean);
-  for (const seg of segments) {
-    if (characterMatchesBattleCanUseSegment(characterCardId, seg)) return true;
+function canUseMatchesCharacter(canUse: string | undefined, characterCardId: string): boolean {
+  if (!canUse || !canUse.trim() || canUse.trim().toLowerCase() === "any") return true;
+  return canUse.split(",").some((seg) => characterMatchesBattleCanUseSegment(characterCardId, seg.trim()));
+}
+
+function canBattleCardBeUsedBy(
+  battleCardId: string,
+  characterCardId: string,
+  half?: "primary" | "second",
+  set?: string
+): boolean {
+  const bDef = getCard(battleCardId, set) as {
+    type?: string;
+    canUse?: string;
+    comboBattle?: boolean;
+    comboHalf?: { canUse?: string };
+    doubleImpact?: string;
+    doubleImpactHalf?: { canUse?: string };
+  } | undefined;
+  if (!bDef || bDef.type !== "battle") return false;
+  if (half === "second" && bDef.doubleImpact === "battle-battle") {
+    return canUseMatchesCharacter(bDef.doubleImpactHalf?.canUse, characterCardId);
   }
+  if (half === "primary") return canUseMatchesCharacter(bDef.canUse, characterCardId);
+  if (canUseMatchesCharacter(bDef.canUse, characterCardId)) return true;
+  if (bDef.comboBattle && bDef.comboHalf && canUseMatchesCharacter(bDef.comboHalf.canUse, characterCardId)) return true;
+  if (bDef.doubleImpact === "battle-battle" && bDef.doubleImpactHalf && canUseMatchesCharacter(bDef.doubleImpactHalf.canUse, characterCardId)) return true;
   return false;
+}
+
+type SplitHalf = "primary" | "second";
+
+function splitHalfOf(card: { doubleImpactChoice?: string } | undefined): SplitHalf {
+  return card?.doubleImpactChoice === "second" ? "second" : "primary";
+}
+
+function activeBattleFields(cardId: string, set: string | undefined, half: SplitHalf): {
+  powerAdd: number;
+  destinyAdd: number;
+  canUse?: string;
+  condition: string;
+  gametextbonus: string;
+  grayboxbonus: string;
+} {
+  const def = getCard(cardId, set) as {
+    powerAdd?: number;
+    destinyAdd?: number;
+    canUse?: string;
+    condition?: string;
+    gametextbonus?: string;
+    grayboxbonus?: string;
+    doubleImpact?: string;
+    doubleImpactHalf?: {
+      powerAdd?: number;
+      destinyAdd?: number;
+      canUse?: string;
+      condition?: string;
+      gametextbonus?: string;
+      grayboxbonus?: string;
+    };
+  } | undefined;
+  const second = half === "second" && def?.doubleImpact === "battle-battle" ? def.doubleImpactHalf : undefined;
+  const src = second ?? def;
+  return {
+    powerAdd: typeof src?.powerAdd === "number" ? src.powerAdd : 0,
+    destinyAdd: typeof src?.destinyAdd === "number" ? src.destinyAdd : 0,
+    canUse: src?.canUse,
+    condition: typeof src?.condition === "string" ? src.condition.trim() : "",
+    gametextbonus: src?.gametextbonus ?? "",
+    grayboxbonus: src?.grayboxbonus ?? "",
+  };
+}
+
+/** Bonuses for the chosen side of a battle-battle card. Other cards use their own text. */
+export function splitBattleBonusText(cardId: string, set: string | undefined, half: SplitHalf): string {
+  const face = activeBattleFields(cardId, set, half);
+  return `${face.gametextbonus};${face.grayboxbonus}`.toLowerCase();
 }
 
 /** Check if two characters together cover all canUse segments (for "both:fighttogether"). */
@@ -469,6 +586,7 @@ export function wouldViolateUniquenessAtLocationWeapon(
 }
 
 function twoCharactersSamePersona(char1CardId: string, char2CardId: string): boolean {
+  if (char1CardId.toLowerCase() === char2CardId.toLowerCase()) return true;
   const p1 = getCharacterPersona(char1CardId).toLowerCase();
   const p2 = getCharacterPersona(char2CardId).toLowerCase();
   return p1.length > 0 && p1 === p2;
@@ -485,11 +603,12 @@ function battleCardConditionMet(
   opponentCharacterCardId: string,
   fighterIndex: number,
   locationCardId: string,
-  weaponCardId?: string
+  weaponCardId?: string,
+  conditionOverride?: string
 ): boolean {
   const bDef = getCard(battleCardId);
   if (!bDef || (bDef as { type?: string }).type !== "battle") return false;
-  const condition = (bDef as { condition?: string }).condition;
+  const condition = conditionOverride !== undefined ? conditionOverride : (bDef as { condition?: string }).condition;
   if (!condition || !condition.trim()) return true;
   const parts = condition.includes(":") ? condition.split(":") : condition.split(",");
   const op = (parts[0] ?? "").trim().toLowerCase();
@@ -530,15 +649,18 @@ function getBattleCardConditionString(battleCardId: string): string {
 }
 
 /** True if battle card condition contains ":noweapon" — no weapon may add power for this fight. */
+function battleConditionTexts(battleCardId: string): string {
+  const def = getCard(battleCardId) as { condition?: string; comboHalf?: { condition?: string } } | undefined;
+  return `${def?.condition ?? ""} ${def?.comboHalf?.condition ?? ""}`.toLowerCase();
+}
+
 function battleCardConditionNoWeapon(battleCardId: string): boolean {
-  const conditionStr = getBattleCardConditionString(battleCardId).toLowerCase();
-  return conditionStr.includes(":noweapon");
+  return battleConditionTexts(battleCardId).split(/[^a-z]+/).includes("noweapon");
 }
 
 /** True if battle card condition contains "oppnoweapon" — when this fighter has no weapon, the opponent cannot use a weapon (no weapon bonus, and if opponent loses their weapon is not lost). */
 function battleCardConditionOppNoWeapon(battleCardId: string): boolean {
-  const conditionStr = getBattleCardConditionString(battleCardId).toLowerCase();
-  return conditionStr.includes("oppnoweapon");
+  return battleConditionTexts(battleCardId).includes("oppnoweapon");
 }
 
 /** True if battle card condition contains "returnhand" — loser returns character(s) and weapon(s) to hand. */
@@ -547,15 +669,25 @@ function battleCardConditionReturnHand(battleCardId: string): boolean {
   return conditionStr.includes("returnhand");
 }
 
+/** Named character after returnhand, such as returnhand:jarjar. Empty means every character in the fight. */
+function getReturnHandTarget(battleCardId: string): string | null {
+  const parts = getBattleCardConditionString(battleCardId).toLowerCase().split(":").map((s) => s.trim()).filter(Boolean);
+  const i = parts.indexOf("returnhand");
+  if (i < 0) return null;
+  const next = parts[i + 1];
+  if (!next || next === "nodamage") return null;
+  return next;
+}
+
 /** True if battle card condition contains "nodamage" — no milling from loser's deck for damage this fight. */
 function battleCardConditionNoDamage(battleCardId: string): boolean {
   const conditionStr = getBattleCardConditionString(battleCardId).toLowerCase();
   return conditionStr.includes("nodamage");
 }
 
-/** True if battle card condition is "defeat◆:fightagain" (or defeat + fightagain): when attacker defeats a uniqueness:false character, they fight the next defender too (same character + weapon, no battle card). */
-function battleCardHasDefeatFightAgain(battleCardId: string): boolean {
-  const conditionStr = getBattleCardConditionString(battleCardId).toLowerCase();
+/** True if the chosen half says defeat◆:fightagain. A ◆ character is unique. */
+function battleCardHasDefeatFightAgain(card: { cardId: string; cardSet?: string; doubleImpactChoice?: string }): boolean {
+  const conditionStr = activeBattleFields(card.cardId, card.cardSet, splitHalfOf(card)).condition.toLowerCase();
   return conditionStr.includes("defeat") && conditionStr.includes("fightagain");
 }
 
@@ -573,11 +705,11 @@ function getBattleCardConditionLoseSegment(battleCardId: string): string | null 
   return null;
 }
 
-/** True if the character card has uniqueness === false (non-unique). */
-function isCharacterUniquenessFalse(cardId: string): boolean {
+/** True if the character card is unique (printed ◆). */
+function isCharacterUnique(cardId: string): boolean {
   const def = getCard(cardId);
   if (!def || (def as { type?: string }).type !== "character") return false;
-  return (def as { uniqueness?: boolean }).uniqueness === false;
+  return (def as { uniqueness?: boolean }).uniqueness === true;
 }
 
 function getBattleCardPowerAdd(cardId: string): number {
@@ -594,8 +726,29 @@ function getBattleCardDestinyAdd(cardId: string): number {
   return typeof v === "number" ? v : 0;
 }
 
-/** One destiny result. alternate is the other card when the player still has to choose. */
-type ChosenDestinyDraw = { cardId: string; destiny: number; alternate?: { cardId: string; destiny: number } };
+/** One destiny result. alternate is the other card, or the other printed number, when the player still has to choose. */
+type ChosenDestinyDraw = {
+  cardId: string;
+  destiny: number;
+  alternate?: { cardId: string; destiny: number; imageCardId?: string };
+};
+
+/**
+ * A card with two printed destiny numbers asks the player to pick one.
+ * The bot keeps the higher number. imageCardId means both choices are the same card.
+ */
+function destinyChoiceForDraw(state: GameStateData, side: Side, card: CardInstance): ChosenDestinyDraw {
+  const nums = printedDestinyNumbers(card.cardId, card.cardSet);
+  const primary = nums[0] ?? 0;
+  if (nums.length < 2) return { cardId: card.cardId, destiny: primary };
+  const second = nums[1];
+  if (!isHumanSide(state, side)) return { cardId: card.cardId, destiny: Math.max(primary, second) };
+  return {
+    cardId: card.cardId,
+    destiny: primary,
+    alternate: { cardId: `${card.cardId}#destiny2`, destiny: second, imageCardId: card.cardId },
+  };
+}
 
 /** Draw N destiny cards from a side's deck. Each goes to discard after drawing. Returns drawn card info. */
 export function drawDestinyCards(state: GameStateData, side: Side, count: number): ChosenDestinyDraw[] {
@@ -603,7 +756,7 @@ export function drawDestinyCards(state: GameStateData, side: Side, count: number
   const draws: ChosenDestinyDraw[] = [];
   for (let i = 0; i < count && p.deck.length > 0; i++) {
     const c = p.deck.pop()!;
-    draws.push({ cardId: c.cardId, destiny: getDestinyValue(c.cardId, c.cardSet) });
+    draws.push(destinyChoiceForDraw(state, side, c));
     c.zone = "discard";
     c.faceDown = false;
     p.discard.push(c);
@@ -641,8 +794,8 @@ function drawDestinyForCardUser(state: GameStateData, side: Side, count: number,
     };
     keep(first);
     if (second) keep(second);
-    const a = { cardId: first.cardId, destiny: getDestinyValue(first.cardId, first.cardSet) };
-    const b = second ? { cardId: second.cardId, destiny: getDestinyValue(second.cardId, second.cardSet) } : undefined;
+    const a = { cardId: first.cardId, destiny: destinyForCompare(first.cardId, first.cardSet) };
+    const b = second ? { cardId: second.cardId, destiny: destinyForCompare(second.cardId, second.cardSet) } : undefined;
     if (!b || !human || a.destiny === b.destiny) {
       draws.push(!b || a.destiny >= b.destiny ? a : b);
       continue;
@@ -833,7 +986,7 @@ export interface GameStateData {
     effectCardId: string;
     effectCardName: string;
     countersToAdd: number;
-    kind?: "discard_counters" | "peek_opp_deck" | "bottom_hand";
+    kind?: "discard_counters" | "peek_opp_deck" | "bottom_hand" | "bottom_or_draw";
     peekedInstanceId?: string;
     peekedCardId?: string;
     peekedSet?: string;
@@ -853,8 +1006,10 @@ export interface GameStateData {
     darkDone: boolean;
     lastFetched?: { side: Side; cardId: string; name: string };
   };
-  /** Face-up deploy may draw (Baskol Yeesrim on Coruscant). */
-  deployDrawPending?: { side: Side; count: number };
+  /** Face-up deploy may draw (Baskol Yeesrim on Coruscant), or a winner may draw after defeating a character. */
+  deployDrawPending?: { side: Side; count: number; note?: string };
+  /** Further optional draws waiting behind deployDrawPending. */
+  deployDrawQueue?: { side: Side; count: number; note?: string }[];
   /** On-deploy search for a related card (deployfromdeck gametext). */
   deployFromDeckPending?: {
     side: Side;
@@ -867,6 +1022,7 @@ export interface GameStateData {
     foundSet?: string;
     nonUnique?: boolean;
     discardSearcher?: boolean;
+    toHand?: boolean;
   };
   /** Jedi Training: after a face-up Jedi deploys, optionally discard the Effect and deploy a lightsaber from deck. */
   jediTrainingPending?: {
@@ -908,10 +1064,10 @@ export interface GameStateData {
     side: Side;
     draws: { key: string; cardId: string; destiny: number }[];
   };
-  /** Watto: pick which of two destiny cards to use. Both cards are already in hand. */
+  /** Watto: pick which of two destiny cards to use. Also a card with two printed destiny numbers. */
   destinyChoosePending?: {
     side: Side;
-    draw: { key: string; options: { cardId: string; destiny: number }[] };
+    draw: { key: string; options: { cardId: string; destiny: number; imageCardId?: string }[] };
   };
   /** Card ids that already used a once-each-turn destiny redraw. */
   destinyRedrawUsed?: string[];
@@ -1142,22 +1298,55 @@ export function drawCards(state: GameStateData, side: Side, count: number): void
  * Cards are held in state.destinyLightCard / destinyDarkCard until put back.
  * Appends this round to state.destinyCompareRounds for display (all pairs when ties occur).
  */
+function drawCompareCard(deck: CardInstance[]): CardInstance | null {
+  return deck.length > 0 ? deck.pop()! : null;
+}
+
+/**
+ * Draw one card from each deck. If both show two destiny numbers, set them aside and draw again.
+ */
+function drawOpeningComparePair(state: GameStateData): void {
+  if (!state.destinyDrawnLight) state.destinyDrawnLight = [];
+  if (!state.destinyDrawnDark) state.destinyDrawnDark = [];
+  let light = drawCompareCard(state.light.deck);
+  let dark = drawCompareCard(state.dark.deck);
+  let guard = 0;
+  while (
+    light &&
+    dark &&
+    cardHasTwoDestinyNumbers(light.cardId, light.cardSet) &&
+    cardHasTwoDestinyNumbers(dark.cardId, dark.cardSet) &&
+    guard < 40
+  ) {
+    state.destinyDrawnLight.push(light);
+    state.destinyDrawnDark.push(dark);
+    light = drawCompareCard(state.light.deck);
+    dark = drawCompareCard(state.dark.deck);
+    guard++;
+  }
+  state.destinyLightCard = light;
+  state.destinyDarkCard = dark;
+}
+
+function pushDestinyCompareRound(state: GameStateData): void {
+  if (!state.destinyLightCard || !state.destinyDarkCard) return;
+  if (!state.destinyCompareRounds) state.destinyCompareRounds = [];
+  state.destinyCompareRounds.push({
+    light: {
+      cardId: state.destinyLightCard.cardId,
+      destiny: destinyForCompare(state.destinyLightCard.cardId, state.destinyLightCard.cardSet),
+    },
+    dark: {
+      cardId: state.destinyDarkCard.cardId,
+      destiny: destinyForCompare(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet),
+    },
+  });
+}
+
 export function runDestinyCompareRound(state: GameStateData): void {
   if (!state.destinyCompareRounds) state.destinyCompareRounds = [];
-  state.destinyLightCard = state.light.deck.length > 0 ? state.light.deck.pop()! : null;
-  state.destinyDarkCard = state.dark.deck.length > 0 ? state.dark.deck.pop()! : null;
-  if (state.destinyLightCard && state.destinyDarkCard) {
-    state.destinyCompareRounds.push({
-      light: {
-        cardId: state.destinyLightCard.cardId,
-        destiny: getDestinyValue(state.destinyLightCard.cardId, state.destinyLightCard.cardSet),
-      },
-      dark: {
-        cardId: state.destinyDarkCard.cardId,
-        destiny: getDestinyValue(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet),
-      },
-    });
-  }
+  drawOpeningComparePair(state);
+  pushDestinyCompareRound(state);
 }
 
 /**
@@ -1199,8 +1388,8 @@ export function putDestinyCardsBack(state: GameStateData): void {
  * Get destiny numbers for the current destiny compare cards (0 if none).
  */
 export function getDestinyCompareValues(state: GameStateData): { light: number; dark: number } {
-  const light = state.destinyLightCard ? getDestinyValue(state.destinyLightCard.cardId, state.destinyLightCard.cardSet) : 0;
-  const dark = state.destinyDarkCard ? getDestinyValue(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet) : 0;
+  const light = state.destinyLightCard ? destinyForCompare(state.destinyLightCard.cardId, state.destinyLightCard.cardSet) : 0;
+  const dark = state.destinyDarkCard ? destinyForCompare(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet) : 0;
   return { light, dark };
 }
 
@@ -1231,20 +1420,8 @@ export function resolveDestinyCompare(state: GameStateData): { done: boolean; wi
   if (!state.destinyDrawnDark) state.destinyDrawnDark = [];
   if (state.destinyLightCard) state.destinyDrawnLight.push(state.destinyLightCard);
   if (state.destinyDarkCard) state.destinyDrawnDark.push(state.destinyDarkCard);
-  state.destinyLightCard = state.light.deck.length > 0 ? state.light.deck.pop()! : null;
-  state.destinyDarkCard = state.dark.deck.length > 0 ? state.dark.deck.pop()! : null;
-  if (state.destinyLightCard && state.destinyDarkCard) {
-    state.destinyCompareRounds!.push({
-      light: {
-        cardId: state.destinyLightCard.cardId,
-        destiny: getDestinyValue(state.destinyLightCard.cardId, state.destinyLightCard.cardSet),
-      },
-      dark: {
-        cardId: state.destinyDarkCard.cardId,
-        destiny: getDestinyValue(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet),
-      },
-    });
-  }
+  drawOpeningComparePair(state);
+  pushDestinyCompareRound(state);
   return { done: false };
 }
 
@@ -1374,10 +1551,10 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
     publicState.destinyCompare = {
       rounds: state.destinyCompareRounds ?? [],
       light: state.destinyLightCard
-        ? { cardId: state.destinyLightCard.cardId, destiny: getDestinyValue(state.destinyLightCard.cardId, state.destinyLightCard.cardSet) }
+        ? { cardId: state.destinyLightCard.cardId, destiny: destinyForCompare(state.destinyLightCard.cardId, state.destinyLightCard.cardSet) }
         : undefined,
       dark: state.destinyDarkCard
-        ? { cardId: state.destinyDarkCard.cardId, destiny: getDestinyValue(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet) }
+        ? { cardId: state.destinyDarkCard.cardId, destiny: destinyForCompare(state.destinyDarkCard.cardId, state.destinyDarkCard.cardSet) }
         : undefined,
     };
   }
@@ -1500,11 +1677,16 @@ export function toSnapshot(state: GameStateData, forSide?: Side): import("../typ
       foundCardId: p.foundCardId,
       foundSet: p.foundSet,
       found: !!p.foundInstanceId,
-    discardSearcher: !!p.discardSearcher,
+      discardSearcher: !!p.discardSearcher,
+      toHand: !!p.toHand,
     };
   }
   if (state.deployDrawPending) {
-    publicState.deployDrawPending = { side: state.deployDrawPending.side, count: state.deployDrawPending.count };
+    publicState.deployDrawPending = {
+      side: state.deployDrawPending.side,
+      count: state.deployDrawPending.count,
+      note: state.deployDrawPending.note,
+    };
   }
   if (state.jediTrainingPending) {
     const p = state.jediTrainingPending;
@@ -1680,6 +1862,24 @@ export function spendForce(state: GameStateData, side: Side, cost: number): bool
   return true;
 }
 
+/** Armed & Dangerous deploy cost is the character bars plus the built-in weapon bars. Other cards use cost. */
+function armedDangerousDeployCost(def: unknown): number {
+  const card = def as {
+    cost?: number;
+    characterCost?: number;
+    armedDangerous?: boolean;
+    builtInWeapon?: { cost?: number };
+  };
+  const printed = Math.floor(Number(card.cost)) || 0;
+  if (!card.armedDangerous) return printed;
+  const character = card.characterCost;
+  const weapon = card.builtInWeapon?.cost;
+  if (typeof character === "number" && typeof weapon === "number") {
+    return Math.floor(character) + Math.floor(weapon);
+  }
+  return printed;
+}
+
 /**
  * Effective deploy cost for a character card, applying gametextbonus "N, cost, conditionCardId".
  * If the condition card (cardId containing conditionCardId) is at the current location (in play), returns N; otherwise returns the card's base cost.
@@ -1690,7 +1890,7 @@ export function getDeployCostWithGametextBonus(state: GameStateData, side: Side,
     const base = (def as { cost?: number }).cost;
     return typeof base === "number" ? Math.floor(base) : 0;
   }
-  const baseCost = Math.floor(Number((def as { cost?: number }).cost)) || 0;
+  const baseCost = armedDangerousDeployCost(def);
   const gametextbonus = (def as { gametextbonus?: string }).gametextbonus;
   if (!gametextbonus || typeof gametextbonus !== "string") return baseCost;
   const costClause = parseGametextBonusClauses(gametextbonus).find((c) => c.what === "cost");
@@ -1708,11 +1908,13 @@ export function getWeaponDeployCost(state: GameStateData, side: Side, cardId: st
   const def = getCard(cardId, cardSet);
   const base = Math.floor(Number((def as { cost?: number } | undefined)?.cost)) || 0;
   if (base <= 0) return 0;
+  // P-59 Armed & Dangerous includes a Multi Troop Transport, but Where Are Those Droidekas? does not discount it.
+  if ((def as { armedDangerous?: boolean } | undefined)?.armedDangerous) return base;
   const id = cardId.toLowerCase();
   const name = ((def as { name?: string } | undefined)?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
   for (const eff of getEffectsAtLocation(state, side)) {
     if (eff.faceDown) continue;
-    const effects = ((getCard(eff.cardId, eff.cardSet) as { effects?: string } | undefined)?.effects ?? "").toLowerCase();
+    const effects = (deployedEffectFace(eff.cardId, eff.cardSet)?.effects ?? "").toLowerCase();
     const match = effects.match(/deployfree:([a-z0-9]+)/);
     if (!match) continue;
     const token = match[1];
@@ -1865,10 +2067,10 @@ export function hasEffectAtLocation(state: GameStateData, side: Side): boolean {
 
 /** Parse effect "effects" for "yourDeploy:counters+N". Returns N or 0 if not present (static bonus at start of your deploy). */
 export function getEffectYourDeployCounters(effectCardId: string, effectSet?: string): number {
-  const def = getCard(effectCardId, effectSet);
-  if (!def || (def as { type?: string }).type !== "effect") return 0;
-  const effectsStr = (def as { effects?: string }).effects;
-  if (!effectsStr || typeof effectsStr !== "string") return 0;
+  const face = deployedEffectFace(effectCardId, effectSet);
+  if (!face) return 0;
+  const effectsStr = face.effects;
+  if (!effectsStr) return 0;
   const m = effectsStr.match(/yourDeploy:counters\+(\d+)/i);
   return m ? Math.max(0, parseInt(m[1], 10)) : 0;
 }
@@ -1885,10 +2087,10 @@ export function getEffectYourDeployCountersBonus(state: GameStateData, side: Sid
 
 /** Parse effect "effects" for "evenup:evenup+N". Returns N or 0 if not present (draw up to 6+N cards when evening up). */
 export function getEffectEvenUpBonus(effectCardId: string, effectSet?: string): number {
-  const def = getCard(effectCardId, effectSet);
-  if (!def || (def as { type?: string }).type !== "effect") return 0;
-  const effectsStr = (def as { effects?: string }).effects;
-  if (!effectsStr || typeof effectsStr !== "string") return 0;
+  const face = deployedEffectFace(effectCardId, effectSet);
+  if (!face) return 0;
+  const effectsStr = face.effects;
+  if (!effectsStr) return 0;
   const m = effectsStr.match(/evenup:evenup\+(\d+)/i);
   return m ? Math.max(0, parseInt(m[1], 10)) : 0;
 }
@@ -1905,10 +2107,10 @@ export function getEffectEvenUpTarget(state: GameStateData, side: Side): number 
 
 /** Parse effect "effects" for "yourDeployDiscard:counters+N". Returns N or 0 if not present. */
 export function getEffectYourDeployDiscardCounters(effectCardId: string, effectSet?: string): number {
-  const def = getCard(effectCardId, effectSet);
-  if (!def || (def as { type?: string }).type !== "effect") return 0;
-  const effectsStr = (def as { effects?: string }).effects;
-  if (!effectsStr || typeof effectsStr !== "string") return 0;
+  const face = deployedEffectFace(effectCardId, effectSet);
+  if (!face) return 0;
+  const effectsStr = face.effects;
+  if (!effectsStr) return 0;
   const m = effectsStr.match(/yourDeployDiscard:counters\+(\d+)/i);
   return m ? Math.max(0, parseInt(m[1], 10)) : 0;
 }
@@ -1994,7 +2196,7 @@ export function resolveOppDeckPeek(state: GameStateData, side: Side, place: "top
 /** Jedi Meditation: move one hand card under this side's deck. */
 export function placeHandCardUnderDeck(state: GameStateData, side: Side, instanceId: string): { ok: boolean; error?: string } {
   const pending = state.effectActivationPending;
-  if (!pending || pending.side !== side || pending.kind !== "bottom_hand") {
+  if (!pending || pending.side !== side || (pending.kind !== "bottom_hand" && pending.kind !== "bottom_or_draw")) {
     return { ok: false, error: "No card to put under your deck" };
   }
   const p = side === "light" ? state.light : state.dark;
@@ -2004,8 +2206,10 @@ export function placeHandCardUnderDeck(state: GameStateData, side: Side, instanc
   card.zone = "deck";
   card.faceDown = undefined;
   p.deck.unshift(card);
-  if (!state.usedEffectsThisTurn) state.usedEffectsThisTurn = [];
-  state.usedEffectsThisTurn.push(pending.effectInstanceId);
+  if (pending.kind === "bottom_hand") {
+    if (!state.usedEffectsThisTurn) state.usedEffectsThisTurn = [];
+    state.usedEffectsThisTurn.push(pending.effectInstanceId);
+  }
   state.effectActivationPending = undefined;
   return { ok: true };
 }
@@ -2090,6 +2294,31 @@ export function markFoughtThisTurn(state: GameStateData, ...cardIds: (string | u
 function namedListFromCondition(condition: string, prefix: string): string[] {
   if (!condition.startsWith(prefix)) return [];
   return condition.slice(prefix.length).split("|").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+/** Yoda, Jedi Instructor: another character here adds power to a Jedi in this duel. */
+export function duelOtherPowerBonus(state: GameStateData, duelist: CardInstance): number {
+  let bonus = 0;
+  for (const side of ["light", "dark"] as Side[]) {
+    for (const other of getCharactersAtLocation(state, side, true)) {
+      if (other.instanceId === duelist.instanceId) continue;
+      const text = ((getCard(other.cardId, other.cardSet) as { gametextbonus?: string } | undefined)?.gametextbonus ?? "");
+      for (const clause of parseGametextBonusClauses(text)) {
+        if (clause.what !== "power" || !clause.condition.startsWith("duelother:")) continue;
+        const names = namedListFromCondition(clause.condition, "duelother:");
+        const def = getCard(duelist.cardId, duelist.cardSet);
+        const persona = ((def as { persona?: string } | undefined)?.persona ?? "").toLowerCase();
+        const id = duelist.cardId.toLowerCase();
+        const traits = ((def as { trait?: string } | undefined)?.trait ?? "")
+          .toLowerCase()
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (names.some((n) => persona === n || id.startsWith(n) || traits.includes(n))) bonus += clause.num;
+      }
+    }
+  }
+  return bonus;
 }
 
 function characterMatchesNamedList(cardId: string | undefined, names: string[]): boolean {
@@ -2213,6 +2442,7 @@ export function getGametextBonusForCharacter(
       continue;
     }
     if (clause.condition.startsWith("evacuating:")) continue;
+    if (clause.condition.startsWith("duelother:")) continue;
     if (
       clause.condition === "jedi" ||
       clause.condition === "tank" ||
@@ -2335,12 +2565,13 @@ function getEffectPowerBonusForCharacter(state: GameStateData, side: Side, chara
   let total = 0;
   const effects = getEffectsAtLocation(state, side);
   for (const eff of effects) {
+    const face = deployedEffectFace(eff.cardId, eff.cardSet);
     const def = getCard(eff.cardId, eff.cardSet);
-    if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!face || !def) continue;
     if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
-    const powerAdd = (def as { powerAdd?: number }).powerAdd;
-    if (typeof powerAdd !== "number" || powerAdd <= 0) continue;
-    const canUse = (def as { canUse?: string }).canUse;
+    const powerAdd = face.powerAdd;
+    if (powerAdd <= 0) continue;
+    const canUse = face.canUse;
     if (!canUse || !canUse.trim()) continue;
     const segments = canUse.split(",").map((s) => s.trim()).filter(Boolean);
     const matches = segments.some((seg) => characterMatchesBattleCanUseSegment(characterCardId, seg));
@@ -2386,11 +2617,12 @@ function getEffectDamageReduction(state: GameStateData, side: Side, characterCar
   let total = 0;
   const effects = getEffectsAtLocation(state, side);
   for (const eff of effects) {
+    const face = deployedEffectFace(eff.cardId, eff.cardSet);
     const def = getCard(eff.cardId, eff.cardSet);
-    if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!face || !def) continue;
     if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
-    const effectsStr = (def as { effects?: string }).effects;
-    if (!effectsStr || typeof effectsStr !== "string") continue;
+    const effectsStr = face.effects;
+    if (!effectsStr) continue;
     const regex = /damage-(\d+):([^:\s]+)/gi;
     let m: RegExpExecArray | null;
     while ((m = regex.exec(effectsStr)) !== null) {
@@ -2404,19 +2636,20 @@ function getEffectDamageReduction(state: GameStateData, side: Side, characterCar
 }
 
 /** Damage bonus from effect cards at location. Effect "effects" format: "damage:damage+N" with canUse — when this character loses, add N to milling damage (e.g. battledroid +2). */
-function getEffectDamageBonus(state: GameStateData, side: Side, characterCardId: string): number {
+function getEffectDamageBonus(state: GameStateData, _side: Side, characterCardId: string): number {
   let total = 0;
-  const effects = getEffectsAtLocation(state, side);
+  const effects = (["light", "dark"] as Side[]).flatMap((owner) => getEffectsAtLocation(state, owner));
   for (const eff of effects) {
+    const face = deployedEffectFace(eff.cardId, eff.cardSet);
     const def = getCard(eff.cardId, eff.cardSet);
-    if (!def || (def as { type?: string }).type !== "effect") continue;
+    if (!face || !def) continue;
     if (!effectAffectsCharacter(def as { affectsSide?: string }, characterCardId)) continue;
-    const canUse = (def as { canUse?: string }).canUse;
+    const canUse = face.canUse;
     if (!canUse || !canUse.trim()) continue;
     const segments = canUse.split(",").map((s) => s.trim()).filter(Boolean);
     const characterMatches = segments.some((seg) => characterMatchesBattleCanUseSegment(characterCardId, seg));
     if (!characterMatches) continue;
-    const effectsStr = (def as { effects?: string }).effects;
+    const effectsStr = face.effects;
     if (!effectsStr || typeof effectsStr !== "string") continue;
     const m = effectsStr.match(/damage:damage\+(\d+)/i);
     if (m) total += Math.max(0, parseInt(m[1], 10));
@@ -2512,8 +2745,8 @@ function battleCardSwitchesDestiny(cardId: string, set?: string): boolean {
   return getBattleCardTextBonus(cardId, set).includes("switchdestiny");
 }
 
-function battleCardSkipsBreakthrough(cardId: string, set?: string): boolean {
-  return getBattleCardTextBonus(cardId, set).includes("nobreakthrough:last");
+function battleCardSkipsBreakthrough(card: CardInstance): boolean {
+  return splitBattleBonusText(card.cardId, card.cardSet, splitHalfOf(card)).includes("nobreakthrough:last");
 }
 
 function fighterBattleCards(f: BattleFighter): CardInstance[] {
@@ -2535,7 +2768,7 @@ function sideSkipsBreakthrough(fighters: BattleFighter[], pile: CardInstance[]):
   }
   const lastCharId = pile[lastCharIndex].instanceId;
   return fighters.some((f) => {
-    if (!fighterBattleCards(f).some((c) => battleCardSkipsBreakthrough(c.cardId, c.cardSet))) return false;
+    if (!fighterBattleCards(f).some((c) => battleCardSkipsBreakthrough(c))) return false;
     return [f.character, f.character2, f.character3].some((c) => c?.instanceId === lastCharId);
   });
 }
@@ -2676,6 +2909,12 @@ export function getEvacuatingStarshipPowerBonus(state: GameStateData, side: Side
   if (!evac || evac.evacuatingSide !== side) return 0;
   const shipId = shipCardId.toLowerCase();
   let bonus = 0;
+  const shipText = ((getCard(shipCardId) as { gametextbonus?: string } | undefined)?.gametextbonus ?? "");
+  for (const clause of parseGametextBonusClauses(shipText)) {
+    if (clause.what !== "power" || !clause.condition.startsWith("evacuatingwith:")) continue;
+    const who = namedListFromCondition(clause.condition, "evacuatingwith:");
+    if (evac.stackedCards.some((stacked) => characterMatchesNamedList(stacked.cardId, who))) bonus += clause.num;
+  }
   for (const stacked of evac.stackedCards) {
     const text = ((getCard(stacked.cardId) as { gametextbonus?: string } | undefined)?.gametextbonus ?? "");
     for (const clause of parseGametextBonusClauses(text)) {
@@ -2764,7 +3003,7 @@ function buildFighters(pile: CardInstance[]): { fighters: BattleFighter[]; unuse
   while (i < pile.length) {
     const ct = getCardType(pile[i].cardId, pile[i].cardSet);
     if (ct === "battle") {
-      const conditionStr = getBattleCardConditionString(pile[i].cardId);
+      const conditionStr = activeBattleFields(pile[i].cardId, pile[i].cardSet, splitHalfOf(pile[i])).condition;
       const condLower = conditionStr.toLowerCase();
       const isFightTogether = condLower.includes("fighttogether");
       const isBothFightTogether = condLower.startsWith("both:");
@@ -2792,9 +3031,9 @@ function buildFighters(pile: CardInstance[]): { fighters: BattleFighter[]; unuse
           if (fightTogetherN === 3) {
             const char3Idx = i + 1 + charRelIndices[2];
             const char3Card = pile[char3Idx];
-            bValid = canBattleCardBeUsedBy(pile[i].cardId, char1Card.cardId) &&
-              canBattleCardBeUsedBy(pile[i].cardId, char2Card.cardId) &&
-              canBattleCardBeUsedBy(pile[i].cardId, char3Card.cardId);
+            bValid = canBattleCardBeUsedBy(pile[i].cardId, char1Card.cardId, splitHalfOf(pile[i]), pile[i].cardSet) &&
+              canBattleCardBeUsedBy(pile[i].cardId, char2Card.cardId, splitHalfOf(pile[i]), pile[i].cardSet) &&
+              canBattleCardBeUsedBy(pile[i].cardId, char3Card.cardId, splitHalfOf(pile[i]), pile[i].cardSet);
             if (bValid) {
               // Only one weapon per fight: must immediately follow Battle card; only first character gets its power.
               let weapon1: CardInstance | undefined;
@@ -2838,7 +3077,7 @@ function buildFighters(pile: CardInstance[]): { fighters: BattleFighter[]; unuse
             } else {
               bValid = isBothFightTogether
                 ? twoCharactersCoverBattleCanUse(pile[i].cardId, char1Card.cardId, char2Card.cardId)
-                : (canBattleCardBeUsedBy(pile[i].cardId, char1Card.cardId) && canBattleCardBeUsedBy(pile[i].cardId, char2Card.cardId));
+                : (canBattleCardBeUsedBy(pile[i].cardId, char1Card.cardId, splitHalfOf(pile[i]), pile[i].cardSet) && canBattleCardBeUsedBy(pile[i].cardId, char2Card.cardId, splitHalfOf(pile[i]), pile[i].cardSet));
             }
             if (bValid && condLower.includes("diffnosebulba")) {
               bValid = twoCharactersDifferentNamesNoSebulba(char1Card.cardId, char2Card.cardId);
@@ -2891,14 +3130,14 @@ function buildFighters(pile: CardInstance[]): { fighters: BattleFighter[]; unuse
       }
       const actualCharIdx = i + 1 + nextCharIdx;
       const charCard = pile[actualCharIdx];
-      const bValid = canBattleCardBeUsedBy(pile[i].cardId, charCard.cardId);
+      const bValid = canBattleCardBeUsedBy(pile[i].cardId, charCard.cardId, splitHalfOf(pile[i]), pile[i].cardSet);
       const weaponsBetween: CardInstance[] = [];
       const extraBattleCards: CardInstance[] = [];
       for (let j = i + 1; j < actualCharIdx; j++) {
         const jt = getCardType(pile[j].cardId, pile[j].cardSet);
         if (jt === "weapon") weaponsBetween.push(pile[j]);
         else if (jt === "battle") {
-          if (canBattleCardBeUsedBy(pile[j].cardId, charCard.cardId)) extraBattleCards.push(pile[j]);
+          if (canBattleCardBeUsedBy(pile[j].cardId, charCard.cardId, splitHalfOf(pile[j]), pile[j].cardSet)) extraBattleCards.push(pile[j]);
           else unusedBattleCards.push(pile[j]);
         }
       }
@@ -2969,18 +3208,93 @@ function buildFighters(pile: CardInstance[]): { fighters: BattleFighter[]; unuse
       i++;
     }
   }
+  applyArmedDangerousFighterRules(fighters, unusedWeapons, unusedBattleCards);
   return { fighters, unusedWeapons, unusedBattleCards };
+}
+
+function isAddTogetherBattle(card: CardInstance): boolean {
+  const condition = activeBattleFields(card.cardId, card.cardSet, splitHalfOf(card)).condition;
+  if (condition.toLowerCase().includes("fighttogether")) return true;
+  const name = getCardName(card.cardId, card.cardSet).toLowerCase();
+  return card.cardId.toLowerCase().includes("yousaguysbombad") || name.includes("yousa guys bombad");
+}
+
+function isMountedOrPatrolBattle(cardId: string, set?: string): boolean {
+  const id = cardId.toLowerCase();
+  const name = getCardName(cardId, set).toLowerCase();
+  return id.includes("gunganmountedtroops") || id.includes("battledroidpatrol")
+    || name.includes("gungan mounted troop") || name.includes("battle droid patrol");
+}
+
+function dropFighterWeapon(fighter: BattleFighter, slot: "weapon" | "extraWeapon" | "weapon2" | "weapon3", unused: CardInstance[]): void {
+  const card = fighter[slot];
+  if (!card) return;
+  unused.push(card);
+  fighter[slot] = undefined;
+  if (slot === "weapon") fighter.weaponValid = false;
+  else if (slot === "extraWeapon") fighter.extraWeaponValid = false;
+  else if (slot === "weapon2") fighter.weapon2Valid = false;
+  else fighter.weapon3Valid = false;
+}
+
+/**
+ * Armed & Dangerous characters ignore a Weapon card played with them.
+ * Gungan Mounted Troops / Battle Droid Patrol in front of a weapon and an A&D character is discarded.
+ * An add-together battle allows one A&D character and no other weapon, and is discarded with two A&D characters.
+ */
+function applyArmedDangerousFighterRules(
+  fighters: BattleFighter[],
+  unusedWeapons: CardInstance[],
+  unusedBattleCards: CardInstance[]
+): void {
+  for (const fighter of fighters) {
+    const chars = [fighter.character, fighter.character2, fighter.character3].filter((c): c is CardInstance => !!c);
+    const armed = chars.filter((c) => isArmedDangerous(c.cardId, c.cardSet));
+    if (armed.length === 0) continue;
+    const battle = fighter.battleCard;
+    const addTogether = !!battle && isAddTogetherBattle(battle);
+    const weaponWithArmed = !!(
+      (isArmedDangerous(fighter.character.cardId, fighter.character.cardSet) && (fighter.weapon || fighter.extraWeapon)) ||
+      (fighter.character2 && isArmedDangerous(fighter.character2.cardId, fighter.character2.cardSet) && fighter.weapon2) ||
+      (fighter.character3 && isArmedDangerous(fighter.character3.cardId, fighter.character3.cardSet) && fighter.weapon3)
+    );
+    const discardBattle = () => {
+      if (fighter.battleCard) unusedBattleCards.push(fighter.battleCard);
+      for (const extra of fighter.extraBattleCards ?? []) unusedBattleCards.push(extra);
+      fighter.battleCard = undefined;
+      fighter.battleCardValid = false;
+      fighter.extraBattleCards = undefined;
+    };
+    if (battle && isMountedOrPatrolBattle(battle.cardId, battle.cardSet) && weaponWithArmed) discardBattle();
+    if (addTogether && armed.length >= 2 && fighter.battleCard) discardBattle();
+    if (isArmedDangerous(fighter.character.cardId, fighter.character.cardSet)) {
+      dropFighterWeapon(fighter, "weapon", unusedWeapons);
+      dropFighterWeapon(fighter, "extraWeapon", unusedWeapons);
+    }
+    if (fighter.character2 && isArmedDangerous(fighter.character2.cardId, fighter.character2.cardSet)) {
+      dropFighterWeapon(fighter, "weapon2", unusedWeapons);
+    }
+    if (fighter.character3 && isArmedDangerous(fighter.character3.cardId, fighter.character3.cardSet)) {
+      dropFighterWeapon(fighter, "weapon3", unusedWeapons);
+    }
+    if (addTogether && armed.length === 1) {
+      dropFighterWeapon(fighter, "weapon", unusedWeapons);
+      dropFighterWeapon(fighter, "extraWeapon", unusedWeapons);
+      dropFighterWeapon(fighter, "weapon2", unusedWeapons);
+      dropFighterWeapon(fighter, "weapon3", unusedWeapons);
+    }
+  }
 }
 
 function locationEffectTexts(state: GameStateData): { text: string; powerAdd: number }[] {
   const out: { text: string; powerAdd: number }[] = [];
   for (const side of ["light", "dark"] as Side[]) {
     for (const eff of getEffectsAtLocation(state, side)) {
-      const def = getCard(eff.cardId, eff.cardSet) as { effects?: string; powerAdd?: number } | undefined;
-      if (!def) continue;
+      const face = deployedEffectFace(eff.cardId, eff.cardSet);
+      if (!face) continue;
       out.push({
-        text: (def.effects ?? "").toLowerCase(),
-        powerAdd: typeof def.powerAdd === "number" ? def.powerAdd : 0,
+        text: face.effects.toLowerCase(),
+        powerAdd: face.powerAdd,
       });
     }
   }
@@ -3046,6 +3360,51 @@ function resolveWeaponBonusForPair(
   return { bonus: totalBonus, destinyDraws };
 }
 
+/** Armed & Dangerous built-in weapon. Force Push and other weapon cancels skip this entirely. */
+function resolveBuiltInWeapon(
+  state: GameStateData,
+  side: Side,
+  character: CardInstance
+): { bonus: number; destinyDraws: ChosenDestinyDraw[] } {
+  const empty = { bonus: 0, destinyDraws: [] as ChosenDestinyDraw[] };
+  const def = getCard(character.cardId, character.cardSet) as {
+    armedDangerous?: boolean;
+    builtInWeapon?: { powerAdd?: number | "?"; destinyAdd?: number };
+  } | undefined;
+  if (!def?.armedDangerous || !def.builtInWeapon) return empty;
+  const powerAdd = def.builtInWeapon.powerAdd;
+  const destinyCount = typeof def.builtInWeapon.destinyAdd === "number" ? def.builtInWeapon.destinyAdd : 0;
+  const chooses = characterChoosesDestiny(character.cardId, character.cardSet);
+  const destinyDraws: ChosenDestinyDraw[] = [];
+  let totalBonus = 0;
+  if (powerAdd === "?") {
+    const powerDraws = drawDestinyForCardUser(state, side, 1, chooses);
+    destinyDraws.push(...powerDraws);
+    totalBonus += powerDraws[0]?.destiny ?? 0;
+  } else if (typeof powerAdd === "number") {
+    totalBonus += powerAdd;
+  }
+  if (destinyCount > 0) {
+    const extra = drawDestinyForCardUser(state, side, destinyCount, chooses);
+    destinyDraws.push(...extra);
+    for (const d of extra) totalBonus += d.destiny;
+  }
+  return { bonus: totalBonus, destinyDraws };
+}
+
+function addBuiltInWeapon(
+  state: GameStateData,
+  side: Side,
+  character: CardInstance | undefined,
+  cancelled: boolean,
+  into: { bonus: number; destinyDraws: { cardId: string; destiny: number }[] }
+): void {
+  if (!character || cancelled) return;
+  const extra = resolveBuiltInWeapon(state, side, character);
+  into.bonus += extra.bonus;
+  into.destinyDraws.push(...extra.destinyDraws);
+}
+
 function resolveWeaponBonus(
   state: GameStateData,
   side: Side,
@@ -3068,7 +3427,11 @@ function resolveWeaponBonus(
     fighter.character.cardId,
     opponentCharacterCardId
   );
-  return { bonus: primary.bonus + extra.bonus, destinyDraws: [...primary.destinyDraws, ...extra.destinyDraws] };
+  const builtIn = resolveBuiltInWeapon(state, side, fighter.character);
+  return {
+    bonus: primary.bonus + extra.bonus + builtIn.bonus,
+    destinyDraws: [...primary.destinyDraws, ...extra.destinyDraws, ...builtIn.destinyDraws],
+  };
 }
 
 /**
@@ -3094,38 +3457,77 @@ function resolveBattleCardBonus(
 ): { bonus: number; destinyDraws: { cardId: string; destiny: number }[] } {
   const empty = { bonus: 0, destinyDraws: [] as { cardId: string; destiny: number }[] };
   if (!fighter.battleCard) return empty;
-  const conditionStr = getBattleCardConditionString(fighter.battleCard.cardId);
-  const isAtCondition = conditionStr.toLowerCase().startsWith("at:");
-  const atValue = isAtCondition ? (conditionStr.split(":")[1] ?? "").trim().toLowerCase() : "";
-  const atLocationMatch = isAtCondition && atValue && (locationCardId.toLowerCase().includes(atValue) || locationCardId.toLowerCase().endsWith(atValue));
-  const validByCanUse = !!fighter.battleCardValid;
-  if (!validByCanUse) return empty;
+  const battleCard = fighter.battleCard;
+  const def = getCard(battleCard.cardId, battleCard.cardSet) as {
+    canUse?: string;
+    comboBattle?: boolean;
+    comboHalf?: { powerAdd?: number; destinyAdd?: number; canUse?: string; condition?: string };
+    doubleImpact?: string;
+    doubleImpactHalf?: { powerAdd?: number; destinyAdd?: number; canUse?: string; condition?: string };
+  } | undefined;
+  if (!fighter.battleCardValid || !def) return empty;
   const weaponForCondition = weaponsCancelled ? undefined : fighter.weapon?.cardId;
-  let powerAdd = 0;
-  if (conditionStr.toLowerCase().includes("fighttogether")) {
-    const nMatch = conditionStr.toLowerCase().match(/^(\d+):fighttogether/);
-    const n = nMatch ? parseInt(nMatch[1], 10) : 2;
-    if (n >= 3 && !fighter.character3) return empty;
-    if (!fighter.character2) return empty;
-    powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
-  } else if (isAtCondition) {
-    if (!atLocationMatch) return empty;
-    powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
-  } else if (!battleCardConditionMet(fighter.battleCard.cardId, fighter.character.cardId, opponentCharacterCardId, fighterIndex, locationCardId, weaponForCondition)) {
+  const characterId = fighter.character.cardId;
+  const applyListedHalf = (
+    powerAdd: number,
+    destinyAdd: number,
+    canUse: string | undefined,
+    condition: string | undefined,
+    includeDestinyDiff: boolean
+  ): { bonus: number; destinyDraws: ChosenDestinyDraw[]; applied: boolean } => {
+    const none = { bonus: 0, destinyDraws: [] as ChosenDestinyDraw[], applied: false };
+    if (!canUseMatchesCharacter(canUse, characterId)) return none;
+    const conditionStr = (condition ?? "").trim();
+    if (conditionStr.toLowerCase().includes("fighttogether")) {
+      const nMatch = conditionStr.toLowerCase().match(/(\d+):fighttogether/);
+      const n = nMatch ? parseInt(nMatch[1], 10) : 2;
+      if (n >= 3 && !fighter.character3) return none;
+      if (!fighter.character2) return none;
+    } else if (conditionStr.toLowerCase().startsWith("at:")) {
+      const atValue = (conditionStr.split(":")[1] ?? "").trim().toLowerCase();
+      const atLocationMatch = !!atValue && (locationCardId.toLowerCase().includes(atValue) || locationCardId.toLowerCase().endsWith(atValue));
+      if (!atLocationMatch) return none;
+    } else if (!battleCardConditionMet(battleCard.cardId, characterId, opponentCharacterCardId, fighterIndex, locationCardId, weaponForCondition, conditionStr)) {
+      return none;
+    }
+    const destinyDraws = destinyAdd > 0 ? drawDestinyForCardUser(state, side, destinyAdd, fighterChoosesDestiny(fighter)) : [];
+    let bonus = powerAdd;
+    for (const d of destinyDraws) bonus += d.destiny;
+    if (includeDestinyDiff && getBattleCardTextBonus(battleCard.cardId, battleCard.cardSet).includes("destinydiff")) {
+      const mine = getDestinyValue(characterId, fighter.character.cardSet);
+      const theirs = getDestinyValue(opponentCharacterCardId);
+      if (mine < theirs) bonus += theirs - mine;
+    }
+    return { bonus, destinyDraws, applied: true };
+  };
+  const primary = applyListedHalf(
+    getBattleCardPowerAdd(battleCard.cardId),
+    getBattleCardDestinyAdd(battleCard.cardId),
+    def.canUse,
+    getBattleCardConditionString(battleCard.cardId),
+    true
+  );
+  if (def.comboBattle && def.comboHalf) {
+    const second = applyListedHalf(
+      typeof def.comboHalf.powerAdd === "number" ? def.comboHalf.powerAdd : 0,
+      typeof def.comboHalf.destinyAdd === "number" ? def.comboHalf.destinyAdd : 0,
+      def.comboHalf.canUse,
+      def.comboHalf.condition,
+      false
+    );
+    return { bonus: primary.bonus + second.bonus, destinyDraws: [...primary.destinyDraws, ...second.destinyDraws] };
+  }
+  if (def.doubleImpact === "battle-battle" && def.doubleImpactHalf) {
+    if (splitHalfOf(battleCard) === "second") {
+      const face = activeBattleFields(battleCard.cardId, battleCard.cardSet, "second");
+      const second = applyListedHalf(face.powerAdd, face.destinyAdd, face.canUse, face.condition, false);
+      if (second.applied) return { bonus: second.bonus, destinyDraws: second.destinyDraws };
+      return empty;
+    }
+    if (primary.applied) return { bonus: primary.bonus, destinyDraws: primary.destinyDraws };
     return empty;
-  } else {
-    powerAdd = getBattleCardPowerAdd(fighter.battleCard.cardId);
   }
-  const destinyCount = getBattleCardDestinyAdd(fighter.battleCard.cardId);
-  const destinyDraws = destinyCount > 0 ? drawDestinyForCardUser(state, side, destinyCount, fighterChoosesDestiny(fighter)) : [];
-  let totalBonus = powerAdd;
-  for (const d of destinyDraws) totalBonus += d.destiny;
-  if (fighter.battleCard && getBattleCardTextBonus(fighter.battleCard.cardId, fighter.battleCard.cardSet).includes("destinydiff")) {
-    const mine = getDestinyValue(fighter.character.cardId, fighter.character.cardSet);
-    const theirs = getDestinyValue(opponentCharacterCardId);
-    if (mine < theirs) totalBonus += theirs - mine;
-  }
-  return { bonus: totalBonus, destinyDraws };
+  return { bonus: primary.bonus, destinyDraws: primary.destinyDraws };
 }
 
 function resolveFighterBattleBonuses(
@@ -3165,6 +3567,41 @@ function resolveFighterBattleBonuses(
  * Winner stays; loser + their weapon go to discard and mill damage from that deck.
  * Attacker's unopposed fighters each mill 1 card from defender's deck.
  */
+function defeatDrawAmount(card: { cardId: string; cardSet?: string; faceDown?: boolean } | undefined): number {
+  if (!card || card.faceDown) return 0;
+  const bonus = ((getCard(card.cardId, card.cardSet) as { gametextbonus?: string } | undefined)?.gametextbonus ?? "").toLowerCase();
+  const match = bonus.match(/(?:^|[,;])\s*defeatdraw:(\d+)/);
+  if (!match) return 0;
+  const n = parseInt(match[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Optional draw after a face-up character with defeatdraw wins and the loser is discarded. */
+function queueDefeatDraws(
+  state: GameStateData,
+  side: Side,
+  winners: ({ cardId: string; cardSet?: string; faceDown?: boolean } | undefined)[],
+  defeated: number
+): void {
+  if (defeated <= 0) return;
+  for (const winner of winners) {
+    const each = defeatDrawAmount(winner);
+    if (!winner || each <= 0) continue;
+    const total = each * defeated;
+    const name = getCardName(winner.cardId);
+    const note =
+      total === 1
+        ? name + " defeated a character. Draw a card, or skip."
+        : name + " defeated " + defeated + " characters. Draw " + total + " cards, or skip.";
+    const offer = { side, count: total, note };
+    if (!state.deployDrawPending) state.deployDrawPending = offer;
+    else {
+      if (!state.deployDrawQueue) state.deployDrawQueue = [];
+      state.deployDrawQueue.push(offer);
+    }
+  }
+}
+
 export function resolveBattlePlan(state: GameStateData): void {
   const loc = getCurrentLocationCard(state);
   const locationCardId = loc?.card.cardId ?? "";
@@ -3204,6 +3641,62 @@ export function resolveBattlePlan(state: GameStateData): void {
     const p = side === "light" ? state.light : state.dark;
     card.zone = "hand";
     p.hand.push(card);
+  };
+
+  const countDefeated = (
+    fighter: BattleFighter,
+    returnHand: boolean,
+    returnTarget: string | null,
+    loseSegment: string | null
+  ): number => {
+    const chars = [fighter.character, fighter.character2, fighter.character3].filter((c): c is CardInstance => !!c);
+    if (returnHand && !returnTarget) return 0;
+    let n = 0;
+    for (const c of chars) {
+      const matches = characterMatchesBattleCanUseSegment(c.cardId, returnTarget || loseSegment || "");
+      if (returnHand && returnTarget) {
+        if (!matches) n++;
+      } else if (loseSegment) {
+        if (matches) n++;
+      } else n++;
+    }
+    return n;
+  };
+
+  /** Return only the named character and that character's weapons. Everyone else is defeated normally. */
+  const sendNamedCharacterHome = (
+    side: Side,
+    fighter: BattleFighter,
+    target: string,
+    oppNoWeapon: boolean,
+    mainOff: boolean,
+    secondOff: boolean,
+    thirdOff: boolean,
+    winners: ({ cardId: string; cardSet?: string } | undefined)[],
+    survivors: CardInstance[]
+  ): number => {
+    const slots: { char?: CardInstance; weapons: (CardInstance | undefined)[]; millWeapon?: CardInstance; off: boolean }[] = [
+      { char: fighter.character, weapons: [fighter.weapon, fighter.extraWeapon], millWeapon: fighter.weapon, off: mainOff },
+      { char: fighter.character2, weapons: [fighter.weapon2], millWeapon: fighter.weapon2, off: secondOff },
+      { char: fighter.character3, weapons: [fighter.weapon3], millWeapon: fighter.weapon3, off: thirdOff },
+    ];
+    let mill = 0;
+    for (const slot of slots) {
+      if (!slot.char) continue;
+      if (characterMatchesBattleCanUseSegment(slot.char.cardId, target)) {
+        toHand(side, slot.char);
+        for (const w of slot.weapons) if (w) toHand(side, w);
+      } else {
+        toDiscard(side, slot.char);
+        for (const w of slot.weapons) {
+          if (!w) continue;
+          if (oppNoWeapon) survivors.push(w);
+          else toDiscard(side, w);
+        }
+        mill += millDefeatedCharacter(state, side, slot.char, slot.off ? undefined : slot.millWeapon, winners);
+      }
+    }
+    return mill;
   };
 
   const removeFromHand = (side: Side, instanceId: string): CardInstance | undefined => {
@@ -3296,6 +3789,7 @@ export function resolveBattlePlan(state: GameStateData): void {
       lightPowerDraw2 = r2.powerDestinyDraw;
       lightBonus2 = getLocationBonusForCharacter(lf.character2.cardId, locationCardId);
       lw2 = (lightWeaponsCancelled || effectDeniesCharacterWeapons(state, lf.character2.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "light", lf.weapon2, lf.weapon2Valid, lf.character2.cardId, df.character2?.cardId ?? df.character.cardId);
+      addBuiltInWeapon(state, "light", lf.character2, lightWeaponsCancelled || effectDeniesCharacterWeapons(state, lf.character2.cardId), lw2);
     }
     if (df.character2) {
       const r2 = resolveCharacterPowerForBattle(state, "dark", df.character2.cardId);
@@ -3303,6 +3797,7 @@ export function resolveBattlePlan(state: GameStateData): void {
       darkPowerDraw2 = r2.powerDestinyDraw;
       darkBonus2 = getLocationBonusForCharacter(df.character2.cardId, locationCardId);
       dw2 = (darkWeaponsCancelled || effectDeniesCharacterWeapons(state, df.character2.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "dark", df.weapon2, df.weapon2Valid, df.character2.cardId, lf.character2?.cardId ?? lf.character.cardId);
+      addBuiltInWeapon(state, "dark", df.character2, darkWeaponsCancelled || effectDeniesCharacterWeapons(state, df.character2.cardId), dw2);
     }
     if (lf.character3) {
       const r3 = resolveCharacterPowerForBattle(state, "light", lf.character3.cardId);
@@ -3310,6 +3805,7 @@ export function resolveBattlePlan(state: GameStateData): void {
       lightPowerDraw3 = r3.powerDestinyDraw;
       lightBonus3 = getLocationBonusForCharacter(lf.character3.cardId, locationCardId);
       lw3 = (lightWeaponsCancelled || effectDeniesCharacterWeapons(state, lf.character3.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "light", lf.weapon3, lf.weapon3Valid, lf.character3.cardId, df.character3?.cardId ?? df.character.cardId);
+      addBuiltInWeapon(state, "light", lf.character3, lightWeaponsCancelled || effectDeniesCharacterWeapons(state, lf.character3.cardId), lw3);
     }
     if (df.character3) {
       const r3 = resolveCharacterPowerForBattle(state, "dark", df.character3.cardId);
@@ -3317,6 +3813,7 @@ export function resolveBattlePlan(state: GameStateData): void {
       darkPowerDraw3 = r3.powerDestinyDraw;
       darkBonus3 = getLocationBonusForCharacter(df.character3.cardId, locationCardId);
       dw3 = (darkWeaponsCancelled || effectDeniesCharacterWeapons(state, df.character3.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "dark", df.weapon3, df.weapon3Valid, df.character3.cardId, lf.character3?.cardId ?? lf.character.cardId);
+      addBuiltInWeapon(state, "dark", df.character3, darkWeaponsCancelled || effectDeniesCharacterWeapons(state, df.character3.cardId), dw3);
     }
 
     const lightHasReplace = fighterBattleCards(lf).some((c) => battleCardReplacesDestinyWithDamage(c.cardId, c.cardSet));
@@ -3357,12 +3854,21 @@ export function resolveBattlePlan(state: GameStateData): void {
       const darkReturnHand = df.battleCard ? battleCardConditionReturnHand(df.battleCard.cardId) : false;
       const darkLoseSegment = df.battleCard ? getBattleCardConditionLoseSegment(df.battleCard.cardId) : null;
       if (darkReturnHand) {
-        toHand("dark", df.character);
-        if (df.character2) toHand("dark", df.character2);
-        if (df.character3) toHand("dark", df.character3);
-        forEachMainWeapon(df, (w) => toHand("dark", w));
-        if (df.weapon2) toHand("dark", df.weapon2);
-        if (df.weapon3) toHand("dark", df.weapon3);
+        const returnTarget = df.battleCard ? getReturnHandTarget(df.battleCard.cardId) : null;
+        if (returnTarget) {
+          darkMill = sendNamedCharacterHome(
+            "dark", df, returnTarget, lightOppNoWeapon, darkMainOff, dark2Off, dark3Off,
+            [lf.character, lf.character2, lf.character3], darkSurvivors
+          );
+          if (darkMill > 0) darkMilledCardIds = millFromDeck(state, "dark", darkMill);
+        } else {
+          toHand("dark", df.character);
+          if (df.character2) toHand("dark", df.character2);
+          if (df.character3) toHand("dark", df.character3);
+          forEachMainWeapon(df, (w) => toHand("dark", w));
+          if (df.weapon2) toHand("dark", df.weapon2);
+          if (df.weapon3) toHand("dark", df.weapon3);
+        }
       } else if (darkLoseSegment) {
         // Only characters matching the "lose X" segment are discarded; others survive.
         if (characterMatchesBattleCanUseSegment(df.character.cardId, darkLoseSegment)) {
@@ -3416,6 +3922,9 @@ export function resolveBattlePlan(state: GameStateData): void {
           if (darkMill > 0) darkMilledCardIds = millFromDeck(state, "dark", darkMill);
         }
       }
+      const darkReturnTarget = darkReturnHand && df.battleCard ? getReturnHandTarget(df.battleCard.cardId) : null;
+      const darkDefeated = countDefeated(df, darkReturnHand, darkReturnTarget, darkLoseSegment);
+      if (darkDefeated > 0) queueDefeatDraws(state, "light", [lf.character, lf.character2, lf.character3], darkDefeated);
     } else if (darkPower > lightPower) {
       winner = "dark";
       darkSurvivors.push(df.character);
@@ -3425,12 +3934,21 @@ export function resolveBattlePlan(state: GameStateData): void {
       const lightReturnHand = lf.battleCard ? battleCardConditionReturnHand(lf.battleCard.cardId) : false;
       const lightLoseSegment = lf.battleCard ? getBattleCardConditionLoseSegment(lf.battleCard.cardId) : null;
       if (lightReturnHand) {
-        toHand("light", lf.character);
-        if (lf.character2) toHand("light", lf.character2);
-        if (lf.character3) toHand("light", lf.character3);
-        forEachMainWeapon(lf, (w) => toHand("light", w));
-        if (lf.weapon2) toHand("light", lf.weapon2);
-        if (lf.weapon3) toHand("light", lf.weapon3);
+        const returnTarget = lf.battleCard ? getReturnHandTarget(lf.battleCard.cardId) : null;
+        if (returnTarget) {
+          lightMill = sendNamedCharacterHome(
+            "light", lf, returnTarget, darkOppNoWeapon, lightMainOff, light2Off, light3Off,
+            [df.character, df.character2, df.character3], lightSurvivors
+          );
+          if (lightMill > 0) lightMilledCardIds = millFromDeck(state, "light", lightMill);
+        } else {
+          toHand("light", lf.character);
+          if (lf.character2) toHand("light", lf.character2);
+          if (lf.character3) toHand("light", lf.character3);
+          forEachMainWeapon(lf, (w) => toHand("light", w));
+          if (lf.weapon2) toHand("light", lf.weapon2);
+          if (lf.weapon3) toHand("light", lf.weapon3);
+        }
       } else if (lightLoseSegment) {
         // Only characters matching the "lose X" segment are discarded; others survive.
         if (characterMatchesBattleCanUseSegment(lf.character.cardId, lightLoseSegment)) {
@@ -3484,6 +4002,9 @@ export function resolveBattlePlan(state: GameStateData): void {
           if (lightMill > 0) lightMilledCardIds = millFromDeck(state, "light", lightMill);
         }
       }
+      const lightReturnTarget = lightReturnHand && lf.battleCard ? getReturnHandTarget(lf.battleCard.cardId) : null;
+      const lightDefeated = countDefeated(lf, lightReturnHand, lightReturnTarget, lightLoseSegment);
+      if (lightDefeated > 0) queueDefeatDraws(state, "dark", [df.character, df.character2, df.character3], lightDefeated);
     } else {
       lightSurvivors.push(lf.character);
       if (lf.character2) lightSurvivors.push(lf.character2);
@@ -3619,14 +4140,14 @@ export function resolveBattlePlan(state: GameStateData): void {
       df.character3?.cardId
     );
 
-    // Fight again (defeat◆:fightagain): if attacker won and defeated a uniqueness:false character, they fight the next defender with same character+weapon (no battle card); weapon can be used again.
+    // Fight again (defeat◆:fightagain): if attacker won and defeated a unique character, they fight the next defender with same character+weapon (no battle card); weapon can be used again.
     const attackerSideLoop = state.turnSide;
     const attackerFighter = attackerSideLoop === "light" ? lf : df;
     const defenderFighter = attackerSideLoop === "light" ? df : lf;
     if (
       winner === attackerSideLoop &&
-      fighterBattleCards(attackerFighter).some((c) => battleCardHasDefeatFightAgain(c.cardId)) &&
-      isCharacterUniquenessFalse(defenderFighter.character.cardId)
+      fighterBattleCards(attackerFighter).some((c) => battleCardHasDefeatFightAgain(c)) &&
+      isCharacterUnique(defenderFighter.character.cardId)
     ) {
       const nextDefenderIdx = attackerSideLoop === "light" ? di : li;
       const nextDefenderFighters = attackerSideLoop === "light" ? darkFighters : lightFighters;
@@ -3670,12 +4191,14 @@ export function resolveBattlePlan(state: GameStateData): void {
           lightBase2b = r2.power;
           lightBonus2b = getLocationBonusForCharacter(lf2.character2.cardId, locationCardId);
           lw2b = (lightBattleNoW2 || effectDeniesCharacterWeapons(state, lf2.character2.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "light", lf2.weapon2, lf2.weapon2Valid, lf2.character2.cardId);
+          addBuiltInWeapon(state, "light", lf2.character2, lightBattleNoW2 || effectDeniesCharacterWeapons(state, lf2.character2.cardId), lw2b);
         }
         if (df2.character2) {
           const r2 = resolveCharacterPowerForBattle(state, "dark", df2.character2.cardId);
           darkBase2b = r2.power;
           darkBonus2b = getLocationBonusForCharacter(df2.character2.cardId, locationCardId);
           dw2b = (darkBattleNoW2 || effectDeniesCharacterWeapons(state, df2.character2.cardId)) ? emptyWeaponResult : resolveWeaponBonusForPair(state, "dark", df2.weapon2, df2.weapon2Valid, df2.character2.cardId);
+          addBuiltInWeapon(state, "dark", df2.character2, darkBattleNoW2 || effectDeniesCharacterWeapons(state, df2.character2.cardId), dw2b);
         }
         const lightPower2 = lightBase2 + lightBonus2a + lightBase2b + lightBonus2b + lb2.bonus + lw2a.bonus + lw2b.bonus +
           getGametextBonusForCharacter(lf2.character.cardId, lf2.character.cardSet, lightNoW2 ? undefined : lf2.weapon?.cardId, df2.character.cardId, lightNoW2 ? undefined : lf2.weapon?.cardSet, lf2.battleCard?.cardId, lf2.battleCard?.cardSet, state).bonus +
@@ -4046,16 +4569,22 @@ export function resolveBattlePlan(state: GameStateData): void {
             key: ref.key,
             options: [
               { cardId: ref.draw.cardId, destiny: ref.draw.destiny },
-              { cardId: alt.cardId, destiny: alt.destiny },
+              {
+                cardId: alt.cardId,
+                destiny: alt.destiny,
+                ...(alt.imageCardId ? { imageCardId: alt.imageCardId } : {}),
+              },
             ],
           },
         };
         destinyChooseResume.set(state.id, (cardId) => {
           if (cardId === alt.cardId) {
             const delta = alt.destiny - ref.draw.destiny;
-            ref.draw.cardId = alt.cardId;
             ref.draw.destiny = alt.destiny;
-            ref.cardId = alt.cardId;
+            if (!alt.imageCardId) {
+              ref.draw.cardId = alt.cardId;
+              ref.cardId = alt.cardId;
+            }
             ref.applyDelta(delta);
             lightPower = sumLight();
             darkPower = sumDark();

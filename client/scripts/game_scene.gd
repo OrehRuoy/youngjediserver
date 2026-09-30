@@ -4,6 +4,7 @@ extends Control
 
 const CardPlaceholderScene = preload("res://scenes/card_placeholder.tscn")
 const BattlePlanCardScene = preload("res://scenes/battle_plan_card.tscn")
+const CardArt = preload("res://scripts/card_art.gd")
 var CARD_BACK_LIGHT: Texture2D = preload("res://assets/card_back_light.png")
 var CARD_BACK_DARK: Texture2D = preload("res://assets/card_back_dark.png")
 
@@ -119,6 +120,7 @@ var _drag_preview_layer: CanvasLayer = null
 var _battle_plan_order: Array = []  # instance ids left-to-right for battle plan
 var _battle_cards_in_plan: Array = []  # battle card instance ids added from hand
 var _declared_battle_cards: Array = []  # battle card instance ids staged during declaration phase
+var _double_impact_choices: Dictionary = {}  # instanceId -> "primary" or "second"
 var _dragging_from_battle_plan: bool = false
 var _effect_decline_btn: Button = null
 var _battle_reveal_sequence: Array = []
@@ -463,8 +465,11 @@ func _update_controlled_planets_display(pub: Dictionary) -> void:
 		var loc_card_id: String = planet_data.get("locationCardId", "")
 		var winner: String = planet_data.get("controlledBy", "")
 		var planet_name: String = planet_data.get("planet", "")
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = 86
+		column.add_theme_constant_override("separation", 3)
 		var wrapper := Control.new()
-		wrapper.custom_minimum_size = Vector2(70, 100)
+		wrapper.custom_minimum_size = Vector2(86, 60)
 		wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
 		var tex := TextureRect.new()
 		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -502,21 +507,22 @@ func _update_controlled_planets_display(pub: Dictionary) -> void:
 			winner_label.text = "DARK"
 			winner_label.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2, 1))
 		wrapper.add_child(winner_label)
+		column.add_child(wrapper)
 		if planet_name:
 			var planet_label := Label.new()
 			planet_label.text = planet_name
-			planet_label.add_theme_font_size_override("font_size", 9)
-			planet_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9, 0.9))
+			planet_label.add_theme_font_size_override("font_size", 10)
+			planet_label.add_theme_color_override("font_color", Color(0.82, 0.84, 0.92, 1))
 			planet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			planet_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-			planet_label.offset_top = -16
-			wrapper.add_child(planet_label)
+			planet_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			planet_label.custom_minimum_size = Vector2(86, 0)
+			column.add_child(planet_label)
 		var pd: Dictionary = planet_data
 		wrapper.gui_input.connect(func(event: InputEvent) -> void:
 			if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
 				_show_stranded_cards(pd, planet_index)
 		)
-		vbox.add_child(wrapper)
+		vbox.add_child(column)
 
 
 func _leading_int(text: String) -> int:
@@ -724,9 +730,12 @@ func _get_starfighter_cards_in_hand(state: RefCounted) -> Array:
 	return result
 
 
-## Only controlled planets (won by someone) where we have stranded characters/weapons.
+## Current planet (index -1) plus won planets where we have characters or weapons to take.
 func _get_evacuatable_planet_info(pub: Dictionary, my_side: String) -> Array:
 	var result: Array = []
+	var here: Dictionary = _current_planet_evac_info(pub, my_side)
+	if not here.is_empty():
+		result.append(here)
 	var planets: Array = pub.get("controlledPlanets", [])
 	var stranded_key: String = "strandedLight" if my_side == "light" else "strandedDark"
 	for i in range(planets.size()):
@@ -750,6 +759,39 @@ func _get_evacuatable_planet_info(pub: Dictionary, my_side: String) -> Array:
 				"strandedCards": stranded_cards
 			})
 	return result
+
+
+## Face-up characters and weapons at the planet in play. Index -1 is legal to evacuate.
+func _current_planet_evac_info(pub: Dictionary, my_side: String) -> Dictionary:
+	var loc_inst := str(pub.get("startingLocationInstanceId", ""))
+	if loc_inst.is_empty() or CardCatalog == null:
+		return {}
+	var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
+	var loc_card_id := ""
+	var leaving: Array = []
+	for c in mine:
+		if str(c.get("instanceId", "")) == loc_inst:
+			loc_card_id = str(c.get("cardId", ""))
+			continue
+		if bool(c.get("faceDown", false)):
+			continue
+		var t := str(CardCatalog.get_card_info(c.get("cardId", ""), my_side, str(c.get("set", ""))).get("type", "")).to_lower()
+		if t == "character" or t == "weapon":
+			leaving.append(c)
+	if leaving.is_empty():
+		return {}
+	var planet := str(CardCatalog.get_card_info(loc_card_id, "").get("planet", "")).strip_edges()
+	if planet.is_empty():
+		planet = "This planet"
+	return {
+		"index": -1,
+		"planet": planet,
+		"locationCardId": loc_card_id,
+		"controlledBy": my_side,
+		"count": leaving.size(),
+		"strandedCards": leaving,
+		"current": true,
+	}
 
 
 func _update_evacuation_ui(state: RefCounted, pub: Dictionary, phase: String, my_side: String) -> void:
@@ -842,34 +884,30 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 	_evacuation_panel = PanelContainer.new()
 	_evacuation_panel.custom_minimum_size = Vector2(560, 0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.14, 0.22, 0.98)
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.4, 0.6, 0.9, 0.8)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 16
-	style.content_margin_right = 16
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.97)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.75)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 20
+	style.content_margin_right = 20
+	style.content_margin_top = 18
+	style.content_margin_bottom = 18
+	style.shadow_color = Color(0, 0, 0, 0.55)
+	style.shadow_size = 18
 	_evacuation_panel.add_theme_stylebox_override("panel", style)
 	center.add_child(_evacuation_panel)
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
 	_evacuation_panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "Evacuation — Select Planet" if transports.is_empty() else "Evacuation — Select Transport & Planet"
+	title.text = "EVACUATE" if transports.is_empty() else "EVACUATE — CHOOSE A TRANSPORT"
+	title.theme_type_variation = &"HeaderLabel"
 	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4, 1))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 	if transports.is_empty():
 		var hs_note := Label.new()
-		hs_note.text = "Your entire Hyperspace pile will attempt this evacuation. All characters and weapons at the planet go."
+		hs_note.text = "Your whole Hyperspace pile goes. Every face-up character and weapon at the planet leaves with it."
 		hs_note.add_theme_font_size_override("font_size", 12)
 		hs_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		vbox.add_child(hs_note)
@@ -936,8 +974,9 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 			transport_row.add_child(wrapper)
 	# Planet selection — card images with stranded cards below
 	var planet_label := Label.new()
-	planet_label.text = "Select Planet to Evacuate:"
+	planet_label.text = "Choose a planet"
 	planet_label.add_theme_font_size_override("font_size", 13)
+	planet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(planet_label)
 	var planet_row := HBoxContainer.new()
 	planet_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -954,9 +993,13 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 		if cards.is_empty():
 			return
 		var stranded_label := Label.new()
-		stranded_label.text = "Stranded cards at %s:" % planet_data.get("planet", "?")
-		stranded_label.add_theme_font_size_override("font_size", 12)
-		stranded_label.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
+		if bool(planet_data.get("current", false)):
+			stranded_label.text = "Leaving %s now:" % planet_data.get("planet", "this planet")
+		else:
+			stranded_label.text = "Stranded at %s:" % planet_data.get("planet", "?")
+		stranded_label.add_theme_font_size_override("font_size", 13)
+		stranded_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		stranded_label.add_theme_color_override("font_color", Color(0.9, 0.86, 0.7, 1))
 		stranded_container.add_child(stranded_label)
 		var cards_row := HBoxContainer.new()
 		cards_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -977,25 +1020,21 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 		var loc_side: String = p.get("controlledBy", "")
 		if loc_side.is_empty():
 			loc_side = my_side
+		var column := VBoxContainer.new()
+		column.custom_minimum_size.x = 168
+		column.add_theme_constant_override("separation", 4)
 		var wrapper := Panel.new()
-		wrapper.custom_minimum_size = Vector2(140, 100)
+		wrapper.custom_minimum_size = Vector2(168, 112)
 		var wrapper_style := StyleBoxFlat.new()
 		wrapper_style.bg_color = Color(0, 0, 0, 0)
-		wrapper_style.border_width_left = 3
-		wrapper_style.border_width_right = 3
-		wrapper_style.border_width_top = 3
-		wrapper_style.border_width_bottom = 3
-		wrapper_style.corner_radius_top_left = 4
-		wrapper_style.corner_radius_top_right = 4
-		wrapper_style.corner_radius_bottom_left = 4
-		wrapper_style.corner_radius_bottom_right = 4
+		wrapper_style.set_border_width_all(3)
+		wrapper_style.set_corner_radius_all(4)
 		if p == planets[0]:
-			wrapper_style.border_color = Color(0.4, 0.9, 0.4)
+			wrapper_style.border_color = Color(0.86, 0.72, 0.32, 1)
 		else:
 			wrapper_style.border_color = Color(0.3, 0.3, 0.3, 0.5)
 		wrapper.add_theme_stylebox_override("panel", wrapper_style)
 		var tex := TextureRect.new()
-		tex.custom_minimum_size = Vector2(134, 94)
 		tex.set_anchors_preset(Control.PRESET_FULL_RECT)
 		tex.offset_left = 3
 		tex.offset_top = 3
@@ -1003,16 +1042,9 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 		tex.offset_bottom = -3
 		tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		tex.texture = _load_card_texture_for_id(loc_card_id, loc_side)
 		wrapper.add_child(tex)
-		var name_lbl := Label.new()
-		name_lbl.text = "%s (%d)" % [p.get("planet", "?"), p.get("count", 0)]
-		name_lbl.add_theme_font_size_override("font_size", 10)
-		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		name_lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-		name_lbl.offset_top = -18
-		name_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-		wrapper.add_child(name_lbl)
 		var click_btn := Button.new()
 		click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
 		click_btn.flat = true
@@ -1022,17 +1054,31 @@ func _show_evacuation_picker(transports: Array, planets: Array, my_side: String)
 		click_btn.pressed.connect(func() -> void:
 			selected_planet = p_copy
 			for ch in planet_row.get_children():
-				var s: StyleBoxFlat = ch.get_theme_stylebox("panel") as StyleBoxFlat
+				if not ch is VBoxContainer:
+					continue
+				var art: Panel = (ch as VBoxContainer).get_child(0) as Panel
+				if art == null:
+					continue
+				var s: StyleBoxFlat = art.get_theme_stylebox("panel") as StyleBoxFlat
 				if s:
 					s.border_color = Color(0.3, 0.3, 0.3, 0.5)
 			var ws: StyleBoxFlat = w_ref.get_theme_stylebox("panel") as StyleBoxFlat
 			if ws:
-				ws.border_color = Color(0.4, 0.9, 0.4)
+				ws.border_color = Color(0.86, 0.72, 0.32, 1)
 			w_ref.queue_redraw()
 			_update_stranded_display.call(p_copy)
 		)
 		wrapper.add_child(click_btn)
-		planet_row.add_child(wrapper)
+		column.add_child(wrapper)
+		var name_lbl := Label.new()
+		var here := "This planet" if bool(p.get("current", false)) else "Stranded"
+		name_lbl.text = "%s\n%s · %d" % [p.get("planet", "?"), here, p.get("count", 0)]
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		name_lbl.custom_minimum_size = Vector2(168, 0)
+		column.add_child(name_lbl)
+		planet_row.add_child(column)
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 6)
 	vbox.add_child(spacer)
@@ -1394,17 +1440,23 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 	if dfd is Dictionary and str(dfd.get("side", "")) == my_side:
 		if _dotf_overlay_kind != "deploy_from_deck":
 			var found: bool = bool(dfd.get("found", false))
-			var vbox := _begin_choice_overlay("deploy_from_deck", "Deploy from deck")
+			var to_hand_title: bool = bool(dfd.get("toHand", false))
+			var reveal_kind: String = "Character" if str(dfd.get("targetId", "")) == "character" else "Weapon"
+			var vbox := _begin_choice_overlay("deploy_from_deck", ("Reveal a " + reveal_kind) if to_hand_title else "Deploy from deck")
 			var note := Label.new()
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			if found:
-				var dfd_cost: Variant = dfd.get("cost", "free")
-				if str(dfd_cost) == "free" or str(dfd_cost) == "0":
-					note.text = "Found a matching card. Deploy it now, or skip (1 DAMAGE)."
+				var to_hand: bool = bool(dfd.get("toHand", false))
+				if to_hand:
+					note.text = "Reveal this " + reveal_kind + ", put it in your hand, and reshuffle your deck. Or skip."
 				else:
-					note.text = "Found a matching card. Deploy it now (pays its cost), or skip (1 DAMAGE)."
-				if bool(dfd.get("discardSearcher", false)):
-					note.text += " Deploying it also discards this character."
+					var dfd_cost: Variant = dfd.get("cost", "free")
+					if str(dfd_cost) == "free" or str(dfd_cost) == "0":
+						note.text = "Found a matching card. Deploy it now, or skip (1 DAMAGE)."
+					else:
+						note.text = "Found a matching card. Deploy it now (pays its cost), or skip (1 DAMAGE)."
+					if bool(dfd.get("discardSearcher", false)):
+						note.text += " Deploying it also discards this character."
 			else:
 				note.text = "No matching card in your deck. Continue."
 			vbox.add_child(note)
@@ -1414,7 +1466,7 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 				vbox.add_child(preview)
 				preview.set_card(cid, "preview", my_side, str(dfd.get("foundSet", "")))
 				var deploy_btn := Button.new()
-				deploy_btn.text = "Deploy"
+				deploy_btn.text = "Take" if bool(dfd.get("toHand", false)) else "Deploy"
 				deploy_btn.pressed.connect(func() -> void:
 					Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_deploy_from_deck"}})
 					_clear_dotf_overlay()
@@ -1427,6 +1479,24 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 				_clear_dotf_overlay()
 			)
 			vbox.add_child(skip)
+		return
+	if dfd is Dictionary and str(dfd.get("side", "")) != my_side:
+		if bool(dfd.get("toHand", false)) and bool(dfd.get("found", false)):
+			if _dotf_overlay_kind != "reveal_weapon":
+				var reveal_kind: String = "Character" if str(dfd.get("targetId", "")) == "character" else "Weapon"
+				var vbox := _begin_choice_overlay("reveal_weapon", "Revealed " + reveal_kind)
+				var note := Label.new()
+				note.text = "Your opponent revealed this " + reveal_kind + " from their deck."
+				note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				vbox.add_child(note)
+				var cid: String = str(dfd.get("foundCardId", ""))
+				var preview: Control = CardPlaceholderScene.instantiate()
+				vbox.add_child(preview)
+				preview.set_card(cid, "preview", str(dfd.get("side", "")), str(dfd.get("foundSet", "")))
+			return
+		if _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "reveal_weapon":
+			_clear_dotf_overlay()
+		status_label.text = "Opponent is searching their deck..."
 		return
 	var train: Variant = pub.get("jediTrainingPending", null)
 	if train is Dictionary and str(train.get("side", "")) == my_side:
@@ -1441,13 +1511,16 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 	var drawp: Variant = pub.get("deployDrawPending", null)
 	if drawp is Dictionary and str(drawp.get("side", "")) == my_side:
 		if _dotf_overlay_kind != "deploy_draw":
-			var vbox := _begin_choice_overlay("deploy_draw", "Draw a card?")
+			var draw_count := int(drawp.get("count", 1))
+			var draw_title := "Draw a card?" if draw_count <= 1 else "Draw %d cards?" % draw_count
+			var vbox := _begin_choice_overlay("deploy_draw", draw_title)
 			var note := Label.new()
-			note.text = "He deployed to Coruscant. Draw a card, or skip."
+			var draw_note := str(drawp.get("note", ""))
+			note.text = draw_note if draw_note != "" else "He deployed to Coruscant. Draw a card, or skip."
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			vbox.add_child(note)
 			var yes := Button.new()
-			yes.text = "Draw"
+			yes.text = "Draw" if draw_count <= 1 else "Draw %d" % draw_count
 			yes.pressed.connect(func() -> void:
 				Connection.get_client().send_message({"type": "game_action", "action": {"kind": "confirm_deploy_draw"}})
 				_clear_dotf_overlay()
@@ -1477,14 +1550,20 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 		status_label.text = "Opponent is choosing a non-unique card to discard..."
 		return
 	var bottom: Variant = pub.get("effectActivationPending", null)
-	if bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand" and str(bottom.get("side", "")) == my_side:
-		if _dotf_overlay_kind != "bottom_hand":
+	var bottom_kind := ""
+	if bottom is Dictionary:
+		bottom_kind = str(bottom.get("kind", ""))
+	if bottom is Dictionary and (bottom_kind == "bottom_hand" or bottom_kind == "bottom_or_draw") and str(bottom.get("side", "")) == my_side:
+		if bottom_kind == "bottom_or_draw":
+			if _dotf_overlay_kind != "bottom_or_draw":
+				_show_bottom_or_draw(bottom, my_side)
+		elif _dotf_overlay_kind != "bottom_hand":
 			_show_bottom_hand(my_side)
 		return
-	if bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand" and str(bottom.get("side", "")) != my_side:
-		if _dotf_overlay_kind == "bottom_hand":
+	if bottom is Dictionary and (bottom_kind == "bottom_hand" or bottom_kind == "bottom_or_draw") and str(bottom.get("side", "")) != my_side:
+		if _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "bottom_or_draw":
 			_clear_dotf_overlay()
-		status_label.text = "Opponent is putting a card under their deck..."
+		status_label.text = "Opponent is choosing for a character who just deployed..." if bottom_kind == "bottom_or_draw" else "Opponent is putting a card under their deck..."
 		return
 	var wcp: Variant = pub.get("winControlPending", null)
 	if wcp is Dictionary and str(wcp.get("side", "")) == my_side:
@@ -1553,17 +1632,17 @@ func _update_dotf_choice_ui(state: RefCounted, pub: Dictionary, my_side: String)
 		status_label.text = "Opponent may replace a destiny number with damage..."
 		return
 
-	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "win_control" or _dotf_overlay_kind == "destiny_swap" or _dotf_overlay_kind == "destiny_redraw" or _dotf_overlay_kind == "destiny_choose" or _dotf_overlay_kind == "damage_replace" or _dotf_overlay_kind == "peek_opp_deck" or _dotf_overlay_kind == "jedi_training" or _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "pounded" or _dotf_overlay_kind == "deploy_draw":
-		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (redraw is Dictionary) and not (choose is Dictionary) and not (replace_damage is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and str(bottom.get("kind", "")) == "bottom_hand") and not (pounded is Dictionary) and not (drawp is Dictionary):
+	if _dotf_overlay_kind == "planet_effect" or _dotf_overlay_kind == "deploy_from_deck" or _dotf_overlay_kind == "reveal_weapon" or _dotf_overlay_kind == "win_control" or _dotf_overlay_kind == "destiny_swap" or _dotf_overlay_kind == "destiny_redraw" or _dotf_overlay_kind == "destiny_choose" or _dotf_overlay_kind == "damage_replace" or _dotf_overlay_kind == "peek_opp_deck" or _dotf_overlay_kind == "jedi_training" or _dotf_overlay_kind == "bottom_hand" or _dotf_overlay_kind == "bottom_or_draw" or _dotf_overlay_kind == "pounded" or _dotf_overlay_kind == "deploy_draw":
+		if not (fetch is Dictionary) and not (dfd is Dictionary) and not (wcp is Dictionary) and not (swap is Dictionary) and not (redraw is Dictionary) and not (choose is Dictionary) and not (replace_damage is Dictionary) and not (peek is Dictionary and str(peek.get("kind", "")) == "peek_opp_deck") and not (train is Dictionary) and not (bottom is Dictionary and (str(bottom.get("kind", "")) == "bottom_hand" or str(bottom.get("kind", "")) == "bottom_or_draw")) and not (pounded is Dictionary) and not (drawp is Dictionary):
 			_clear_dotf_overlay()
 
 	_update_duel_ui(state, pub, my_side)
 
 
 func _show_pounded(pending: Dictionary, my_side: String) -> void:
-	var vbox := _begin_choice_overlay("pounded", "Pounded Unto Death — discard one non-unique card")
+	var vbox := _begin_choice_overlay("pounded", "Remove one non-unique card from this planet")
 	var note := Label.new()
-	note.text = "This Effect is discarded. The card you pick is discarded. It does not lose damage."
+	note.text = "This Effect leaves play. The card you pick leaves play. You do not lose cards for its damage."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vbox.add_child(note)
 	var opp_side := "dark" if my_side == "light" else "light"
@@ -1661,21 +1740,27 @@ func _jedi_cost_badge(card: Control, cost: int, can_pay: bool) -> void:
 func _show_destiny_choose(pending: Dictionary) -> void:
 	var draw: Dictionary = pending.get("draw", {})
 	var key := str(draw.get("key", ""))
-	var vbox := _begin_choice_overlay("destiny_choose", "Watto draws two destiny cards")
+	var options: Array = draw.get("options", [])
+	var same_card := false
+	for option in options:
+		if option is Dictionary and not str(option.get("imageCardId", "")).is_empty():
+			same_card = true
+			break
+	var vbox := _begin_choice_overlay("destiny_choose", "Choose one destiny number" if same_card else "Watto draws two destiny cards")
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	note.text = "Choose which destiny to use. Both cards go to your hand."
+	note.text = "This card has two destiny numbers. Choose one. The card is discarded." if same_card else "Choose which destiny to use. Both cards go to your hand."
 	vbox.add_child(note)
-	var options: Array = draw.get("options", [])
 	for option in options:
 		if not (option is Dictionary):
 			continue
 		var cid := str(option.get("cardId", ""))
+		var image_id := str(option.get("imageCardId", cid))
 		var destiny := int(option.get("destiny", 0))
-		if not cid.is_empty():
+		if not image_id.is_empty():
 			var preview: Control = CardPlaceholderScene.instantiate()
 			vbox.add_child(preview)
-			preview.set_card(cid, "destiny", "", "")
+			preview.set_card(image_id, "destiny", "", "")
 		var use_btn := Button.new()
 		use_btn.text = "Use destiny %d" % destiny
 		var picked := cid
@@ -1759,6 +1844,28 @@ func _show_bottom_hand(my_side: String) -> void:
 	vbox.add_child(cancel)
 
 
+func _show_bottom_or_draw(pending: Dictionary, my_side: String) -> void:
+	var who := str(pending.get("effectCardName", "This character"))
+	var vbox := _begin_choice_overlay("bottom_or_draw", who + " — Anakin deployed here")
+	var note := Label.new()
+	note.text = "Put one card from your hand under your draw deck, or draw one card."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(note)
+	var hand: Array = Connection.get_state().hand_with_instances
+	if hand.is_empty():
+		note.text = "Your hand is empty. Draw one card."
+	else:
+		_add_card_row(vbox, hand, my_side, func(inst: String, _cid: String) -> void:
+			Connection.get_client().send_message({"type": "game_action", "action": {"kind": "bottom_hand_card", "instanceId": inst}})
+		)
+	var draw_btn := Button.new()
+	draw_btn.text = "Draw a card"
+	draw_btn.pressed.connect(func() -> void:
+		Connection.get_client().send_message({"type": "game_action", "action": {"kind": "deploy_here_draw"}})
+	)
+	vbox.add_child(draw_btn)
+
+
 func _show_opp_deck_peek(pending: Dictionary, my_side: String) -> void:
 	var vbox := _begin_choice_overlay("peek_opp_deck", "Top card of your opponent's deck")
 	var cid := str(pending.get("peekedCardId", ""))
@@ -1778,6 +1885,16 @@ func _show_opp_deck_peek(pending: Dictionary, my_side: String) -> void:
 	)
 	vbox.add_child(top_btn)
 	vbox.add_child(bottom_btn)
+
+
+func _split_half_bonus(card_id: String, half: String) -> String:
+	if half != "second" or not CardCatalog:
+		return _card_bonus_text(card_id)
+	var info: Dictionary = CardCatalog.get_card_info(card_id, "")
+	if str(info.get("doubleImpact", "")) != "battle-battle":
+		return _card_bonus_text(card_id)
+	var side: Dictionary = info.get("doubleImpactHalf", {})
+	return (str(side.get("gametextbonus", "")) + ";" + str(side.get("grayboxbonus", ""))).to_lower()
 
 
 func _card_bonus_text(card_id: String) -> String:
@@ -1844,10 +1961,15 @@ func _show_destiny_swap(pending: Dictionary) -> void:
 	vbox.add_child(confirm)
 
 
-func _play_duel_card(instance_id: String, card_id: String, discard_for_extra_hits: bool) -> void:
+func _play_duel_card(instance_id: String, card_id: String, discard_for_extra_hits: bool, destiny_pick: int = -1, impact_half: String = "") -> void:
+	var action := {"kind": "duel_play_card", "instanceId": instance_id, "discardForExtraHits": discard_for_extra_hits}
+	if destiny_pick >= 0:
+		action["destinyPick"] = destiny_pick
+	if impact_half == "primary" or impact_half == "second":
+		action["doubleImpactHalf"] = impact_half
 	Connection.get_client().send_message({
 		"type": "game_action",
-		"action": {"kind": "duel_play_card", "instanceId": instance_id, "discardForExtraHits": discard_for_extra_hits}
+		"action": action
 	})
 
 
@@ -2667,24 +2789,43 @@ func _build_duel_play_screen(pub: Dictionary, d: Dictionary, my_side: String) ->
 			if not my_turn_to_play:
 				status_label.text = "Wait for the other player to play a card."
 				return
-			var bonus := _card_bonus_text(cid)
-			var becomes_attack := pending.is_empty() or printed == int(pending.get("destiny", -1))
-			var play_normal := func() -> void: _play_duel_card(inst, cid, false)
-			if bonus.contains("duel:discard:draw2"):
-				var draw_two := func() -> void: Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_discard_draw", "instanceId": inst}})
-				_duel_hand_choice(hand_area, "Play this card, or discard it to draw 2?", [
-					{"text": "Play card", "kind": "primary", "cb": play_normal},
-					{"text": "Discard, draw 2", "kind": "secondary", "cb": draw_two},
+			var play_with_half := func(half: String) -> void:
+				var bonus := _split_half_bonus(cid, half)
+				var info := CardCatalog.get_card_info(cid, my_side, str(entry.get("set", ""))) if CardCatalog else {}
+				var destiny2 := int(info.get("destiny2", -1))
+				var becomes_attack := pending.is_empty() or printed == int(pending.get("destiny", -1)) or (destiny2 >= 0 and destiny2 == int(pending.get("destiny", -1)))
+				var play_normal := func() -> void: _play_duel_card(inst, cid, false, -1, half)
+				if destiny2 >= 0 and destiny2 != printed and half.is_empty():
+					var use_first := func() -> void: _play_duel_card(inst, cid, false, printed, half)
+					var use_second := func() -> void: _play_duel_card(inst, cid, false, destiny2, half)
+					_duel_hand_choice(hand_area, "This card has two destiny numbers. Choose one.", [
+						{"text": "Use destiny %d" % printed, "kind": "primary", "cb": use_first},
+						{"text": "Use destiny %d" % destiny2, "kind": "secondary", "cb": use_second},
+					])
+					return
+				if bonus.contains("duel:discard:draw2"):
+					var draw_two := func() -> void: Connection.get_client().send_message({"type": "game_action", "action": {"kind": "duel_discard_draw", "instanceId": inst}})
+					_duel_hand_choice(hand_area, "Play this card, or discard it to draw 2?", [
+						{"text": "Play card", "kind": "primary", "cb": play_normal},
+						{"text": "Discard, draw 2", "kind": "secondary", "cb": draw_two},
+					])
+					return
+				if bonus.contains("duel:discard:extrahit2") and becomes_attack:
+					var extra_hits := func() -> void: _play_duel_card(inst, cid, true, -1, half)
+					_duel_hand_choice(hand_area, "Discard it for this swing. If they miss, they take 3 hits. If they match the number, it is blocked and the card stays discarded.", [
+						{"text": "Play normally", "kind": "secondary", "cb": play_normal},
+						{"text": "Discard for +2 hits", "kind": "primary", "cb": extra_hits},
+					])
+					return
+				_play_duel_card(inst, cid, false, -1, half)
+			if _is_split_battle(cid):
+				var names := _split_side_names(cid)
+				_duel_hand_choice(hand_area, "Choose a side of this split card.", [
+					{"text": str(names[0]), "kind": "primary", "cb": func() -> void: play_with_half.call("primary")},
+					{"text": str(names[1]), "kind": "secondary", "cb": func() -> void: play_with_half.call("second")},
 				])
 				return
-			if bonus.contains("duel:discard:extrahit2") and becomes_attack:
-				var extra_hits := func() -> void: _play_duel_card(inst, cid, true)
-				_duel_hand_choice(hand_area, "Discard it for this swing. If they miss, they take 3 hits. If they match the number, it is blocked and the card stays discarded.", [
-					{"text": "Play normally", "kind": "secondary", "cb": play_normal},
-					{"text": "Discard for +2 hits", "kind": "primary", "cb": extra_hits},
-				])
-				return
-			_play_duel_card(inst, cid, false)
+			play_with_half.call("")
 		)
 
 
@@ -3430,6 +3571,7 @@ func _on_your_discard_mouse_entered() -> void:
 		var count_lbl: Label = _discard_popup_yours.get_meta("count_label")
 		if tex:
 			tex.texture = _your_discard_top_texture if _your_discard_top_texture else your_discard.texture
+			_fit_peek_card(_discard_popup_yours, tex, DISCARD_POPUP_CARD_SIZE)
 		if count_lbl:
 			count_lbl.text = str(_your_discard_count_cached) + " cards"
 		var rect: Rect2 = your_discard_wrapper.get_global_rect()
@@ -3456,6 +3598,7 @@ func _on_opp_discard_mouse_entered() -> void:
 		var count_lbl: Label = _discard_popup_opp.get_meta("count_label")
 		if tex:
 			tex.texture = _opp_discard_top_texture if _opp_discard_top_texture else opp_discard.texture
+			_fit_peek_card(_discard_popup_opp, tex, DISCARD_POPUP_CARD_SIZE)
 		if count_lbl:
 			count_lbl.text = str(_opp_discard_count_cached) + " cards"
 		var rect: Rect2 = opp_discard_wrapper.get_global_rect()
@@ -3469,6 +3612,13 @@ func _on_opp_discard_mouse_entered() -> void:
 		if _discard_popup_yours:
 			_discard_popup_yours.visible = false
 		_discard_popup_opp.visible = true
+
+
+func _fit_peek_card(panel: Control, tex: TextureRect, slot: Vector2) -> void:
+	var fitted := CardArt.fitted_size(slot, tex.texture)
+	tex.custom_minimum_size = fitted
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	panel.custom_minimum_size = Vector2(fitted.x + 40, fitted.y + 50)
 
 
 func _on_opp_discard_mouse_exited() -> void:
@@ -3601,9 +3751,9 @@ func _on_hand_card_drag_started(instance_id: String) -> void:
 	add_child(_drag_preview_layer)
 	_drag_preview = TextureRect.new()
 	_drag_preview.texture = drag_tex
-	_drag_preview.custom_minimum_size = Vector2(96, 136)
+	_drag_preview.custom_minimum_size = CardArt.fitted_size(Vector2(96, 136), drag_tex)
 	_drag_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_drag_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_drag_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	_drag_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_drag_preview_layer.add_child(_drag_preview)
 	_drag_preview.position = get_viewport().get_mouse_position() - _drag_preview.custom_minimum_size / 2
@@ -3674,8 +3824,7 @@ func _try_drop_battle_card_declare(instance_id: String, pos: Vector2) -> bool:
 		return false
 	if _declared_battle_cards.has(instance_id):
 		return true
-	_declared_battle_cards.append(instance_id)
-	_refresh()
+	_stage_split_battle_card(instance_id, card_id, true)
 	return true
 
 
@@ -3713,7 +3862,7 @@ func _try_deploy_dragged_card() -> void:
 			break
 	if card_id and CardCatalog:
 		var card_type: String = str(CardCatalog.get_card_info(card_id, my_side).get("type", "")).to_lower()
-		if card_type == "battle":
+		if card_type == "battle" and str(CardCatalog.get_card_info(card_id, my_side).get("doubleImpact", "")) != "battle-effect":
 			status_label.text = "Battle cards can only be used during battle."
 			return
 		if card_type == "starship":
@@ -3744,7 +3893,11 @@ func _try_deploy_dragged_card() -> void:
 			return
 	var cost: int = 0
 	if card_id and CardCatalog:
-		cost = int(CardCatalog.get_card_info(card_id, my_side).get("cost", 0))
+		var drag_info: Dictionary = CardCatalog.get_card_info(card_id, my_side)
+		if str(drag_info.get("doubleImpact", "")) == "battle-effect":
+			cost = int(drag_info.get("effectHalf", {}).get("cost", 0))
+		else:
+			cost = _listed_cost(drag_info)
 	var my_force: int = int((g.get("light", {}) if my_side == "light" else g.get("dark", {})).get("force", 0))
 	if my_force < cost:
 		status_label.text = "You don't have enough counters to play this card"
@@ -4243,6 +4396,8 @@ func _refresh() -> void:
 		duel_btn.visible = is_my_turn and phase == "battle" and _uses_hyperspace(pub) and not bool(pub.get("duelUsedThisTurn", false)) and not (pub.get("duelState") is Dictionary) and not pub.get("battlePlanPhase", false) and not in_declare_phase and not any_face_down
 	if battle_plan_section:
 		var in_battle_plan: bool = pub.get("battlePlanPhase", false) and ((phase == "battle") or starship_battle)
+		if not in_battle_plan and not in_declare_phase:
+			_double_impact_choices.clear()
 		battle_plan_section.visible = in_battle_plan or in_declare_phase
 		if in_declare_phase:
 			_build_battle_card_declare_ui(state, pub, declare_side)
@@ -4338,6 +4493,9 @@ func _refresh() -> void:
 		else:
 			if _effect_decline_btn:
 				_effect_decline_btn.visible = false
+			status_label.text = "Deploy. Play cards, send starships to Hyperspace, or pass."
+	elif phase == "deploy" and status_label and (status_label.text.begins_with("Submitting battle") or status_label.text.begins_with("Waiting for opponent to set") or status_label.text.begins_with("Both ready")):
+		status_label.text = ""
 	# Destiny compare (who goes first): show two cards in the middle until phase changes
 	var destiny_compare: Dictionary = pub.get("destinyCompare", {})
 	if phase == "determine_first" and destiny_compare.size() > 0:
@@ -4485,11 +4643,22 @@ func _play_blocked(pub: Dictionary) -> bool:
 	return false
 
 
+func _listed_cost(info: Dictionary) -> int:
+	if bool(info.get("armedDangerous", false)):
+		var built: Variant = info.get("builtInWeapon", {})
+		if info.get("characterCost") != null and built is Dictionary and built.get("cost") != null:
+			return int(info.get("characterCost")) + int(built.get("cost"))
+	return int(info.get("cost", 0))
+
+
 func _printed_deploy_cost(info: Dictionary, card_id: String, pub: Dictionary, my_side: String) -> int:
 	var card_type := str(info.get("type", "")).to_lower()
 	if card_type == "starship":
 		return 0
-	var base := int(info.get("cost", 0))
+	var base := _listed_cost(info)
+	if str(info.get("doubleImpact", "")) == "battle-effect":
+		var half: Dictionary = info.get("effectHalf", {})
+		return int(half.get("cost", 0))
 	if card_type == "character":
 		var bonus := str(info.get("gametextbonus", ""))
 		var mine: Array = pub.get("lightInPlay" if my_side == "light" else "darkInPlay", [])
@@ -4539,7 +4708,7 @@ func _have_effect_at_location(pub: Dictionary, my_side: String) -> bool:
 		if str(c.get("instanceId", "")) == loc_id:
 			continue
 		var info: Dictionary = CardCatalog.get_card_info(str(c.get("cardId", "")), my_side, str(c.get("set", "")))
-		if str(info.get("type", "")).to_lower() == "effect":
+		if str(info.get("type", "")).to_lower() == "effect" or str(info.get("doubleImpact", "")) == "battle-effect":
 			return true
 	return false
 
@@ -4600,7 +4769,10 @@ func _table_ability_glow(card: Dictionary, pub: Dictionary, my_side: String, pha
 				return "ability"
 		if bonus.contains("discardsearcher"):
 			return "ability"
-	if phase == "even_up" and card_type == "effect" and effects.contains("discardopp:nonunique"):
+	var discard_effects := effects
+	if str(info.get("doubleImpact", "")) == "battle-effect":
+		discard_effects = str(info.get("effectHalf", {}).get("effects", "")).to_lower()
+	if phase == "even_up" and (card_type == "effect" or str(info.get("doubleImpact", "")) == "battle-effect") and discard_effects.contains("discardopp:nonunique"):
 		var opp_play: Array = pub.get("darkInPlay" if my_side == "light" else "lightInPlay", [])
 		var loc_id := str(pub.get("startingLocationInstanceId", ""))
 		var opp_side := "dark" if my_side == "light" else "light"
@@ -4972,6 +5144,7 @@ func _on_declare_battle_cards_confirmed() -> void:
 
 func _on_declare_battle_cards_clear() -> void:
 	_declared_battle_cards.clear()
+	_double_impact_choices.clear()
 	_refresh()
 
 
@@ -4985,6 +5158,7 @@ func _on_declared_card_drag_ended(instance_id: String) -> void:
 	var in_play_area: bool = _get_play_area_drop_rect().has_point(pos)
 	if not in_play_area:
 		_declared_battle_cards.erase(instance_id)
+		_double_impact_choices.erase(instance_id)
 	_dragging_from_battle_plan = false
 	_clear_drag_preview()
 	_dragging_instance_id = ""
@@ -5051,12 +5225,80 @@ func _build_battle_cards_from_hand(state: RefCounted) -> void:
 		section.add_child(container)
 
 
+func _is_split_battle(card_id: String) -> bool:
+	if not CardCatalog or card_id.is_empty():
+		return false
+	return str(CardCatalog.get_card_info(card_id, Connection.get_state().game_side).get("doubleImpact", "")) == "battle-battle"
+
+
+func _split_side_names(card_id: String) -> Array:
+	var info: Dictionary = CardCatalog.get_card_info(card_id, Connection.get_state().game_side) if CardCatalog else {}
+	var full := str(info.get("name", "This card"))
+	var left := full
+	if " & " in full:
+		left = full.split(" & ")[0]
+	var right := str(info.get("doubleImpactHalf", {}).get("name", "Other side"))
+	return [left, right]
+
+
+func _stage_split_battle_card(instance_id: String, card_id: String, into_declare: bool) -> void:
+	if not _is_split_battle(card_id):
+		_commit_staged_battle_card(instance_id, into_declare)
+		return
+	var names := _split_side_names(card_id)
+	var vbox := _begin_choice_overlay("split_battle", "Choose a side")
+	var note := Label.new()
+	note.text = "This is a split card. Play one side."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(note)
+	var left_btn := Button.new()
+	left_btn.text = str(names[0])
+	left_btn.pressed.connect(func() -> void:
+		_double_impact_choices[instance_id] = "primary"
+		_clear_dotf_overlay()
+		_commit_staged_battle_card(instance_id, into_declare)
+	)
+	var right_btn := Button.new()
+	right_btn.text = str(names[1])
+	right_btn.pressed.connect(func() -> void:
+		_double_impact_choices[instance_id] = "second"
+		_clear_dotf_overlay()
+		_commit_staged_battle_card(instance_id, into_declare)
+	)
+	var cancel := Button.new()
+	cancel.text = "Cancel"
+	cancel.pressed.connect(func() -> void:
+		_clear_dotf_overlay()
+	)
+	vbox.add_child(left_btn)
+	vbox.add_child(right_btn)
+	vbox.add_child(cancel)
+
+
+func _commit_staged_battle_card(instance_id: String, into_declare: bool) -> void:
+	if into_declare:
+		if not _declared_battle_cards.has(instance_id):
+			_declared_battle_cards.append(instance_id)
+	else:
+		if not _battle_cards_in_plan.has(instance_id):
+			_battle_cards_in_plan.append(instance_id)
+		if not _battle_plan_order.has(instance_id):
+			_battle_plan_order.append(instance_id)
+	_refresh()
+
+
 func _on_battle_card_from_hand_clicked(instance_id: String) -> void:
 	if _battle_cards_in_plan.has(instance_id):
 		return
-	_battle_cards_in_plan.append(instance_id)
-	_battle_plan_order.append(instance_id)
-	_refresh()
+	var card_id := ""
+	var my_side: String = Connection.get_state().game_side
+	for hc in Connection.get_state().hand_with_instances:
+		if str(hc.get("instanceId", "")) == instance_id:
+			card_id = str(hc.get("cardId", ""))
+			break
+	if card_id.is_empty():
+		return
+	_stage_split_battle_card(instance_id, card_id, false)
 
 
 func _on_battle_plan_drag_started(instance_id: String) -> void:
@@ -5119,7 +5361,7 @@ func _on_battle_plan_ready_pressed() -> void:
 	status_label.text = "Submitting battle plan…"
 	Connection.get_client().send_message({
 		"type": "game_action",
-		"action": { "kind": "battle_plan_ready", "instanceIds": _battle_plan_order }
+		"action": { "kind": "battle_plan_ready", "instanceIds": _battle_plan_order, "doubleImpactChoices": _double_impact_choices }
 	})
 	# Do not _refresh() here: it overwrites status before the server error arrives on reject.
 	# Success path refreshes via game_state_updated.
@@ -6002,15 +6244,17 @@ func _battle_step_show_destiny_draws(step: Dictionary) -> void:
 		for d in draws:
 			var cid: String = d.get("cardId", "")
 			var dval: int = int(d.get("destiny", 0))
+			var drawn_tex := _load_card_texture_for_id(cid, side)
+			var drawn_slot := CardArt.fitted_size(Vector2(38, 54), drawn_tex)
 			var cw: Control = Control.new()
-			cw.custom_minimum_size = Vector2(38, 54)
+			cw.custom_minimum_size = drawn_slot
 			cw.clip_contents = false
 			cw.modulate = Color(1, 1, 1, 0)
 			var tex: TextureRect = TextureRect.new()
 			tex.set_anchors_preset(Control.PRESET_FULL_RECT)
 			tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-			tex.texture = _load_card_texture_for_id(cid, side)
+			tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			tex.texture = drawn_tex
 			cw.add_child(tex)
 			var dframe: Panel = Panel.new()
 			dframe.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -6244,8 +6488,10 @@ func _build_in_play(state: RefCounted) -> void:
 					cp.tooltip_text = "Click to return this face-down character to your hand and refund its deploy cost."
 					cp.card_selected.connect(_on_my_table_card_clicked)
 				elif not face_down and CardCatalog and not in_battle_card_declare:
-					var ct: String = str(CardCatalog.get_card_info(card.get("cardId", ""), my_side, card.get("set", "")).get("type", "")).to_lower()
-					if ct == "effect" and cp.has_signal("card_selected"):
+					var played_info: Dictionary = CardCatalog.get_card_info(card.get("cardId", ""), my_side, card.get("set", ""))
+					var ct: String = str(played_info.get("type", "")).to_lower()
+					var deployed_effect := ct == "effect" or str(played_info.get("doubleImpact", "")) == "battle-effect"
+					if deployed_effect and cp.has_signal("card_selected"):
 						cp.card_selected.connect(_on_my_in_play_effect_clicked)
 					elif cp.has_signal("card_selected"):
 						cp.card_selected.connect(_on_my_table_card_clicked)
@@ -6484,7 +6730,11 @@ func _on_play_card_pressed() -> void:
 			card_id = entry.get("cardId", "")
 			break
 	if card_id and CardCatalog:
-		var card_type: String = CardCatalog.get_card_info(card_id, my_side).get("type", "")
+		var play_info: Dictionary = CardCatalog.get_card_info(card_id, my_side)
+		var card_type: String = str(play_info.get("type", ""))
+		if card_type == "battle" and str(play_info.get("doubleImpact", "")) != "battle-effect":
+			status_label.text = "Battle cards can only be used during battle."
+			return
 		if card_type == "location":
 			if _can_replace_location_with(card_id):
 				Connection.get_client().send_message({
@@ -6498,7 +6748,11 @@ func _on_play_card_pressed() -> void:
 			return
 	var cost: int = 0
 	if card_id and CardCatalog:
-		cost = int(CardCatalog.get_card_info(card_id, my_side).get("cost", 0))
+		var cost_info: Dictionary = CardCatalog.get_card_info(card_id, my_side)
+		if str(cost_info.get("doubleImpact", "")) == "battle-effect":
+			cost = int(cost_info.get("effectHalf", {}).get("cost", 0))
+		else:
+			cost = _listed_cost(cost_info)
 	if my_force < cost:
 		status_label.text = "You don't have enough counters to play this card"
 		return
@@ -6575,53 +6829,50 @@ func _show_surrender_confirm(planet_name: String) -> void:
 	add_child(_evacuation_overlay)
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.05, 0.05, 0.15, 0.85)
+	bg.color = Color(0.02, 0.03, 0.08, 0.78)
+	bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	_evacuation_overlay.add_child(bg)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_evacuation_overlay.add_child(center)
 	_evacuation_panel = PanelContainer.new()
-	_evacuation_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_evacuation_panel.offset_left = -220
-	_evacuation_panel.offset_top = -120
-	_evacuation_panel.offset_right = 220
-	_evacuation_panel.offset_bottom = 120
+	_evacuation_panel.custom_minimum_size = Vector2(460, 0)
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.15, 0.1, 0.1, 0.98)
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_width_bottom = 2
-	style.border_color = Color(0.9, 0.5, 0.3, 0.8)
-	style.corner_radius_top_left = 8
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_left = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 16
-	style.content_margin_right = 16
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.bg_color = Color(0.03, 0.05, 0.12, 0.97)
+	style.set_border_width_all(2)
+	style.border_color = Color(0.86, 0.72, 0.32, 0.75)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 24
+	style.content_margin_right = 24
+	style.content_margin_top = 18
+	style.content_margin_bottom = 20
+	style.shadow_color = Color(0, 0, 0, 0.55)
+	style.shadow_size = 18
 	_evacuation_panel.add_theme_stylebox_override("panel", style)
-	_evacuation_overlay.add_child(_evacuation_panel)
+	center.add_child(_evacuation_panel)
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
+	vbox.add_theme_constant_override("separation", 14)
 	_evacuation_panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "Surrender Planet?"
+	title.text = "SURRENDER PLANET"
+	title.theme_type_variation = &"HeaderLabel"
 	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", Color(1.0, 0.7, 0.4, 1))
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
 	var msg := Label.new()
-	msg.text = "Are you sure you want to surrender %s?\n\nYour opponent will win control. Your characters and weapons will be stranded there." % planet_name
-	msg.add_theme_font_size_override("font_size", 13)
+	msg.text = "Give %s to your opponent? Your characters and weapons there stay behind, stranded." % planet_name
+	msg.add_theme_font_size_override("font_size", 14)
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	msg.custom_minimum_size = Vector2(400, 0)
 	vbox.add_child(msg)
 	var btn_row := HBoxContainer.new()
 	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	btn_row.add_theme_constant_override("separation", 16)
 	vbox.add_child(btn_row)
 	var yes_btn := Button.new()
-	yes_btn.text = "Yes, Surrender"
-	yes_btn.add_theme_font_size_override("font_size", 14)
+	yes_btn.text = "Surrender"
+	_style_action_button(yes_btn, "danger")
 	yes_btn.pressed.connect(func() -> void:
 		Connection.get_client().send_message({
 			"type": "game_action",
@@ -6634,8 +6885,8 @@ func _show_surrender_confirm(planet_name: String) -> void:
 	)
 	btn_row.add_child(yes_btn)
 	var no_btn := Button.new()
-	no_btn.text = "No"
-	no_btn.add_theme_font_size_override("font_size", 14)
+	no_btn.text = "Cancel"
+	_style_action_button(no_btn, "secondary")
 	no_btn.pressed.connect(func() -> void:
 		if _evacuation_overlay:
 			_evacuation_overlay.queue_free()

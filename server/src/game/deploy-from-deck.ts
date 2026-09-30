@@ -15,6 +15,8 @@ export interface DeployFromDeckClause {
   nonUnique?: boolean;
   /** Confirming the deploy also discards the card that started the search. */
   discardSearcher?: boolean;
+  /** Put the found card in hand instead of deploying it. Skipping does not deal damage. */
+  toHand?: boolean;
 }
 
 export interface DeployFromDeckPending {
@@ -28,6 +30,7 @@ export interface DeployFromDeckPending {
   foundSet?: string;
   nonUnique?: boolean;
   discardSearcher?: boolean;
+  toHand?: boolean;
 }
 
 function parseCost(raw: string): DeployFromDeckCost {
@@ -44,16 +47,18 @@ export function parseDeployFromDeck(cardId: string, set?: string): DeployFromDec
   const bonus = (def as { gametextbonus?: string }).gametextbonus ?? "";
   const text = (def as { gametext?: string }).gametext ?? "";
   const source = `${bonus};${text}`;
-  const m = source.match(/deployfromdeck\s*,\s*([a-z0-9]+)\s*,\s*(cost:[a-z0-9]+|[a-z0-9]+)((?:\s*,\s*[a-z0-9:]+)*)/i);
+  const m = source.match(/deployfromdeck\s*,\s*([a-z0-9]+)\s*,\s*([a-z0-9:]+)((?:\s*,\s*[a-z0-9:]+)*)/i);
   if (!m) return null;
+  const toHand = m[2].toLowerCase() === "tohand";
   const flags = (m[3] ?? "").toLowerCase();
   const planet = flags.match(/planet:([a-z0-9]+)/);
   return {
     targetId: m[1].toLowerCase(),
-    cost: parseCost(m[2]),
+    cost: toHand ? "free" : parseCost(m[2]),
     planet: planet ? planet[1] : undefined,
     nonUnique: flags.includes("nonunique"),
     discardSearcher: flags.includes("discardsearcher"),
+    toHand,
   };
 }
 
@@ -105,12 +110,14 @@ function matchesTarget(cardId: string, targetId: string, set: string | undefined
   const id = cardId.toLowerCase();
   const t = targetId.toLowerCase();
   const def = getCard(cardId, set);
+  const type = ((def as { type?: string } | undefined)?.type ?? "").toLowerCase();
   if (nonUnique && !isNonUniqueCard(def)) return false;
+  if (t === "weapon") return type === "weapon";
+  if (t === "character") return type === "character";
   if (t === "droidstarfighter") return isDroidStarfighterShip(cardId, set);
   if (t === "starfighterdroid") return isStarfighterDroidCharacter(cardId, set);
   if (cardHasTrait(def, t)) return true;
   if (id === t) return true;
-  const type = ((def as { type?: string } | undefined)?.type ?? "").toLowerCase();
   if (type !== "character" && type !== "weapon") return false;
   if (id.includes(t)) return true;
   const name = ((def as { name?: string } | undefined)?.name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -153,6 +160,7 @@ export function maybeBeginDeployFromDeck(
     foundSet: found?.cardSet,
     nonUnique: clause.nonUnique,
     discardSearcher: clause.discardSearcher,
+    toHand: clause.toHand,
   };
   return true;
 }
@@ -191,6 +199,7 @@ export function beginInPlayDeployFromDeck(
     foundSet: found?.cardSet,
     nonUnique: clause.nonUnique,
     discardSearcher: true,
+    toHand: clause.toHand,
   };
   return { ok: true };
 }
@@ -203,11 +212,15 @@ export function confirmDeployFromDeck(state: GameStateData, side: Side): boolean
   if (idx < 0) return false;
   const ship = isStarship(pending.foundCardId ?? "", pending.foundSet);
   if (ship && wouldViolateStarshipUniqueness(state, side, pending.foundCardId ?? "", pending.foundSet)) return false;
-  const cost = deployCostOf(pending.foundCardId ?? "", pending.foundSet, pending.cost);
+  const cost = pending.toHand ? 0 : deployCostOf(pending.foundCardId ?? "", pending.foundSet, pending.cost);
   if (cost > 0 && !spendForce(state, side, cost)) return false;
   const [card] = p.deck.splice(idx, 1);
   card.faceDown = false;
-  if (ship) {
+  if (pending.toHand) {
+    card.zone = "hand";
+    card.position = p.hand.length;
+    p.hand.push(card);
+  } else if (ship) {
     if (!p.hyperspace) p.hyperspace = [];
     card.zone = "hyperspace";
     card.position = p.hyperspace.length;
@@ -242,7 +255,7 @@ export function confirmDeployFromDeck(state: GameStateData, side: Side): boolean
 export function declineDeployFromDeck(state: GameStateData, side: Side): boolean {
   const pending = state.deployFromDeckPending;
   if (!pending || pending.side !== side) return false;
-  if (pending.foundInstanceId) {
+  if (pending.foundInstanceId && !pending.toHand) {
     millFromDeck(state, side, 1);
   }
   if (pending.discardSearcher) {

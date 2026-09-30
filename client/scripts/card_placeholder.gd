@@ -136,6 +136,8 @@ func set_card(card_id: String, instance_id: String = "", side_hint: String = "",
 	if img:
 		var tex := CardArt.load_texture(card_id, side_hint, set_hint)
 		if tex:
+			if not _is_location:
+				custom_minimum_size = CardArt.fitted_size(CARD_SIZE_NORMAL, tex)
 			_show_card_art(img, lbl, tex)
 			return
 	# Fallback: no image or not found
@@ -220,11 +222,11 @@ func _show_hover_popup() -> void:
 	var tex_rect: TextureRect = TextureRect.new()
 	tex_rect.texture = _current_texture
 	tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	if _is_location:
 		tex_rect.custom_minimum_size = POPUP_SIZE_LOCATION
 	else:
-		tex_rect.custom_minimum_size = POPUP_SIZE_NORMAL
+		tex_rect.custom_minimum_size = CardArt.fitted_size(POPUP_SIZE_NORMAL, _current_texture)
 	margin.add_child(tex_rect)
 	# Style popup
 	var style: StyleBoxFlat = StyleBoxFlat.new()
@@ -270,8 +272,8 @@ func _show_face_down_hover_popup() -> void:
 				var tex_rect: TextureRect = TextureRect.new()
 				tex_rect.texture = tex
 				tex_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-				tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-				tex_rect.custom_minimum_size = POPUP_SIZE_LOCATION if _is_location else POPUP_SIZE_NORMAL
+				tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				tex_rect.custom_minimum_size = POPUP_SIZE_LOCATION if _is_location else CardArt.fitted_size(POPUP_SIZE_NORMAL, tex)
 				vbox.add_child(tex_rect)
 				break
 	margin.add_child(vbox)
@@ -284,7 +286,8 @@ func _show_face_down_hover_popup() -> void:
 	var card_rect: Rect2 = get_global_rect()
 	var popup_size: Vector2
 	if vbox.get_child_count() > 1:
-		popup_size = Vector2((POPUP_SIZE_NORMAL.x if not _is_location else POPUP_SIZE_LOCATION.x) + 24, (POPUP_SIZE_NORMAL.y if not _is_location else POPUP_SIZE_LOCATION.y) + 24 + 24)
+		var shown := vbox.get_child(1) as Control
+		popup_size = Vector2(shown.custom_minimum_size.x + 24, shown.custom_minimum_size.y + 48)
 	else:
 		popup_size = Vector2(220, 24 + name_label.get_minimum_size().y + 12)
 	var above_y: float = card_rect.position.y - popup_size.y - 8
@@ -323,12 +326,14 @@ func _on_popup_mouse_exited() -> void:
 
 ## Board cards are smaller than hand cards so the lanes and location fit on screen together.
 func set_board_size(size: Vector2) -> void:
-	custom_minimum_size = size
+	var fitted := CardArt.fitted_size(size, _current_texture)
+	custom_minimum_size = fitted
 	var img: TextureRect = card_image
 	if img == null:
 		img = get_node_or_null("Panel/Margin/CardImage") as TextureRect
 	if img:
-		img.custom_minimum_size = size
+		img.custom_minimum_size = fitted
+		img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 
 
 ## Gold border: this card can be deployed now. Blue border: an ability on it can be used now.

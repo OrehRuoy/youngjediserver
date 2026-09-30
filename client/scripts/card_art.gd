@@ -8,6 +8,21 @@ static var _missing: Dictionary = {}
 static var _reloaded_catalog: bool = false
 
 
+## Wide cards (two pictures side by side) keep the slot's height and grow sideways.
+## Portrait cards, including the stepped Armed & Dangerous shape, keep the slot.
+static func fitted_size(slot: Vector2, tex: Texture2D) -> Vector2:
+	if tex == null or slot.y < 2.0:
+		return slot
+	var tw := float(tex.get_width())
+	var th := float(tex.get_height())
+	if tw < 2.0 or th < 2.0:
+		return slot
+	var aspect := tw / th
+	if aspect > 1.12 and slot.x < slot.y * 1.05:
+		return Vector2(round(slot.y * aspect), slot.y)
+	return slot
+
+
 static func load_texture(card_id: String, side_hint: String = "", set_hint: String = "") -> Texture2D:
 	if card_id.is_empty() or CardCatalog == null or not CardCatalog.has_method("get_card_info"):
 		return null

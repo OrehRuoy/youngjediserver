@@ -10,7 +10,9 @@
     "dev": "ts-node src/index.ts",
     "sync-cards": "node ../scripts/sync-cards.js",
     "headless": "node dist/headless-runner.js",
-    "headless:dev": "npx ts-node src/headless-runner.ts"
+    "headless:dev": "npx ts-node src/headless-runner.ts",
+    "test:reflections-light": "npx ts-node --transpile-only src/reflections-light.test.ts",
+    "test:reflections-dark": "npx ts-node --transpile-only src/reflections-dark.test.ts"
   },
   "engines": {
     "node": ">=18"

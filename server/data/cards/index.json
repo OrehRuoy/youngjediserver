@@ -1,3 +1,11 @@
 {
-  "sets": ["menaceofdarthmaul", "thejedicouncil", "battleofnaboo", "enhancedmenaceofdarthmaul", "enhancedbattleofnaboo", "duelofthefates"]
+  "sets": [
+    "menaceofdarthmaul",
+    "thejedicouncil",
+    "battleofnaboo",
+    "enhancedmenaceofdarthmaul",
+    "enhancedbattleofnaboo",
+    "duelofthefates",
+    "reflections"
+  ]
 }
